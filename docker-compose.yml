@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mst_portal
+      POSTGRES_USER: portal
+      POSTGRES_PASSWORD: portal123
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U portal -d mst_portal"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pg-data:

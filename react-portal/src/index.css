@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    html, body {
+        font-family: 'Space Grotesk', system-ui, sans-serif;
+    }
+    html {
+        transition: background-color 0.3s ease, color 0.3s ease;
+    }
+}
+
+@layer utilities {
+    .glass-card {
+        background: rgba(37, 140, 244, 0.04);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(37, 140, 244, 0.08);
+        transition: all 0.3s ease;
+    }
+    .glass-card:hover {
+        border-color: rgba(37, 140, 244, 0.3);
+        background: rgba(37, 140, 244, 0.07);
+        box-shadow: 0 0 20px rgba(37, 140, 244, 0.08);
+    }
+    :is(.dark) .glass-card {
+        background: rgba(37, 140, 244, 0.03);
+        border: 1px solid rgba(37, 140, 244, 0.1);
+    }
+    :is(.dark) .glass-card:hover {
+        border-color: rgba(37, 140, 244, 0.4);
+        background: rgba(37, 140, 244, 0.06);
+        box-shadow: 0 0 20px rgba(37, 140, 244, 0.1);
+    }
+    .circuit-bg {
+        background-image: 
+            radial-gradient(circle at 50% 50%, rgba(37, 140, 244, 0.06) 0%, transparent 50%),
+            linear-gradient(to right, rgba(37, 140, 244, 0.04) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(37, 140, 244, 0.04) 1px, transparent 1px);
+        background-size: 100% 100%, 40px 40px, 40px 40px;
+    }
+    :is(.dark) .circuit-bg {
+        background-image: 
+            radial-gradient(circle at 50% 50%, rgba(37, 140, 244, 0.1) 0%, transparent 50%),
+            linear-gradient(to right, rgba(37, 140, 244, 0.05) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(37, 140, 244, 0.05) 1px, transparent 1px);
+        background-size: 100% 100%, 40px 40px, 40px 40px;
+    }
+    .circuit-pattern {
+        background-image: 
+            radial-gradient(circle at 50% 50%, rgba(37, 140, 244, 0.03) 0%, transparent 50%),
+            linear-gradient(to right, rgba(37, 140, 244, 0.02) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(37, 140, 244, 0.02) 1px, transparent 1px);
+        background-size: 100% 100%, 40px 40px, 40px 40px;
+    }
+    :is(.dark) .circuit-pattern {
+        background-image: 
+            radial-gradient(circle at 50% 50%, rgba(37, 140, 244, 0.05) 0%, transparent 50%),
+            linear-gradient(to right, rgba(37, 140, 244, 0.03) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(37, 140, 244, 0.03) 1px, transparent 1px);
+        background-size: 100% 100%, 40px 40px, 40px 40px;
+    }
+    .glow-text {
+        text-shadow: 0 0 15px rgba(37, 140, 244, 0.5);
+    }
+    .neon-border-glow {
+        box-shadow: 0 0 15px rgba(37, 140, 244, 0.3), inset 0 0 10px rgba(37, 140, 244, 0.2);
+        border: 1px solid rgba(37, 140, 244, 0.5);
+    }
+    .neon-glow {
+        box-shadow: 0 0 10px rgba(37, 140, 244, 0.4);
+    }
+    .accent-glow {
+        box-shadow: 0 0 10px rgba(0, 255, 157, 0.3);
+    }
+}

@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#258cf4",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#101922",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        .neon-border {
+            box-shadow: 0 0 10px rgba(37, 140, 244, 0.2);
+        }
+        .terminal-bg {
+            background-color: #080d12;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="relative flex flex-col min-h-screen w-full">
+<!-- Header / Top Navigation -->
+<header class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 lg:px-12 py-4 bg-background-light dark:bg-background-dark sticky top-0 z-50">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-3">
+<div class="size-8 bg-primary rounded-lg flex items-center justify-center text-white">
+<span class="material-symbols-outlined">memory</span>
+</div>
+<h2 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white uppercase tracking-widest">AI Forge</h2>
+</div>
+<nav class="hidden md:flex items-center gap-8">
+<a class="text-primary text-sm font-semibold border-b-2 border-primary pb-1" href="#">Agents</a>
+<a class="text-slate-600 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors" href="#">Skills</a>
+<a class="text-slate-600 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors" href="#">MCP Servers</a>
+<a class="text-slate-600 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors" href="#">Solutions</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="hidden sm:block">
+<label class="relative block">
+<span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</span>
+<input class="w-64 bg-slate-100 dark:bg-slate-800 border-none rounded-lg py-2 pl-10 pr-3 text-sm placeholder:text-slate-500 focus:ring-2 focus:ring-primary outline-none transition-all" placeholder="Search registry..." type="text"/>
+</label>
+</div>
+<button class="size-10 rounded-full border border-slate-200 dark:border-slate-700 overflow-hidden">
+<img alt="User" data-alt="User profile avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBvmKUnP6Bnx-vkaFlmvu9HQZ5Lj2SKnnnlCmmINsQwe3o32gppRQrtibJKOOL3YFc6QbjBPhnjw0wsLgS7LVL3k7yumacplVQpW4MSMdlQ8rQPlUM4dMe24JIeyExE6PFFZXqi9IbIadbQJ1YBqyg6ziAUsu461iBqOVd8DBFBy2sqhtqAsH2zIS6AWRM6CdKYFIrIyuQYDCXZHdpa6AfMMPWRUaeDbfZQEv3PxHheGEbaTUA_XDuHNDrrLwbuTfR1DJAQ5zuY3w"/>
+</button>
+</div>
+</header>
+<main class="flex-1 flex flex-col lg:flex-row">
+<!-- Sidebar Filters -->
+<aside class="w-full lg:w-64 p-6 border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-background-dark/50">
+<div class="space-y-8">
+<div>
+<h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Categories</h3>
+<div class="space-y-1">
+<button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/10 text-primary text-sm font-medium">
+<span class="material-symbols-outlined text-[20px]">smart_toy</span> Agents
+                            </button>
+<button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 text-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[20px]">bolt</span> Skills
+                            </button>
+<button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 text-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[20px]">dns</span> MCP Servers
+                            </button>
+<button class="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 text-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[20px]">lightbulb</span> Solutions
+                            </button>
+</div>
+</div>
+<div>
+<h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Verification</h3>
+<div class="space-y-3">
+<label class="flex items-center gap-3 cursor-pointer group">
+<input checked="" class="rounded border-slate-300 dark:border-slate-700 text-primary focus:ring-primary bg-transparent" type="checkbox"/>
+<span class="text-sm text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200">Verified by Intel</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<input class="rounded border-slate-300 dark:border-slate-700 text-primary focus:ring-primary bg-transparent" type="checkbox"/>
+<span class="text-sm text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200">Community Built</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<input class="rounded border-slate-300 dark:border-slate-700 text-primary focus:ring-primary bg-transparent" type="checkbox"/>
+<span class="text-sm text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200">Open Source</span>
+</label>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Marketplace Content -->
+<div class="flex-1 p-6 lg:p-10">
+<div class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div>
+<h1 class="text-3xl font-bold dark:text-white mb-2">Semiconductor Agent Marketplace</h1>
+<p class="text-slate-500 dark:text-slate-400 max-w-2xl">Deploy pre-trained silicon design agents, specialized UVM skills, and model-context protocol servers directly to your EDA environment.</p>
+</div>
+<div class="flex items-center gap-2">
+<button class="flex items-center gap-2 bg-slate-200 dark:bg-slate-800 px-4 py-2 rounded-lg text-sm font-medium">
+<span class="material-symbols-outlined text-[18px]">sort</span> Popular
+                        </button>
+</div>
+</div>
+<!-- Grid of Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+<!-- Card 1: RTL Verification Agent -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col hover:border-primary/50 transition-all group neon-border">
+<div class="flex justify-between items-start mb-4">
+<div class="size-12 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">architecture</span>
+</div>
+<span class="px-2 py-1 rounded bg-green-500/10 text-green-500 text-[10px] font-bold uppercase tracking-wider">Verified</span>
+</div>
+<h3 class="text-lg font-bold dark:text-white mb-2">RTL Verification Agent</h3>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-6 flex-grow">Automated testbench generation and coverage analysis for SystemVerilog designs. Reduces verification cycles by 40%.</p>
+<div class="terminal-bg rounded-lg p-3 mb-4 font-mono text-xs flex items-center justify-between border border-slate-800">
+<code class="text-primary/80">forge install <span class="text-white">rtl-verify-v2</span></code>
+<button class="text-slate-500 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+</div>
+<div class="flex items-center justify-between mt-auto">
+<a class="text-primary text-sm font-bold flex items-center gap-1 group-hover:underline" href="#">
+                                View Details <span class="material-symbols-outlined text-[18px]">arrow_right_alt</span>
+</a>
+<span class="text-xs text-slate-500">v2.4.1</span>
+</div>
+</div>
+<!-- Card 2: UVM Testbench Skill -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col hover:border-primary/50 transition-all group">
+<div class="flex justify-between items-start mb-4">
+<div class="size-12 bg-amber-500/10 rounded-lg flex items-center justify-center text-amber-500">
+<span class="material-symbols-outlined">psychology</span>
+</div>
+<span class="px-2 py-1 rounded bg-slate-500/10 text-slate-500 text-[10px] font-bold uppercase tracking-wider">Skill</span>
+</div>
+<h3 class="text-lg font-bold dark:text-white mb-2">UVM Testbench Skill</h3>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-6 flex-grow">Extends base agents with specialized knowledge of Universal Verification Methodology patterns and macros.</p>
+<div class="terminal-bg rounded-lg p-3 mb-4 font-mono text-xs flex items-center justify-between border border-slate-800">
+<code class="text-primary/80">forge add skill <span class="text-white">uvm-master</span></code>
+<button class="text-slate-500 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+</div>
+<div class="flex items-center justify-between mt-auto">
+<a class="text-primary text-sm font-bold flex items-center gap-1 group-hover:underline" href="#">
+                                View Details <span class="material-symbols-outlined text-[18px]">arrow_right_alt</span>
+</a>
+<span class="text-xs text-slate-500">v1.0.8</span>
+</div>
+</div>
+<!-- Card 3: Jira-to-Spec MCP -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col hover:border-primary/50 transition-all group">
+<div class="flex justify-between items-start mb-4">
+<div class="size-12 bg-purple-500/10 rounded-lg flex items-center justify-center text-purple-500">
+<span class="material-symbols-outlined">sync_alt</span>
+</div>
+<span class="px-2 py-1 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider">MCP Server</span>
+</div>
+<h3 class="text-lg font-bold dark:text-white mb-2">Jira-to-Spec MCP</h3>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-6 flex-grow">Bi-directional synchronization between Jira tickets and design specification documents for traceability.</p>
+<div class="terminal-bg rounded-lg p-3 mb-4 font-mono text-xs flex items-center justify-between border border-slate-800">
+<code class="text-primary/80">forge mcp connect <span class="text-white">jira-spec</span></code>
+<button class="text-slate-500 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+</div>
+<div class="flex items-center justify-between mt-auto">
+<a class="text-primary text-sm font-bold flex items-center gap-1 group-hover:underline" href="#">
+                                View Details <span class="material-symbols-outlined text-[18px]">arrow_right_alt</span>
+</a>
+<span class="text-xs text-slate-500">v3.2.0</span>
+</div>
+</div>
+<!-- Card 4: Timing Closure Agent -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col hover:border-primary/50 transition-all group">
+<div class="flex justify-between items-start mb-4">
+<div class="size-12 bg-rose-500/10 rounded-lg flex items-center justify-center text-rose-500">
+<span class="material-symbols-outlined">auto_timer</span>
+</div>
+<span class="px-2 py-1 rounded bg-green-500/10 text-green-500 text-[10px] font-bold uppercase tracking-wider">Verified</span>
+</div>
+<h3 class="text-lg font-bold dark:text-white mb-2">Timing Closure Agent</h3>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-6 flex-grow">Analyzes static timing reports and suggests placement/routing fixes for high-frequency designs.</p>
+<div class="terminal-bg rounded-lg p-3 mb-4 font-mono text-xs flex items-center justify-between border border-slate-800">
+<code class="text-primary/80">forge install <span class="text-white">timing-ai-pro</span></code>
+<button class="text-slate-500 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+</div>
+<div class="flex items-center justify-between mt-auto">
+<a class="text-primary text-sm font-bold flex items-center gap-1 group-hover:underline" href="#">
+                                View Details <span class="material-symbols-outlined text-[18px]">arrow_right_alt</span>
+</a>
+<span class="text-xs text-slate-500">v0.9.4-beta</span>
+</div>
+</div>
+<!-- Card 5: Power Analysis Skill -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col hover:border-primary/50 transition-all group">
+<div class="flex justify-between items-start mb-4">
+<div class="size-12 bg-cyan-500/10 rounded-lg flex items-center justify-center text-cyan-500">
+<span class="material-symbols-outlined">energy_savings_leaf</span>
+</div>
+<span class="px-2 py-1 rounded bg-slate-500/10 text-slate-500 text-[10px] font-bold uppercase tracking-wider">Skill</span>
+</div>
+<h3 class="text-lg font-bold dark:text-white mb-2">Power Analysis Skill</h3>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-6 flex-grow">Advanced power estimation logic based on switching activity (VCD/FSDB files).</p>
+<div class="terminal-bg rounded-lg p-3 mb-4 font-mono text-xs flex items-center justify-between border border-slate-800">
+<code class="text-primary/80">forge add skill <span class="text-white">power-opt</span></code>
+<button class="text-slate-500 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+</div>
+<div class="flex items-center justify-between mt-auto">
+<a class="text-primary text-sm font-bold flex items-center gap-1 group-hover:underline" href="#">
+                                View Details <span class="material-symbols-outlined text-[18px]">arrow_right_alt</span>
+</a>
+<span class="text-xs text-slate-500">v1.1.2</span>
+</div>
+</div>
+<!-- Card 6: Confluence Spec MCP -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col hover:border-primary/50 transition-all group">
+<div class="flex justify-between items-start mb-4">
+<div class="size-12 bg-indigo-500/10 rounded-lg flex items-center justify-center text-indigo-500">
+<span class="material-symbols-outlined">description</span>
+</div>
+<span class="px-2 py-1 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider">MCP Server</span>
+</div>
+<h3 class="text-lg font-bold dark:text-white mb-2">Confluence Spec MCP</h3>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-6 flex-grow">Contextual retrieval of hardware specifications directly from Confluence workspaces into the agent context.</p>
+<div class="terminal-bg rounded-lg p-3 mb-4 font-mono text-xs flex items-center justify-between border border-slate-800">
+<code class="text-primary/80">forge mcp connect <span class="text-white">confluence-hw</span></code>
+<button class="text-slate-500 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+</div>
+<div class="flex items-center justify-between mt-auto">
+<a class="text-primary text-sm font-bold flex items-center gap-1 group-hover:underline" href="#">
+                                View Details <span class="material-symbols-outlined text-[18px]">arrow_right_alt</span>
+</a>
+<span class="text-xs text-slate-500">v2.1.0</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Info Bar -->
+<footer class="bg-slate-100 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500">
+<div class="flex items-center gap-6">
+<span class="flex items-center gap-1"><span class="size-2 rounded-full bg-green-500"></span> Global Registry Online</span>
+<span>v1.8.2-stable</span>
+</div>
+<div class="flex gap-6">
+<a class="hover:text-primary transition-colors" href="#">Documentation</a>
+<a class="hover:text-primary transition-colors" href="#">Security Registry</a>
+<a class="hover:text-primary transition-colors" href="#">Developer Portal</a>
+</div>
+</footer>
+</div>
+</body></html>

@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AI Ignite - Internal Video Course Portal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#258cf4",
+                        "accent": "#00ff9d",
+                        "background-dark": "#0a0f14",
+                        "background-card": "#131a22",
+                        "background-sidebar": "#0d1218",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0d1218; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2d3748; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4a5568; 
+        }
+        .glass-panel {
+            background: rgba(19, 26, 34, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .active-lesson {
+            background: rgba(37, 140, 244, 0.1);
+            border: 1px solid rgba(37, 140, 244, 0.4);
+            box-shadow: 0 0 15px rgba(37, 140, 244, 0.15);
+        }
+        .circuit-pattern {
+            background-image: 
+                radial-gradient(circle at 50% 50%, rgba(37, 140, 244, 0.05) 0%, transparent 50%),
+                linear-gradient(to right, rgba(37, 140, 244, 0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(37, 140, 244, 0.03) 1px, transparent 1px);
+            background-size: 100% 100%, 40px 40px, 40px 40px;
+        }
+        .neon-glow {
+            box-shadow: 0 0 10px rgba(37, 140, 244, 0.4);
+        }
+        .accent-glow {
+            box-shadow: 0 0 10px rgba(0, 255, 157, 0.3);
+        }.video-control-bar {
+            background: linear-gradient(to top, rgba(10, 15, 20, 0.95), transparent);
+        }
+    </style>
+</head>
+<body class="bg-background-dark font-display text-slate-100 antialiased h-screen flex flex-col overflow-hidden circuit-pattern">
+<header class="h-20 bg-background-sidebar border-b border-white/5 flex items-center justify-between px-6 z-50 shrink-0">
+<div class="flex items-center gap-12">
+<div class="flex items-center gap-3">
+<div class="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-blue-600 shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-white text-2xl" style="">rocket_launch</span>
+</div>
+<div>
+<h1 class="text-xl font-bold tracking-tight text-white leading-none" style="">AI Ignite</h1>
+<span class="text-[10px] text-slate-400 font-mono uppercase tracking-wider" style="">Internal Training Series</span>
+</div>
+</div>
+<div class="hidden lg:flex items-center gap-4 pl-8 border-l border-white/5">
+<div class="flex flex-col gap-1 w-48">
+<div class="flex justify-between text-[10px] uppercase font-bold text-slate-400">
+<span class="" style="">Overall Progress</span>
+<span class="text-white" style="">0% (0/6 Videos)</span>
+</div>
+<div class="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[5%] rounded-full"></div>
+</div>
+</div>
+</div>
+<div class="hidden xl:flex items-center gap-2">
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/50 border border-white/5">
+<span class="flex items-center justify-center w-5 h-5 rounded bg-slate-700 text-[10px] font-bold" style="">0/3</span>
+<span class="text-xs text-slate-300" style="">Code-mate</span>
+</div>
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/50 border border-white/5">
+<span class="flex items-center justify-center w-5 h-5 rounded bg-slate-700 text-[10px] font-bold" style="">0/1</span>
+<span class="text-xs text-slate-300" style="">RAG</span>
+</div>
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/50 border border-white/5">
+<span class="flex items-center justify-center w-5 h-5 rounded bg-slate-700 text-[10px] font-bold" style="">0/1</span>
+<span class="text-xs text-slate-300" style="">Agents</span>
+</div>
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/50 border border-white/5">
+<span class="flex items-center justify-center w-5 h-5 rounded bg-slate-700 text-[10px] font-bold" style="">0/1</span>
+<span class="text-xs text-slate-300" style="">Deep Dive</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/30 border border-white/5">
+<span class="material-symbols-outlined text-yellow-400 text-sm" style="">edit_note</span>
+<span class="text-xs font-bold" style="">0 Notes taken</span>
+</div>
+<div class="w-8 h-8 rounded-full bg-gradient-to-r from-primary to-purple-500 flex items-center justify-center font-bold text-xs border border-white/20" style="">
+                 JD
+             </div>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<aside class="w-80 bg-background-sidebar border-r border-white/5 flex flex-col shrink-0 z-40">
+<div class="p-4 border-b border-white/5">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-500 text-lg" style="">search</span>
+<input class="w-full bg-slate-900/50 border border-slate-700 rounded-lg py-2 pl-10 pr-4 text-sm text-white placeholder-slate-500 focus:ring-1 focus:ring-primary focus:border-primary transition-all" placeholder="Search videos..." type="text"/>
+</div>
+</div>
+<div class="px-4 py-3 flex flex-wrap gap-2 border-b border-white/5">
+<button class="px-3 py-1 rounded-full bg-primary text-white text-[10px] font-bold uppercase tracking-wide neon-glow" style="">All</button>
+<button class="px-3 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 text-[10px] font-bold uppercase tracking-wide border border-slate-700 transition-colors" style="">Code-mate</button>
+<button class="px-3 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 text-[10px] font-bold uppercase tracking-wide border border-slate-700 transition-colors" style="">RAG</button>
+<button class="px-3 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 text-[10px] font-bold uppercase tracking-wide border border-slate-700 transition-colors" style="">Agents</button>
+</div>
+<div class="flex-1 overflow-y-auto p-4 space-y-3">
+<div class="active-lesson p-3 rounded-xl cursor-pointer group transition-all">
+<div class="flex items-start gap-3">
+<div class="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold mt-0.5 shadow-[0_0_10px_rgba(37,140,244,0.5)]" style="">1</div>
+<div class="flex-1">
+<h3 class="text-sm font-bold text-white mb-1 group-hover:text-primary transition-colors" style="">Setup &amp; Usage</h3>
+<div class="flex items-center gap-2 text-[10px] text-slate-400">
+<span class="bg-primary/10 text-primary px-1.5 rounded border border-primary/20" style="">Code-mate</span>
+<span class="" style="">•</span>
+<span class="" style="">10:00</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-primary text-lg animate-pulse" style="">play_circle</span>
+</div>
+</div>
+<div class="p-3 rounded-xl border border-transparent hover:bg-slate-800/50 hover:border-slate-700 cursor-pointer group transition-all">
+<div class="flex items-start gap-3">
+<div class="flex-shrink-0 w-6 h-6 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs font-bold mt-0.5 border border-slate-700" style="">2</div>
+<div class="flex-1">
+<h3 class="text-sm font-medium text-slate-300 mb-1 group-hover:text-white transition-colors" style="">Prompt Engineering</h3>
+<div class="flex items-center gap-2 text-[10px] text-slate-500 group-hover:text-slate-400">
+<span class="bg-slate-800 px-1.5 rounded border border-slate-700" style="">Code-mate</span>
+<span class="" style="">•</span>
+<span class="" style="">10:00</span>
+</div>
+</div>
+</div>
+</div>
+<div class="p-3 rounded-xl border border-transparent hover:bg-slate-800/50 hover:border-slate-700 cursor-pointer group transition-all">
+<div class="flex items-start gap-3">
+<div class="flex-shrink-0 w-6 h-6 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs font-bold mt-0.5 border border-slate-700" style="">3</div>
+<div class="flex-1">
+<h3 class="text-sm font-medium text-slate-300 mb-1 group-hover:text-white transition-colors" style="">Function Calling</h3>
+<div class="flex items-center gap-2 text-[10px] text-slate-500 group-hover:text-slate-400">
+<span class="bg-slate-800 px-1.5 rounded border border-slate-700" style="">Code-mate</span>
+<span class="" style="">•</span>
+<span class="" style="">10:00</span>
+</div>
+</div>
+</div>
+</div>
+<div class="p-3 rounded-xl border border-transparent hover:bg-slate-800/50 hover:border-slate-700 cursor-pointer group transition-all">
+<div class="flex items-start gap-3">
+<div class="flex-shrink-0 w-6 h-6 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs font-bold mt-0.5 border border-slate-700" style="">4</div>
+<div class="flex-1">
+<h3 class="text-sm font-medium text-slate-300 mb-1 group-hover:text-white transition-colors" style="">RAG Fundamentals</h3>
+<div class="flex items-center gap-2 text-[10px] text-slate-500 group-hover:text-slate-400">
+<span class="bg-slate-800 px-1.5 rounded border border-slate-700" style="">RAG</span>
+<span class="" style="">•</span>
+<span class="" style="">10:00</span>
+</div>
+</div>
+</div>
+</div>
+<div class="p-3 rounded-xl border border-transparent hover:bg-slate-800/50 hover:border-slate-700 cursor-pointer group transition-all">
+<div class="flex items-start gap-3">
+<div class="flex-shrink-0 w-6 h-6 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs font-bold mt-0.5 border border-slate-700" style="">5</div>
+<div class="flex-1">
+<h3 class="text-sm font-medium text-slate-300 mb-1 group-hover:text-white transition-colors" style="">Intro to AI Agents</h3>
+<div class="flex items-center gap-2 text-[10px] text-slate-500 group-hover:text-slate-400">
+<span class="bg-slate-800 px-1.5 rounded border border-slate-700" style="">Agents</span>
+<span class="" style="">•</span>
+<span class="" style="">10:00</span>
+</div>
+</div>
+</div>
+</div>
+<div class="p-3 rounded-xl border border-transparent hover:bg-slate-800/50 hover:border-slate-700 cursor-pointer group transition-all">
+<div class="flex items-start gap-3">
+<div class="flex-shrink-0 w-6 h-6 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs font-bold mt-0.5 border border-slate-700" style="">6</div>
+<div class="flex-1">
+<h3 class="text-sm font-medium text-slate-300 mb-1 group-hover:text-white transition-colors" style="">How LLMs Work</h3>
+<div class="flex items-center gap-2 text-[10px] text-slate-500 group-hover:text-slate-400">
+<span class="bg-slate-800 px-1.5 rounded border border-slate-700" style="">Deep Dive</span>
+<span class="" style="">•</span>
+<span class="" style="">10:00</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</aside>
+<main class="flex-1 overflow-y-auto bg-background-dark relative p-6 lg:p-10">
+<div class="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] pointer-events-none"></div>
+<div class="max-w-[1400px] mx-auto flex flex-col gap-6 relative z-10">
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-primary/20 text-primary border border-primary/30 tracking-widest">Internal Tool</span>
+<span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-accent/20 text-accent border border-accent/30 tracking-widest">v2.4.0</span>
+</div>
+<h1 class="text-4xl font-bold text-white leading-tight">Getting Started with the Coding Agent</h1>
+<p class="text-slate-400 max-w-2xl">A comprehensive guide to configuring and deploying our internal LLM-powered assistant, specifically tuned for hardware description languages and firmware C/C++.</p>
+</div>
+<div class="flex gap-8 items-start">
+<!-- Left Sidebar Navigation for Guide -->
+<aside class="w-64 shrink-0 sticky top-0 space-y-4">
+<nav class="flex flex-col gap-1">
+<a class="px-4 py-2 rounded-lg bg-primary/10 text-primary border-l-2 border-primary text-sm font-bold" href="#env">Environment Configuration</a>
+<a class="px-4 py-2 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-all text-sm" href="#ide">IDE Integration</a>
+<a class="px-4 py-2 rounded-lg text-slate-400 hover:bg-slate-800/50 hover:text-white transition-all text-sm" href="#pitfalls">Common Pitfalls</a>
+</nav>
+</aside>
+<!-- Main Article Content -->
+<article class="flex-1 space-y-12 bg-background-card p-8 rounded-2xl border border-white/5 shadow-2xl">
+<section id="env">
+<h2 class="text-2xl font-bold flex items-center gap-3 text-white mb-6">
+<span class="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-white text-sm">1</span>
+                    Environment Configuration
+                </h2>
+<p class="text-slate-300 leading-relaxed mb-6">Before initializing the agent, ensure your workspace has the necessary SDKs and secure access tokens. The agent requires an active VPN connection to the internal Silicon Forge network.</p>
+<div class="bg-black rounded-lg p-4 font-mono text-sm border border-slate-800 my-6">
+<div class="flex justify-between items-center mb-2 border-b border-white/10 pb-2">
+<span class="text-slate-500 text-xs italic">Terminal / Shell</span>
+<button class="text-primary hover:text-white text-xs flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">content_copy</span> Copy
+                        </button>
+</div>
+<div class="text-accent">$ <span class="text-slate-300">curl -s https://ai.internal.corp/install-cli | bash</span></div>
+<div class="text-accent">$ <span class="text-slate-300">sai auth login --scope=chip-design</span></div>
+<div class="text-slate-500 mt-2"># Initializing internal LLM weights...</div>
+<div class="text-slate-300">sai init --agent=coding-assistant --env=development</div>
+</div>
+<div class="p-4 rounded-lg bg-accent/5 border-l-4 border-accent">
+<div class="flex items-center gap-2 text-accent font-bold mb-2">
+<span class="material-symbols-outlined">lightbulb</span>
+<span>PRO TIP</span>
+</div>
+<p class="text-sm text-slate-300">For faster inference, use the <code>--local-cache</code> flag during initialization. This reduces latency by 40%.</p>
+</div>
+</section>
+<section id="ide">
+<h2 class="text-2xl font-bold flex items-center gap-3 text-white mb-6">
+<span class="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-white text-sm">2</span>
+                    IDE Integration
+                </h2>
+<p class="text-slate-300 leading-relaxed mb-6">The Coding Agent works natively with VS Code and CLion. Install the <span class="text-primary font-medium">"Silicon-AI Copilot"</span> extension from our internal marketplace.</p>
+<div class="bg-slate-900/50 rounded-xl border border-white/10 p-4 flex gap-6 items-center">
+<div class="w-48 aspect-video bg-black rounded-lg flex items-center justify-center border border-primary/20">
+<span class="material-symbols-outlined text-4xl text-primary">integration_instructions</span>
+</div>
+<div class="flex-1">
+<h4 class="font-bold text-white mb-2 text-sm">Configuring Settings</h4>
+<ul class="text-xs space-y-2 text-slate-400">
+<li class="flex items-center gap-2"><span class="material-symbols-outlined text-primary text-base">check_circle</span> Enable "Auto-complete for Verilog/VHDL"</li>
+<li class="flex items-center gap-2"><span class="material-symbols-outlined text-primary text-base">check_circle</span> Set Temperature to 0.1 for logic</li>
+</ul>
+</div>
+</div>
+</section>
+</article>
+<!-- Right Sidebar Quick Links -->
+<aside class="w-72 shrink-0 space-y-8">
+<div class="bg-background-card/50 rounded-xl border border-white/5 p-5">
+<h3 class="text-[10px] font-bold uppercase tracking-widest text-primary mb-4">Related Guides</h3>
+<div class="space-y-4">
+<a class="group block" href="#">
+<p class="text-xs font-bold text-white group-hover:text-primary transition-colors mb-1">Verilog Optimization</p>
+<p class="text-[10px] text-slate-500">Advanced prompting for timing closure.</p>
+</a>
+<a class="group block" href="#">
+<p class="text-xs font-bold text-white group-hover:text-primary transition-colors mb-1">Automated Unit Testing</p>
+<p class="text-[10px] text-slate-500">Generate testbenches in seconds.</p>
+</a>
+</div>
+</div>
+<div class="bg-background-card/50 rounded-xl border border-white/5 p-5">
+<h3 class="text-[10px] font-bold uppercase tracking-widest text-primary mb-4">External Resources</h3>
+<div class="space-y-2">
+<a class="flex items-center justify-between p-2 rounded bg-slate-800/30 border border-white/5 hover:border-primary/50 text-[10px] font-medium" href="#">
+<span>Internal Wiki</span>
+<span class="material-symbols-outlined text-sm">open_in_new</span>
+</a>
+<a class="flex items-center justify-between p-2 rounded bg-slate-800/30 border border-white/5 hover:border-primary/50 text-[10px] font-medium" href="#">
+<span>API Docs</span>
+<span class="material-symbols-outlined text-sm">menu_book</span>
+</a>
+</div>
+</div>
+</aside>
+</div>
+</div>
+</main>
+</div>
+</body></html>

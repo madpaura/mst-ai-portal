@@ -1,0 +1,59 @@
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from typing import Optional
+
+from config import settings
+from auth.service import decode_access_token
+from database import get_db
+
+security = HTTPBearer(auto_error=False)
+
+
+async def get_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+) -> dict:
+    if settings.AUTH_MODE == "open" and credentials is None:
+        db = await get_db()
+        row = await db.fetchrow("SELECT * FROM users WHERE username = 'admin' LIMIT 1")
+        if row:
+            return dict(row)
+        raise HTTPException(status_code=401, detail="No admin user found")
+
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    payload = decode_access_token(credentials.credentials)
+    if payload is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    db = await get_db()
+    user = await db.fetchrow("SELECT * FROM users WHERE id = $1", payload["sub"])
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    return dict(user)
+
+
+async def get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+) -> Optional[dict]:
+    if credentials is None:
+        if settings.AUTH_MODE == "open":
+            db = await get_db()
+            row = await db.fetchrow("SELECT * FROM users WHERE username = 'admin' LIMIT 1")
+            return dict(row) if row else None
+        return None
+
+    payload = decode_access_token(credentials.credentials)
+    if payload is None:
+        return None
+
+    db = await get_db()
+    user = await db.fetchrow("SELECT * FROM users WHERE id = $1", payload["sub"])
+    return dict(user) if user else None
+
+
+async def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user

@@ -1,0 +1,327 @@
+<!DOCTYPE html><html class="dark" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>AI Ignite - Internal Video Course Portal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#258cf4",
+                        "accent": "#00ff9d",
+                        "background-dark": "#0a0f14",
+                        "background-card": "#131a22",
+                        "background-sidebar": "#0d1218",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0d1218; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2d3748; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4a5568; 
+        }
+        .glass-panel {
+            background: rgba(19, 26, 34, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .active-lesson {
+            background: rgba(37, 140, 244, 0.1);
+            border: 1px solid rgba(37, 140, 244, 0.4);
+            box-shadow: 0 0 15px rgba(37, 140, 244, 0.15);
+        }
+        .circuit-pattern {
+            background-image: 
+                radial-gradient(circle at 50% 50%, rgba(37, 140, 244, 0.05) 0%, transparent 50%),
+                linear-gradient(to right, rgba(37, 140, 244, 0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(37, 140, 244, 0.03) 1px, transparent 1px);
+            background-size: 100% 100%, 40px 40px, 40px 40px;
+        }
+        .neon-glow {
+            box-shadow: 0 0 10px rgba(37, 140, 244, 0.4);
+        }
+        .accent-glow {
+            box-shadow: 0 0 10px rgba(0, 255, 157, 0.3);
+        }.video-control-bar {
+            background: linear-gradient(to top, rgba(10, 15, 20, 0.95), transparent);
+        }
+    </style>
+</head>
+<body class="bg-background-dark font-display text-slate-100 antialiased h-screen flex flex-col overflow-hidden circuit-pattern">
+<header class="h-20 bg-background-sidebar border-b border-white/5 flex items-center justify-between px-6 z-50 shrink-0">
+<div class="flex items-center gap-12">
+<div class="flex items-center gap-3">
+<div class="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-blue-600 shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-white text-2xl" style="">rocket_launch</span>
+</div>
+<div>
+<h1 class="text-xl font-bold tracking-tight text-white leading-none" style="">AI Ignite</h1>
+<span class="text-[10px] text-slate-400 font-mono uppercase tracking-wider" style="">Internal Training Series</span>
+</div>
+</div>
+<div class="hidden lg:flex items-center gap-4 pl-8 border-l border-white/5">
+<div class="flex flex-col gap-1 w-48">
+<div class="flex justify-between text-[10px] uppercase font-bold text-slate-400">
+<span class="" style="">Overall Progress</span>
+<span class="text-white" style="">0% (0/6 Videos)</span>
+</div>
+<div class="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[5%] rounded-full"></div>
+</div>
+</div>
+</div>
+<div class="hidden xl:flex items-center gap-2">
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/50 border border-white/5">
+<span class="flex items-center justify-center w-5 h-5 rounded bg-slate-700 text-[10px] font-bold" style="">0/3</span>
+<span class="text-xs text-slate-300" style="">Code-mate</span>
+</div>
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/50 border border-white/5">
+<span class="flex items-center justify-center w-5 h-5 rounded bg-slate-700 text-[10px] font-bold" style="">0/1</span>
+<span class="text-xs text-slate-300" style="">RAG</span>
+</div>
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/50 border border-white/5">
+<span class="flex items-center justify-center w-5 h-5 rounded bg-slate-700 text-[10px] font-bold" style="">0/1</span>
+<span class="text-xs text-slate-300" style="">Agents</span>
+</div>
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/50 border border-white/5">
+<span class="flex items-center justify-center w-5 h-5 rounded bg-slate-700 text-[10px] font-bold" style="">0/1</span>
+<span class="text-xs text-slate-300" style="">Deep Dive</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/30 border border-white/5">
+<span class="material-symbols-outlined text-yellow-400 text-sm" style="">edit_note</span>
+<span class="text-xs font-bold" style="">0 Notes taken</span>
+</div>
+<div class="w-8 h-8 rounded-full bg-gradient-to-r from-primary to-purple-500 flex items-center justify-center font-bold text-xs border border-white/20" style="">
+                 JD
+             </div>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<aside class="w-80 bg-background-sidebar border-r border-white/5 flex flex-col shrink-0 z-40">
+<div class="p-4 border-b border-white/5">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-500 text-lg" style="">search</span>
+<input class="w-full bg-slate-900/50 border border-slate-700 rounded-lg py-2 pl-10 pr-4 text-sm text-white placeholder-slate-500 focus:ring-1 focus:ring-primary focus:border-primary transition-all" placeholder="Search videos..." type="text">
+</div>
+</div>
+<div class="px-4 py-3 flex flex-wrap gap-2 border-b border-white/5">
+<button class="px-3 py-1 rounded-full bg-primary text-white text-[10px] font-bold uppercase tracking-wide neon-glow" style="">All</button>
+<button class="px-3 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 text-[10px] font-bold uppercase tracking-wide border border-slate-700 transition-colors" style="">Code-mate</button>
+<button class="px-3 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 text-[10px] font-bold uppercase tracking-wide border border-slate-700 transition-colors" style="">RAG</button>
+<button class="px-3 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 text-[10px] font-bold uppercase tracking-wide border border-slate-700 transition-colors" style="">Agents</button>
+</div>
+<div class="flex-1 overflow-y-auto p-4 space-y-3">
+<div class="active-lesson p-3 rounded-xl cursor-pointer group transition-all">
+<div class="flex items-start gap-3">
+<div class="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold mt-0.5 shadow-[0_0_10px_rgba(37,140,244,0.5)]" style="">1</div>
+<div class="flex-1">
+<h3 class="text-sm font-bold text-white mb-1 group-hover:text-primary transition-colors" style="">Setup &amp; Usage</h3>
+<div class="flex items-center gap-2 text-[10px] text-slate-400">
+<span class="bg-primary/10 text-primary px-1.5 rounded border border-primary/20" style="">Code-mate</span>
+<span class="" style="">•</span>
+<span class="" style="">10:00</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-primary text-lg animate-pulse" style="">play_circle</span>
+</div>
+</div>
+<div class="p-3 rounded-xl border border-transparent hover:bg-slate-800/50 hover:border-slate-700 cursor-pointer group transition-all">
+<div class="flex items-start gap-3">
+<div class="flex-shrink-0 w-6 h-6 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs font-bold mt-0.5 border border-slate-700" style="">2</div>
+<div class="flex-1">
+<h3 class="text-sm font-medium text-slate-300 mb-1 group-hover:text-white transition-colors" style="">Prompt Engineering</h3>
+<div class="flex items-center gap-2 text-[10px] text-slate-500 group-hover:text-slate-400">
+<span class="bg-slate-800 px-1.5 rounded border border-slate-700" style="">Code-mate</span>
+<span class="" style="">•</span>
+<span class="" style="">10:00</span>
+</div>
+</div>
+</div>
+</div>
+<div class="p-3 rounded-xl border border-transparent hover:bg-slate-800/50 hover:border-slate-700 cursor-pointer group transition-all">
+<div class="flex items-start gap-3">
+<div class="flex-shrink-0 w-6 h-6 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs font-bold mt-0.5 border border-slate-700" style="">3</div>
+<div class="flex-1">
+<h3 class="text-sm font-medium text-slate-300 mb-1 group-hover:text-white transition-colors" style="">Function Calling</h3>
+<div class="flex items-center gap-2 text-[10px] text-slate-500 group-hover:text-slate-400">
+<span class="bg-slate-800 px-1.5 rounded border border-slate-700" style="">Code-mate</span>
+<span class="" style="">•</span>
+<span class="" style="">10:00</span>
+</div>
+</div>
+</div>
+</div>
+<div class="p-3 rounded-xl border border-transparent hover:bg-slate-800/50 hover:border-slate-700 cursor-pointer group transition-all">
+<div class="flex items-start gap-3">
+<div class="flex-shrink-0 w-6 h-6 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs font-bold mt-0.5 border border-slate-700" style="">4</div>
+<div class="flex-1">
+<h3 class="text-sm font-medium text-slate-300 mb-1 group-hover:text-white transition-colors" style="">RAG Fundamentals</h3>
+<div class="flex items-center gap-2 text-[10px] text-slate-500 group-hover:text-slate-400">
+<span class="bg-slate-800 px-1.5 rounded border border-slate-700" style="">RAG</span>
+<span class="" style="">•</span>
+<span class="" style="">10:00</span>
+</div>
+</div>
+</div>
+</div>
+<div class="p-3 rounded-xl border border-transparent hover:bg-slate-800/50 hover:border-slate-700 cursor-pointer group transition-all">
+<div class="flex items-start gap-3">
+<div class="flex-shrink-0 w-6 h-6 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs font-bold mt-0.5 border border-slate-700" style="">5</div>
+<div class="flex-1">
+<h3 class="text-sm font-medium text-slate-300 mb-1 group-hover:text-white transition-colors" style="">Intro to AI Agents</h3>
+<div class="flex items-center gap-2 text-[10px] text-slate-500 group-hover:text-slate-400">
+<span class="bg-slate-800 px-1.5 rounded border border-slate-700" style="">Agents</span>
+<span class="" style="">•</span>
+<span class="" style="">10:00</span>
+</div>
+</div>
+</div>
+</div>
+<div class="p-3 rounded-xl border border-transparent hover:bg-slate-800/50 hover:border-slate-700 cursor-pointer group transition-all">
+<div class="flex items-start gap-3">
+<div class="flex-shrink-0 w-6 h-6 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs font-bold mt-0.5 border border-slate-700" style="">6</div>
+<div class="flex-1">
+<h3 class="text-sm font-medium text-slate-300 mb-1 group-hover:text-white transition-colors" style="">How LLMs Work</h3>
+<div class="flex items-center gap-2 text-[10px] text-slate-500 group-hover:text-slate-400">
+<span class="bg-slate-800 px-1.5 rounded border border-slate-700" style="">Deep Dive</span>
+<span class="" style="">•</span>
+<span class="" style="">10:00</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</aside>
+<main class="flex-1 overflow-y-auto bg-background-dark relative p-6 lg:p-10">
+<div class="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] pointer-events-none"></div>
+<div class="max-w-5xl mx-auto flex flex-col gap-8 relative z-10">
+<div class="w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 relative group">
+<div class="absolute inset-0 flex items-center justify-center bg-slate-900">
+<span class="material-symbols-outlined text-slate-700 text-9xl opacity-20" style="">smart_display</span>
+</div>
+<div class="absolute bottom-0 left-0 right-0 h-20 video-control-bar px-6 flex items-end pb-4 opacity-100 group-hover:opacity-100 transition-opacity">
+<div class="w-full flex flex-col gap-2">
+<div class="w-full h-1 bg-slate-700/50 rounded-full cursor-pointer group/progress relative">
+<div class="absolute top-0 left-0 h-full w-[25%] bg-primary rounded-full neon-glow"></div>
+<div class="absolute top-1/2 -translate-y-1/2 left-[25%] w-3 h-3 bg-white rounded-full opacity-0 group-hover/progress:opacity-100 transition-opacity shadow"></div>
+</div>
+<div class="flex items-center justify-between mt-1">
+<div class="flex items-center gap-4">
+<button class="text-white hover:text-primary transition-colors" style="">
+<span class="material-symbols-outlined text-3xl fill-1" style="">play_arrow</span>
+</button>
+<div class="flex items-center gap-2 text-xs font-mono text-slate-300">
+<span class="" style="">2:30</span>
+<span class="text-slate-600" style="">/</span>
+<span class="" style="">10:00</span>
+</div>
+<div class="px-2 py-0.5 rounded-full bg-slate-800/80 border border-slate-700 text-[10px] text-slate-300" style="">
+                                        Introduction
+                                    </div>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-slate-400 hover:text-white transition-colors" style="">
+<span class="material-symbols-outlined" style="">closed_caption</span>
+</button>
+<button class="text-slate-400 hover:text-white transition-colors" style="">
+<span class="material-symbols-outlined" style="">settings</span>
+</button>
+<button class="text-slate-400 hover:text-white transition-colors" style="">
+<span class="material-symbols-outlined" style="">fullscreen</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-6">
+<div>
+<span class="inline-block px-2 py-1 rounded bg-primary/10 border border-primary/20 text-primary text-[10px] font-bold uppercase tracking-wider mb-2" style="">Code-mate</span>
+<h1 class="text-3xl font-bold text-white mb-2" style="">Setup &amp; Usage</h1>
+<p class="text-slate-400 text-sm" style="">Learn how to properly configure your environment for the Code-mate AI assistant.</p>
+</div>
+<div class="flex items-center gap-1 border-b border-white/10">
+<button class="px-6 py-3 text-sm font-bold text-white border-b-2 border-primary bg-primary/5 rounded-t-lg flex items-center gap-2" style="">
+<span class="material-symbols-outlined text-base" style="">format_list_bulleted</span>
+                            Chapters
+                        </button>
+<button class="px-6 py-3 text-sm font-medium text-slate-400 hover:text-white border-b-2 border-transparent hover:bg-slate-800/30 rounded-t-lg transition-all flex items-center gap-2" style="">
+<span class="material-symbols-outlined text-base" style="">edit</span>
+                            Notes
+                        </button>
+<button class="px-6 py-3 text-sm font-medium text-slate-400 hover:text-white border-b-2 border-transparent hover:bg-slate-800/30 rounded-t-lg transition-all flex items-center gap-2" style="">
+<span class="material-symbols-outlined text-base" style="">description</span>How to</button>
+</div>
+<div class="bg-background-card border border-white/5 rounded-xl overflow-hidden">
+<div class="flex items-center justify-between p-4 bg-primary/5 border-l-2 border-primary">
+<div class="flex items-center gap-4">
+<span class="font-mono text-xs text-primary font-bold w-12 text-right" style="">0:00</span>
+<span class="text-sm font-bold text-white" style="">Introduction</span>
+</div>
+<div class="flex items-center gap-2 px-2 py-1 bg-primary text-black text-[10px] font-bold uppercase rounded shadow-[0_0_10px_rgba(37,140,244,0.4)]" style="">
+<span class="material-symbols-outlined text-sm" style="">play_arrow</span>
+                                 NOW
+                             </div>
+</div>
+<div class="flex items-center justify-between p-4 border-t border-white/5 hover:bg-slate-800/50 cursor-pointer group transition-colors">
+<div class="flex items-center gap-4">
+<span class="font-mono text-xs text-slate-500 w-12 text-right group-hover:text-primary transition-colors" style="">0:30</span>
+<span class="text-sm font-medium text-slate-400 group-hover:text-white transition-colors" style="">Installation</span>
+</div>
+<span class="material-symbols-outlined text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity text-lg" style="">play_circle</span>
+</div>
+<div class="flex items-center justify-between p-4 border-t border-white/5 hover:bg-slate-800/50 cursor-pointer group transition-colors">
+<div class="flex items-center gap-4">
+<span class="font-mono text-xs text-slate-500 w-12 text-right group-hover:text-primary transition-colors" style="">1:00</span>
+<span class="text-sm font-medium text-slate-400 group-hover:text-white transition-colors" style="">First Run</span>
+</div>
+<span class="material-symbols-outlined text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity text-lg" style="">play_circle</span>
+</div>
+<div class="flex items-center justify-between p-4 border-t border-white/5 hover:bg-slate-800/50 cursor-pointer group transition-colors">
+<div class="flex items-center gap-4">
+<span class="font-mono text-xs text-slate-500 w-12 text-right group-hover:text-primary transition-colors" style="">1:30</span>
+<span class="text-sm font-medium text-slate-400 group-hover:text-white transition-colors" style="">Key Features Overview</span>
+</div>
+<span class="material-symbols-outlined text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity text-lg" style="">play_circle</span>
+</div>
+<div class="flex items-center justify-between p-4 border-t border-white/5 hover:bg-slate-800/50 cursor-pointer group transition-colors">
+<div class="flex items-center gap-4">
+<span class="font-mono text-xs text-slate-500 w-12 text-right group-hover:text-primary transition-colors" style="">5:45</span>
+<span class="text-sm font-medium text-slate-400 group-hover:text-white transition-colors" style="">Troubleshooting Common Issues</span>
+</div>
+<span class="material-symbols-outlined text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity text-lg" style="">play_circle</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+
+</body></html>
