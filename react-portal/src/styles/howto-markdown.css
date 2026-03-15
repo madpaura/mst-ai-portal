@@ -1,0 +1,214 @@
+/* How-To Guide Markdown Styles */
+
+.howto-markdown h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  margin-bottom: 1.25rem;
+  margin-top: 2rem;
+}
+
+.howto-markdown h2 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 1rem;
+  margin-top: 1.75rem;
+}
+
+.howto-markdown h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.howto-markdown h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.howto-markdown h1:first-child,
+.howto-markdown h2:first-child,
+.howto-markdown h3:first-child {
+  margin-top: 0;
+}
+
+/* Bullet lists */
+.howto-markdown ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin: 0.75rem 0;
+}
+
+.howto-markdown ul ul {
+  list-style-type: circle;
+  margin: 0.25rem 0;
+}
+
+.howto-markdown ul ul ul {
+  list-style-type: square;
+}
+
+.howto-markdown ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin: 0.75rem 0;
+}
+
+.howto-markdown li {
+  margin: 0.35rem 0;
+  padding-left: 0.25rem;
+}
+
+.howto-markdown li::marker {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Links */
+.howto-markdown a {
+  color: #258cf4;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(37, 140, 244, 0.4);
+  transition: color 0.15s, text-decoration-color 0.15s;
+}
+
+.howto-markdown a:hover {
+  color: #5aabff;
+  text-decoration-color: rgba(90, 171, 255, 0.7);
+}
+
+/* Inline code */
+.howto-markdown :not(pre) > code {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e8b4f8;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+  font-weight: 500;
+}
+
+/* Code blocks */
+.howto-markdown pre {
+  background: #0d1117 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+  overflow-x: auto;
+}
+
+.howto-markdown pre code {
+  background: transparent !important;
+  padding: 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+/* Blockquotes */
+.howto-markdown blockquote {
+  border-left: 3px solid #258cf4;
+  background: rgba(37, 140, 244, 0.06);
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+
+.howto-markdown blockquote p {
+  margin: 0;
+}
+
+/* Tables */
+.howto-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.howto-markdown th {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.howto-markdown td {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.howto-markdown tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Horizontal rule */
+.howto-markdown hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 1.5rem 0;
+}
+
+/* Images */
+.howto-markdown img {
+  border-radius: 0.75rem;
+  max-width: 100%;
+}
+
+/* Paragraphs */
+.howto-markdown p {
+  margin: 0.75rem 0;
+  line-height: 1.7;
+}
+
+/* Task lists (GFM) */
+.howto-markdown input[type="checkbox"] {
+  margin-right: 0.5rem;
+  accent-color: #258cf4;
+}
+
+/* Strong / Bold */
+.howto-markdown strong {
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* Light mode overrides */
+:root:not(.dark) .howto-markdown h1,
+:root:not(.dark) .howto-markdown h2 {
+  border-bottom-color: rgba(0, 0, 0, 0.12);
+}
+
+:root:not(.dark) .howto-markdown li::marker {
+  color: rgba(0, 0, 0, 0.4);
+}
+
+:root:not(.dark) .howto-markdown :not(pre) > code {
+  background: rgba(0, 0, 0, 0.06);
+  color: #9333ea;
+}
+
+:root:not(.dark) .howto-markdown strong {
+  color: rgba(0, 0, 0, 0.9);
+}
+
+:root:not(.dark) .howto-markdown th {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+:root:not(.dark) .howto-markdown td {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+:root:not(.dark) .howto-markdown pre {
+  background: #1e1e2e !important;
+  border-color: rgba(0, 0, 0, 0.1);
+}

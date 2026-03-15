@@ -44,7 +44,7 @@ class VideoResponse(BaseModel):
 
 class VideoCreate(BaseModel):
     title: str
-    slug: str
+    slug: Optional[str] = ""
     description: Optional[str] = None
     category: str
     course_id: Optional[str] = None

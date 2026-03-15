@@ -75,7 +75,7 @@ export const AdminVideos: React.FC = () => {
   const [videos, setVideos] = useState<Video[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [selected, setSelected] = useState<Video | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>('metadata');
+  const [activeTab, setActiveTab] = useState<Tab>('banner');
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -151,7 +151,7 @@ export const AdminVideos: React.FC = () => {
 
   const selectVideo = async (video: Video) => {
     setSelected(video);
-    setActiveTab('metadata');
+    setActiveTab('banner');
     setEditForm({
       title: video.title,
       description: video.description || '',
@@ -275,12 +275,12 @@ export const AdminVideos: React.FC = () => {
   };
 
   const handleDelete = async () => {
-    if (!selected || !confirm('Deactivate this video?')) return;
+    if (!selected || !confirm('Permanently delete this video and all associated data? This cannot be undone.')) return;
     try {
       await api.delete(`/admin/videos/${selected.id}`);
       setSelected(null);
       await fetchVideos();
-      showMsg('success', 'Video deactivated');
+      showMsg('success', 'Video permanently deleted');
     } catch (err: any) {
       showMsg('error', err.message);
     }
@@ -749,7 +749,7 @@ export const AdminVideos: React.FC = () => {
 
             {/* Tabs */}
             <div className="flex items-center gap-1 border-b border-slate-200 dark:border-white/10 mb-6">
-              {(['metadata', 'chapters', 'howto', 'quality', 'seed-notes', 'banner'] as Tab[]).map((tab) => (
+              {(['banner', 'metadata', 'chapters', 'howto', 'quality', 'seed-notes'] as Tab[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}

@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 import json
 import shutil
@@ -53,6 +54,9 @@ async def admin_list_videos(admin: dict = Depends(require_admin)):
 @router.post("/videos", response_model=VideoAdminResponse)
 async def admin_create_video(req: VideoCreate, admin: dict = Depends(require_admin)):
     db = await get_db()
+    # Auto-generate slug from title if not provided
+    if not req.slug or not req.slug.strip():
+        req.slug = re.sub(r'[^a-z0-9]+', '-', req.title.lower()).strip('-')
     existing = await db.fetchrow("SELECT id FROM videos WHERE slug = $1", req.slug)
     if existing:
         raise HTTPException(status_code=409, detail="Slug already exists")
@@ -129,28 +133,19 @@ async def admin_update_video(
 
 
 @router.delete("/videos/{video_id}")
-async def admin_soft_delete_video(video_id: str, admin: dict = Depends(require_admin)):
-    db = await get_db()
-    result = await db.execute(
-        "UPDATE videos SET is_active = false, is_published = false WHERE id = $1", video_id
-    )
-    if result == "UPDATE 0":
-        raise HTTPException(status_code=404, detail="Video not found")
-    return {"message": "Video deactivated"}
-
-
-@router.delete("/videos/{video_id}/permanent")
-async def admin_hard_delete_video(video_id: str, admin: dict = Depends(require_admin)):
+async def admin_delete_video(video_id: str, admin: dict = Depends(require_admin)):
     db = await get_db()
     row = await db.fetchrow("SELECT id FROM videos WHERE id = $1", video_id)
     if not row:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    # Delete files from disk
+    # Delete all files from disk (raw, hls, banner, thumbnails)
     video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
     if os.path.exists(video_dir):
         shutil.rmtree(video_dir)
 
+    # Delete from DB — cascades to chapters, quality_settings, progress,
+    # user_notes, seed_notes, howto_guides, video_banners, transcode_jobs
     await db.execute("DELETE FROM videos WHERE id = $1", video_id)
     return {"message": "Video permanently deleted"}
 
@@ -662,9 +657,21 @@ async def _generate_banner_video(video_id: str, db_url: str):
                 except Exception as e:
                     print(f"[banner] Probe parse error: {e}, using defaults")
 
+            # Ensure dimensions are even (required by libx264) and fps is sane
+            orig_w = orig_w + (orig_w % 2)
+            orig_h = orig_h + (orig_h % 2)
+            if orig_fps > 60 or orig_fps < 1:
+                orig_fps = 30
+
             print(f"[banner] Original video: {orig_w}x{orig_h} @ {orig_fps}fps, has_audio={has_audio}")
 
-            # Re-encode banner to match original video resolution and fps
+            # Use the larger dimensions between banner (1920x1080) and original
+            target_w = max(orig_w, 1920)
+            target_h = max(orig_h, 1080)
+            target_w = target_w + (target_w % 2)
+            target_h = target_h + (target_h % 2)
+
+            # Re-encode banner to match target resolution and fps
             # Add silent audio ONLY if original has audio; otherwise video-only
             banner_reenc = os.path.join(banner_dir, "banner_reenc.mp4")
             reencode_cmd = [settings.FFMPEG_PATH, "-y", "-i", banner_output]
@@ -672,7 +679,7 @@ async def _generate_banner_video(video_id: str, db_url: str):
                 reencode_cmd += ["-f", "lavfi", "-i", f"anullsrc=channel_layout=stereo:sample_rate={audio_sample_rate}"]
             reencode_cmd += [
                 "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-                "-vf", f"scale={orig_w}:{orig_h}:force_original_aspect_ratio=decrease,pad={orig_w}:{orig_h}:(ow-iw)/2:(oh-ih)/2",
+                "-vf", f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2",
                 "-pix_fmt", "yuv420p",
                 "-r", str(orig_fps),
             ]
@@ -682,17 +689,32 @@ async def _generate_banner_video(video_id: str, db_url: str):
                 reencode_cmd += ["-an"]
             reencode_cmd.append(banner_reenc)
 
-            print(f"[banner] Re-encoding banner to {orig_w}x{orig_h}...")
+            print(f"[banner] Re-encoding banner to {target_w}x{target_h}...")
             reenc_result = subprocess.run(reencode_cmd, capture_output=True, text=True, timeout=60)
             if reenc_result.returncode != 0:
-                print(f"[banner] Re-encode stderr: {reenc_result.stderr[-300:]}")
+                err_msg = reenc_result.stderr[-500:]
+                print(f"[banner] Banner re-encode FAILED: {err_msg}")
+                await db.execute(
+                    "UPDATE video_banners SET status='error', error=$1 WHERE video_id=$2",
+                    f"Banner re-encode failed: {err_msg[-200:]}", video_id,
+                )
+                return
 
-            # Re-encode original to ensure matching codec params for concat
+            if not os.path.exists(banner_reenc) or os.path.getsize(banner_reenc) == 0:
+                print(f"[banner] Banner re-encode produced empty file")
+                await db.execute(
+                    "UPDATE video_banners SET status='error', error='Banner re-encode produced empty file' WHERE video_id=$1",
+                    video_id,
+                )
+                return
+
+            # Re-encode original to match target resolution and fps
             orig_reenc = os.path.join(banner_dir, "orig_reenc.mp4")
             orig_reencode_cmd = [
                 settings.FFMPEG_PATH, "-y",
                 "-i", source_path,
                 "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                "-vf", f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2",
                 "-pix_fmt", "yuv420p",
                 "-r", str(orig_fps),
             ]
@@ -705,10 +727,14 @@ async def _generate_banner_video(video_id: str, db_url: str):
             print(f"[banner] Re-encoding original for concat compatibility...")
             orig_reenc_result = subprocess.run(orig_reencode_cmd, capture_output=True, text=True, timeout=600)
 
-            if orig_reenc_result.returncode != 0:
-                # Fallback: use source directly
-                print(f"[banner] Original re-encode failed, using source directly")
-                orig_reenc = source_path
+            if orig_reenc_result.returncode != 0 or not os.path.exists(orig_reenc) or os.path.getsize(orig_reenc) == 0:
+                err_msg = orig_reenc_result.stderr[-500:] if orig_reenc_result.returncode != 0 else "empty output"
+                print(f"[banner] Original re-encode FAILED: {err_msg}")
+                await db.execute(
+                    "UPDATE video_banners SET status='error', error=$1 WHERE video_id=$2",
+                    f"Original re-encode failed: {str(err_msg)[-200:]}", video_id,
+                )
+                return
 
             # Create concat list
             concat_list = os.path.join(banner_dir, "concat.txt")

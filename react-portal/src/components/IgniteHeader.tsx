@@ -64,10 +64,11 @@ export const IgniteHeader: React.FC<IgniteHeaderProps> = ({
       </div>
 
       <div className="flex items-center gap-6">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/30 border border-slate-200 dark:border-white/5">
+        {/* Notes counter hidden — feature disabled for now */}
+        {false && <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/30 border border-slate-200 dark:border-white/5">
           <span className="material-symbols-outlined text-yellow-400 text-sm">edit_note</span>
           <span className="text-xs font-bold">{notesTaken} Notes taken</span>
-        </div>
+        </div>}
         <button
           onClick={toggleTheme}
           className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-primary transition-colors"

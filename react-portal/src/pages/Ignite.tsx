@@ -1,4 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import rehypeRaw from 'rehype-raw';
+import 'highlight.js/styles/github-dark.css';
+import '../styles/howto-markdown.css';
 import { IgniteHeader } from '../components/IgniteHeader';
 import { IgniteSidebar, ALL_VIDEOS } from '../components/IgniteSidebar';
 import type { Video } from '../components/IgniteSidebar';
@@ -42,7 +48,7 @@ export const Ignite: React.FC = () => {
   const [activeVideo, setActiveVideo] = useState<Video>(ALL_VIDEOS[0]);
   const [currentTime, setCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
-  const [activeTab, setActiveTab] = useState<'notes' | 'howto'>('notes');
+  const [activeTab, setActiveTab] = useState<'notes' | 'howto'>('howto');
   const [noteText, setNoteText] = useState('');
   const [notes, setNotes] = useState<Note[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -116,7 +122,7 @@ export const Ignite: React.FC = () => {
 
   return (
     <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
-      <IgniteHeader notesTaken={notes.length} />
+      <IgniteHeader notesTaken={0} />
 
       <div className="flex flex-1 overflow-hidden">
         <IgniteSidebar activeVideoId={activeVideo.id} onSelectVideo={handleSelectVideo} />
@@ -190,7 +196,8 @@ export const Ignite: React.FC = () => {
 
               {/* Tab Navigation */}
               <div className="flex items-center gap-1 border-b border-slate-300 dark:border-white/10">
-                <button
+                {/* Notes tab hidden — feature disabled for now */}
+                {false && <button
                   onClick={() => handleTabClick('notes')}
                   className={`px-6 py-3 text-sm font-medium border-b-2 rounded-t-lg transition-all flex items-center gap-2 ${
                     activeTab === 'notes'
@@ -200,7 +207,7 @@ export const Ignite: React.FC = () => {
                 >
                   <span className="material-symbols-outlined text-base">edit</span>
                   Notes
-                </button>
+                </button>}
                 <button
                   onClick={() => handleTabClick('howto')}
                   className={`px-6 py-3 text-sm font-medium border-b-2 rounded-t-lg transition-all flex items-center gap-2 ${
@@ -306,8 +313,13 @@ export const Ignite: React.FC = () => {
                   {howto ? (
                     <>
                       <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">{howto.title}</h3>
-                      <div className="prose dark:prose-invert prose-sm max-w-none">
-                        <pre className="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{howto.content}</pre>
+                      <div className="howto-markdown text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          rehypePlugins={[rehypeHighlight, rehypeRaw]}
+                        >
+                          {howto.content}
+                        </ReactMarkdown>
                       </div>
                     </>
                   ) : (
