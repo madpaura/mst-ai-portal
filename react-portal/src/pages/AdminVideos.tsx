@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
+import { HlsPlayer, type HlsPlayerHandle } from '../components/HlsPlayer';
 
 interface Video {
   id: string;
@@ -69,8 +70,11 @@ export const AdminVideos: React.FC = () => {
   const [editForm, setEditForm] = useState({ title: '', description: '', category: '', course_id: '', sort_order: 0 });
 
   // Chapters
+  const chapterPlayerRef = useRef<HlsPlayerHandle>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [newChapter, setNewChapter] = useState({ title: '', start_time: 0 });
+  const [chapterPlayerTime, setChapterPlayerTime] = useState(0);
+  const [chapterPlayerDuration, setChapterPlayerDuration] = useState(0);
 
   // How-to
   const [howtoTitle, setHowtoTitle] = useState('');
@@ -603,33 +607,111 @@ export const AdminVideos: React.FC = () => {
             )}
 
             {activeTab === 'chapters' && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  {chapters.map((ch) => (
-                    <div key={ch.id} className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/30 border border-white/5">
-                      <span className="font-mono text-xs text-primary min-w-[50px]">{formatDuration(ch.start_time)}</span>
-                      <span className="text-sm text-white flex-1">{ch.title}</span>
-                      <button onClick={() => handleDeleteChapter(ch.id)} className="text-red-400/50 hover:text-red-400 transition-colors">
-                        <span className="material-symbols-outlined text-sm">close</span>
+              <div className="space-y-5">
+                {/* Video Player for Chapter Marking */}
+                {selected.hls_path ? (
+                  <div>
+                    <HlsPlayer
+                      ref={chapterPlayerRef}
+                      hlsPath={selected.hls_path}
+                      chapters={chapters}
+                      onTimeUpdate={(t, d) => { setChapterPlayerTime(t); setChapterPlayerDuration(d); }}
+                      className="rounded-xl border border-white/10"
+                    />
+
+                    {/* Timeline with chapter markers */}
+                    <div className="mt-3 px-1">
+                      <div className="relative w-full h-8 bg-slate-800/50 rounded-lg border border-white/5 overflow-hidden">
+                        {/* Playhead position */}
+                        {chapterPlayerDuration > 0 && (
+                          <div
+                            className="absolute top-0 h-full w-0.5 bg-white/60 z-10"
+                            style={{ left: `${(chapterPlayerTime / chapterPlayerDuration) * 100}%` }}
+                          />
+                        )}
+                        {/* Chapter markers on timeline */}
+                        {chapters.map((ch) => {
+                          const pct = chapterPlayerDuration > 0 ? (ch.start_time / chapterPlayerDuration) * 100 : 0;
+                          return (
+                            <button
+                              key={ch.id}
+                              className="absolute top-0 h-full group/marker"
+                              style={{ left: `${pct}%` }}
+                              onClick={() => chapterPlayerRef.current?.seekTo(ch.start_time)}
+                              title={`${ch.title} (${formatDuration(ch.start_time)})`}
+                            >
+                              <div className="w-1 h-full bg-amber-400/80 group-hover/marker:bg-amber-300" />
+                              <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 bg-slate-900 border border-white/20 rounded text-[9px] text-white whitespace-nowrap opacity-0 group-hover/marker:opacity-100 transition-opacity pointer-events-none z-20">
+                                {ch.title}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="font-mono text-[10px] text-slate-500">0:00</span>
+                        <span className="font-mono text-[10px] text-slate-400">
+                          Current: {formatDuration(Math.floor(chapterPlayerTime))}
+                        </span>
+                        <span className="font-mono text-[10px] text-slate-500">{formatDuration(Math.floor(chapterPlayerDuration))}</span>
+                      </div>
+                    </div>
+
+                    {/* Mark chapter at current time */}
+                    <div className="flex items-end gap-3 mt-4 p-3 rounded-xl bg-primary/5 border border-primary/20">
+                      <div className="flex-1">
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Chapter Title</label>
+                        <input value={newChapter.title} onChange={(e) => setNewChapter((f) => ({ ...f, title: e.target.value }))}
+                          placeholder="e.g. Introduction, Architecture Overview..."
+                          className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                      </div>
+                      <div className="w-32">
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Start (sec)</label>
+                        <input type="number" value={newChapter.start_time} onChange={(e) => setNewChapter((f) => ({ ...f, start_time: parseInt(e.target.value) || 0 }))}
+                          className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                      </div>
+                      <button
+                        onClick={() => setNewChapter((f) => ({ ...f, start_time: Math.floor(chapterPlayerTime) }))}
+                        className="px-3 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs font-bold rounded-lg transition-colors border border-amber-500/30"
+                        title="Set start time to current player position"
+                      >
+                        <span className="material-symbols-outlined text-sm">my_location</span>
+                      </button>
+                      <button onClick={handleAddChapter} className="px-4 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
+                        Add Chapter
                       </button>
                     </div>
-                  ))}
-                  {chapters.length === 0 && <p className="text-slate-500 text-sm">No chapters yet</p>}
-                </div>
-                <div className="flex items-end gap-3 pt-2 border-t border-white/5">
-                  <div className="flex-1">
-                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Chapter Title</label>
-                    <input value={newChapter.title} onChange={(e) => setNewChapter((f) => ({ ...f, title: e.target.value }))}
-                      placeholder="Introduction" className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                   </div>
-                  <div className="w-32">
-                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Start (sec)</label>
-                    <input type="number" value={newChapter.start_time} onChange={(e) => setNewChapter((f) => ({ ...f, start_time: parseInt(e.target.value) || 0 }))}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                ) : (
+                  <div className="p-6 rounded-xl bg-slate-800/30 border border-white/5 text-center">
+                    <span className="material-symbols-outlined text-4xl text-slate-600 mb-2">videocam_off</span>
+                    <p className="text-slate-500 text-sm">Upload and transcode a video first to use the timeline chapter marker.</p>
                   </div>
-                  <button onClick={handleAddChapter} className="px-4 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
-                    Add
-                  </button>
+                )}
+
+                {/* Chapter List */}
+                <div>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                    Chapters ({chapters.length})
+                  </h4>
+                  <div className="space-y-2">
+                    {chapters.map((ch) => (
+                      <div key={ch.id} className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/30 border border-white/5 group/ch">
+                        <button
+                          onClick={() => chapterPlayerRef.current?.seekTo(ch.start_time)}
+                          className="font-mono text-xs text-primary min-w-[50px] hover:text-white transition-colors cursor-pointer"
+                          title="Seek to this chapter"
+                        >
+                          {formatDuration(ch.start_time)}
+                        </button>
+                        <span className="text-sm text-white flex-1">{ch.title}</span>
+                        <button onClick={() => handleDeleteChapter(ch.id)} className="text-red-400/0 group-hover/ch:text-red-400/50 hover:!text-red-400 transition-colors">
+                          <span className="material-symbols-outlined text-sm">close</span>
+                        </button>
+                      </div>
+                    ))}
+                    {chapters.length === 0 && <p className="text-slate-500 text-sm">No chapters yet. Play the video and mark chapter points above.</p>}
+                  </div>
                 </div>
               </div>
             )}

@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { IgniteHeader } from '../components/IgniteHeader';
 import { IgniteSidebar, ALL_VIDEOS } from '../components/IgniteSidebar';
 import type { Video } from '../components/IgniteSidebar';
+import { HlsPlayer, type HlsPlayerHandle } from '../components/HlsPlayer';
 import { api } from '../api/client';
 import { isLoggedIn } from '../api/client';
 
@@ -37,8 +38,10 @@ const fmtTime = (s: number): string => {
 };
 
 export const Ignite: React.FC = () => {
+  const playerRef = useRef<HlsPlayerHandle>(null);
   const [activeVideo, setActiveVideo] = useState<Video>(ALL_VIDEOS[0]);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
   const [activeTab, setActiveTab] = useState<'chapters' | 'notes' | 'howto'>('notes');
   const [noteText, setNoteText] = useState('');
   const [notes, setNotes] = useState<Note[]>([]);
@@ -65,20 +68,22 @@ export const Ignite: React.FC = () => {
 
   const handleSelectVideo = (video: Video) => {
     setActiveVideo(video);
-    setIsPlaying(false);
   };
 
-  const handlePlayPause = () => setIsPlaying(!isPlaying);
-  const handleCaptionToggle = () => {};
-  const handleSettingsClick = () => {};
-  const handleFullscreen = () => {};
-  const handleCaptureScreenshot = () => {};
+  const handleTimeUpdate = (time: number, dur: number) => {
+    setCurrentTime(time);
+    setVideoDuration(dur);
+  };
+
+  const handleChapterSeek = (startTime: number) => {
+    playerRef.current?.seekTo(startTime);
+  };
 
   const handleSaveNote = async () => {
     if (!noteText.trim() || !activeVideo?.slug) return;
     try {
       const note = await api.post<Note>(`/video/videos/${activeVideo.slug}/notes`, {
-        timestamp_s: 0,
+        timestamp_s: Math.floor(currentTime),
         content: noteText.trim(),
       });
       setNotes((prev) => [...prev, note]);
@@ -121,52 +126,13 @@ export const Ignite: React.FC = () => {
 
           <div className="max-w-5xl mx-auto flex flex-col gap-8 relative z-10">
             {/* Video Player */}
-            <div className="w-full aspect-video bg-slate-100 dark:bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 relative group">
-              <div className="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-slate-900">
-                <span className="material-symbols-outlined text-slate-300 dark:text-slate-700 text-9xl opacity-20">smart_display</span>
-              </div>
-
-              {/* Video Controls */}
-              <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black/60 dark:from-black/80 to-transparent px-6 flex items-end pb-4 opacity-100 group-hover:opacity-100 transition-opacity">
-                <div className="w-full flex flex-col gap-2">
-                  {/* Progress Bar */}
-                  <div className="w-full h-1 bg-slate-300 dark:bg-slate-700/50 rounded-full cursor-pointer group/progress relative">
-                    <div className="absolute top-0 left-0 h-full w-[25%] bg-primary rounded-full neon-glow" />
-                    <div className="absolute top-1/2 -translate-y-1/2 left-[25%] w-3 h-3 bg-white rounded-full opacity-0 group-hover/progress:opacity-100 transition-opacity shadow" />
-                  </div>
-
-                  <div className="flex items-center justify-between mt-1">
-                    <div className="flex items-center gap-4">
-                      <button onClick={handlePlayPause} className="text-white hover:text-primary transition-colors">
-                        <span className="material-symbols-outlined text-3xl">
-                          {isPlaying ? 'pause' : 'play_arrow'}
-                        </span>
-                      </button>
-                      <div className="flex items-center gap-2 text-xs font-mono text-slate-300">
-                        <span>2:30</span>
-                        <span className="text-slate-600">/</span>
-                        <span>10:00</span>
-                      </div>
-                      <div className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 text-[10px] text-slate-500 dark:text-slate-300">
-                        Introduction
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                      <button onClick={handleCaptionToggle} className="text-slate-400 hover:text-white transition-colors">
-                        <span className="material-symbols-outlined">closed_caption</span>
-                      </button>
-                      <button onClick={handleSettingsClick} className="text-slate-400 hover:text-white transition-colors">
-                        <span className="material-symbols-outlined">settings</span>
-                      </button>
-                      <button onClick={handleFullscreen} className="text-slate-400 hover:text-white transition-colors">
-                        <span className="material-symbols-outlined">fullscreen</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <HlsPlayer
+              ref={playerRef}
+              hlsPath={activeVideo.hls_path}
+              chapters={chapters}
+              onTimeUpdate={handleTimeUpdate}
+              className="shadow-2xl border border-slate-300 dark:border-slate-800"
+            />
 
             {/* Video Info & Tabs */}
             <div className="flex flex-col gap-6">
@@ -181,7 +147,7 @@ export const Ignite: React.FC = () => {
               </div>
 
               {/* Tab Navigation */}
-              <div className="flex items-center gap-1 border-b border-slate-200 dark:border-white/10">
+              <div className="flex items-center gap-1 border-b border-slate-300 dark:border-white/10">
                 <button
                   onClick={() => handleTabClick('chapters')}
                   className={`px-6 py-3 text-sm font-medium border-b-2 rounded-t-lg transition-all flex items-center gap-2 ${
@@ -221,15 +187,15 @@ export const Ignite: React.FC = () => {
               {activeTab === 'notes' && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {/* Notes List */}
-                  <div className="col-span-1 bg-card-light dark:bg-card-dark border border-slate-200 dark:border-white/5 rounded-xl flex flex-col h-[400px]">
-                    <div className="p-4 border-b border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-800/20">
+                  <div className="col-span-1 bg-card-light dark:bg-card-dark border border-slate-400 dark:border-white/5 rounded-xl overflow-hidden flex flex-col h-[400px]">
+                    <div className="p-4 border-b border-slate-400 dark:border-white/5 bg-slate-50 dark:bg-slate-800/20">
                       <h3 className="text-sm font-bold text-slate-900 dark:text-white">Your Notes</h3>
                     </div>
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
                       {notes.map((note) => (
                         <div
                           key={note.id}
-                          className="flex flex-col gap-2 p-3 bg-slate-50 dark:bg-slate-800/30 rounded-lg border border-slate-200 dark:border-white/5 hover:border-primary/30 transition-colors group/note"
+                          className="flex flex-col gap-2 p-3 bg-slate-50 dark:bg-slate-800/30 rounded-lg border border-slate-400 dark:border-white/5 hover:border-primary/30 transition-colors group/note"
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -255,21 +221,14 @@ export const Ignite: React.FC = () => {
                   </div>
 
                   {/* Note Editor */}
-                  <div className="col-span-1 md:col-span-2 bg-card-light dark:bg-card-dark border border-slate-200 dark:border-white/5 rounded-xl flex flex-col h-[400px]">
-                    <div className="p-4 border-b border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-800/20 flex items-center justify-between">
+                  <div className="col-span-1 md:col-span-2 bg-card-light dark:bg-card-dark border border-slate-400 dark:border-white/5 rounded-xl overflow-hidden flex flex-col h-[400px]">
+                    <div className="p-4 border-b border-slate-400 dark:border-white/5 bg-slate-50 dark:bg-slate-800/20 flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <span className="font-mono text-xs text-accent px-2 py-1 bg-accent/10 rounded border border-accent/20">
-                          2:30
+                          {fmtTime(currentTime)}
                         </span>
-                        <button
-                          onClick={handleCaptureScreenshot}
-                          className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">screenshot_monitor</span>
-                          Capture Screenshot
-                        </button>
                       </div>
-                      <div className="flex items-center gap-2 border border-slate-200 dark:border-white/10 rounded-lg p-1 bg-slate-100 dark:bg-slate-900/50">
+                      <div className="flex items-center gap-2 border border-slate-300 dark:border-white/10 rounded-lg p-1 bg-slate-100 dark:bg-slate-900/50">
                         <button
                           onClick={handleFormatBold}
                           className="w-7 h-7 flex items-center justify-center rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
@@ -293,12 +252,12 @@ export const Ignite: React.FC = () => {
                     <div className="flex-1 p-4">
                       <textarea
                         className="w-full h-full bg-transparent border-none resize-none text-slate-900 dark:text-white placeholder-slate-500 focus:ring-0 text-sm outline-none"
-                        placeholder="Take a note at 2:30..."
+                        placeholder={`Take a note at ${fmtTime(currentTime)} / ${fmtTime(videoDuration)}...`}
                         value={noteText}
                         onChange={(e) => setNoteText(e.target.value)}
                       />
                     </div>
-                    <div className="p-4 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-800/20 flex justify-end">
+                    <div className="p-4 border-t border-slate-300 dark:border-white/5 bg-slate-50 dark:bg-slate-800/20 flex justify-end">
                       <button
                         onClick={handleSaveNote}
                         className="px-6 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors neon-glow flex items-center gap-2"
@@ -312,25 +271,30 @@ export const Ignite: React.FC = () => {
               )}
 
               {activeTab === 'chapters' && (
-                <div className="bg-card-light dark:bg-card-dark border border-slate-200 dark:border-white/5 rounded-xl p-6">
+                <div className="bg-card-light dark:bg-card-dark border border-slate-400 dark:border-white/5 rounded-xl overflow-hidden p-6">
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Video Chapters</h3>
                   {chapters.length > 0 ? (
                     <div className="space-y-3">
-                      {chapters.map((chapter, idx) => (
-                        <button
-                          key={chapter.id}
-                          className={`w-full flex items-center gap-4 p-3 rounded-lg transition-colors ${
-                            idx === 0
-                              ? 'bg-primary/10 border border-primary/20'
-                              : 'hover:bg-slate-100 dark:hover:bg-slate-800/50 border border-transparent'
-                          }`}
-                        >
-                          <span className="font-mono text-xs text-primary min-w-[40px]">{fmtTime(chapter.start_time)}</span>
-                          <span className={`text-sm ${idx === 0 ? 'text-slate-900 dark:text-white font-bold' : 'text-slate-600 dark:text-slate-300'}`}>
-                            {chapter.title}
-                          </span>
-                        </button>
-                      ))}
+                      {chapters.map((chapter) => {
+                        const isActive = currentTime >= chapter.start_time &&
+                          !chapters.find((c) => c.start_time > chapter.start_time && currentTime >= c.start_time);
+                        return (
+                          <button
+                            key={chapter.id}
+                            onClick={() => handleChapterSeek(chapter.start_time)}
+                            className={`w-full flex items-center gap-4 p-3 rounded-lg transition-colors ${
+                              isActive
+                                ? 'bg-primary/10 border border-primary/20'
+                                : 'hover:bg-slate-100 dark:hover:bg-slate-800/50 border border-transparent'
+                            }`}
+                          >
+                            <span className="font-mono text-xs text-primary min-w-[40px]">{fmtTime(chapter.start_time)}</span>
+                            <span className={`text-sm ${isActive ? 'text-slate-900 dark:text-white font-bold' : 'text-slate-600 dark:text-slate-300'}`}>
+                              {chapter.title}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="text-slate-500 text-sm">No chapters available for this video yet.</p>
@@ -339,7 +303,7 @@ export const Ignite: React.FC = () => {
               )}
 
               {activeTab === 'howto' && (
-                <div className="bg-card-light dark:bg-card-dark border border-slate-200 dark:border-white/5 rounded-xl p-6">
+                <div className="bg-card-light dark:bg-card-dark border border-slate-400 dark:border-white/5 rounded-xl overflow-hidden p-6">
                   {howto ? (
                     <>
                       <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">{howto.title}</h3>

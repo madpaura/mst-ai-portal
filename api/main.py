@@ -1,5 +1,8 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
 from config import settings
@@ -44,6 +47,11 @@ app.include_router(forge_admin_router, prefix="/admin/forge", tags=["admin-forge
 app.include_router(video_router, prefix="/video", tags=["video"])
 app.include_router(video_admin_router, prefix="/admin", tags=["admin-video"])
 app.include_router(course_admin_router, prefix="/admin", tags=["admin-courses"])
+
+
+# Serve transcoded video streams (HLS segments, manifests, thumbnails)
+os.makedirs(settings.VIDEO_STORAGE_PATH, exist_ok=True)
+app.mount("/streams", StaticFiles(directory=settings.VIDEO_STORAGE_PATH), name="streams")
 
 
 @app.get("/health")
