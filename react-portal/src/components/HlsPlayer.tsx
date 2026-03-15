@@ -79,7 +79,9 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
     getDuration: () => videoRef.current?.duration || 0,
   }));
 
-  const hlsUrl = hlsPath ? `${API_BASE}${hlsPath}` : null;
+  const cacheBusterRef = useRef(Date.now());
+  useEffect(() => { cacheBusterRef.current = Date.now(); }, [hlsPath]);
+  const hlsUrl = hlsPath ? `${API_BASE}${hlsPath}?_t=${cacheBusterRef.current}` : null;
 
   // Attach video event listeners — called after media is ready
   const attachVideoListeners = useCallback((video: HTMLVideoElement) => {
@@ -151,6 +153,12 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
           bitrate: lvl.bitrate,
         }));
         setQualityLevels(levels);
+        // Default to highest quality
+        if (levels.length > 0) {
+          const highest = levels.reduce((a, b) => (a.height > b.height ? a : b));
+          hls.currentLevel = highest.index;
+          setCurrentQuality(highest.index);
+        }
         if (autoPlay) video.play().catch(() => {});
       });
 

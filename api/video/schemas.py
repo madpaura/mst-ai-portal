@@ -163,6 +163,35 @@ class SeedNoteResponse(BaseModel):
     created_at: datetime
 
 
+class BannerConfigResponse(BaseModel):
+    id: str
+    video_id: str
+    variant: str
+    company_logo: str
+    series_tag: str
+    topic: str
+    subtopic: str
+    episode: str
+    duration: str
+    presenter: str
+    presenter_initial: str
+    status: str
+    banner_video_path: Optional[str] = None
+    error: Optional[str] = None
+
+
+class BannerConfigUpdate(BaseModel):
+    variant: str = 'A'
+    company_logo: str = 'SAMSUNG'
+    series_tag: str = 'KNOWLEDGE SERIES'
+    topic: str = 'Intro to AI Agents'
+    subtopic: str = 'Environment Setup & First Run'
+    episode: str = 'EP 01'
+    duration: str = '3:15'
+    presenter: str = 'Vishwa'
+    presenter_initial: str = 'V'
+
+
 class JobStatusResponse(BaseModel):
     id: int
     video_id: str

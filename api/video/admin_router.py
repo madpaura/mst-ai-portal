@@ -1,13 +1,15 @@
 import os
 import uuid
+import json
 import shutil
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+import subprocess
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
 
 from video.schemas import (
     VideoAdminResponse, VideoCreate, VideoUpdate, ChapterResponse,
     ChapterCreate, ChapterUpdate, ChapterReorder, HowtoResponse, HowtoUpdate,
     QualitySettingResponse, QualitySettingUpdate, SeedNoteCreate,
-    SeedNoteResponse, JobStatusResponse,
+    SeedNoteResponse, JobStatusResponse, BannerConfigResponse, BannerConfigUpdate,
 )
 from auth.dependencies import require_admin
 from database import get_db
@@ -491,3 +493,320 @@ async def admin_delete_seed_note(note_id: str, admin: dict = Depends(require_adm
     if result == "DELETE 0":
         raise HTTPException(status_code=404, detail="Seed note not found")
     return {"message": "Seed note deleted"}
+
+
+# ── Banner Config ──────────────────────────────────────────
+
+def _banner_row_to_response(r) -> BannerConfigResponse:
+    return BannerConfigResponse(
+        id=str(r["id"]), video_id=str(r["video_id"]),
+        variant=r["variant"], company_logo=r["company_logo"],
+        series_tag=r["series_tag"], topic=r["topic"],
+        subtopic=r["subtopic"], episode=r["episode"],
+        duration=r["duration"], presenter=r["presenter"],
+        presenter_initial=r["presenter_initial"], status=r["status"],
+        banner_video_path=r.get("banner_video_path"),
+        error=r.get("error"),
+    )
+
+
+@router.get("/videos/{video_id}/banner", response_model=BannerConfigResponse | None)
+async def admin_get_banner(video_id: str, admin: dict = Depends(require_admin)):
+    db = await get_db()
+    row = await db.fetchrow("SELECT * FROM video_banners WHERE video_id = $1", video_id)
+    if not row:
+        return None
+    return _banner_row_to_response(row)
+
+
+@router.put("/videos/{video_id}/banner", response_model=BannerConfigResponse)
+async def admin_upsert_banner(
+    video_id: str, req: BannerConfigUpdate, admin: dict = Depends(require_admin)
+):
+    db = await get_db()
+    video = await db.fetchrow("SELECT id FROM videos WHERE id = $1", video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    existing = await db.fetchrow("SELECT id FROM video_banners WHERE video_id = $1", video_id)
+    if existing:
+        await db.execute(
+            """UPDATE video_banners SET variant=$1, company_logo=$2, series_tag=$3,
+               topic=$4, subtopic=$5, episode=$6, duration=$7, presenter=$8,
+               presenter_initial=$9, status='draft', updated_at=now()
+               WHERE video_id=$10""",
+            req.variant, req.company_logo, req.series_tag, req.topic,
+            req.subtopic, req.episode, req.duration, req.presenter,
+            req.presenter_initial, video_id,
+        )
+    else:
+        await db.execute(
+            """INSERT INTO video_banners
+               (video_id, variant, company_logo, series_tag, topic, subtopic, episode, duration, presenter, presenter_initial)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)""",
+            video_id, req.variant, req.company_logo, req.series_tag, req.topic,
+            req.subtopic, req.episode, req.duration, req.presenter,
+            req.presenter_initial,
+        )
+
+    row = await db.fetchrow("SELECT * FROM video_banners WHERE video_id = $1", video_id)
+    return _banner_row_to_response(row)
+
+
+async def _generate_banner_video(video_id: str, db_url: str):
+    """Background task: render banner with Remotion and prepend to video."""
+    import asyncpg
+
+    pool = await asyncpg.create_pool(db_url, min_size=1, max_size=2)
+    try:
+        banner = await pool.fetchrow("SELECT * FROM video_banners WHERE video_id = $1", video_id)
+        if not banner:
+            return
+
+        await pool.execute(
+            "UPDATE video_banners SET status='generating', error=NULL WHERE video_id=$1", video_id
+        )
+
+        video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
+        banner_dir = os.path.join(video_dir, "banner")
+        os.makedirs(banner_dir, exist_ok=True)
+
+        # Write props JSON for Remotion
+        props = {
+            "variant": banner["variant"],
+            "companyLogo": banner["company_logo"],
+            "seriesTag": banner["series_tag"],
+            "topic": banner["topic"],
+            "subtopic": banner["subtopic"],
+            "episode": banner["episode"],
+            "duration": banner["duration"],
+            "presenter": banner["presenter"],
+            "presenterInitial": banner["presenter_initial"],
+        }
+        props_path = os.path.join(banner_dir, "props.json")
+        with open(props_path, "w") as f:
+            json.dump(props, f)
+
+        banner_output = os.path.join(banner_dir, "banner.mp4")
+        remotion_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "remotion-banner")
+
+        # Render with Remotion
+        render_cmd = [
+            "npx", "remotion", "render",
+            "src/index.ts",
+            "BannerVideo",
+            "--output", banner_output,
+            "--props", props_path,
+            "--codec", "h264",
+        ]
+        print(f"[banner] Rendering banner for video {video_id}...")
+        print(f"[banner] cmd: {' '.join(render_cmd)}")
+        result = subprocess.run(render_cmd, cwd=remotion_dir, capture_output=True, text=True, timeout=180)
+
+        print(f"[banner] Remotion stdout: {result.stdout[-500:]}")
+        print(f"[banner] Remotion stderr: {result.stderr[-500:]}")
+
+        if result.returncode != 0:
+            error = f"Remotion render failed: {result.stderr[-500:]}"
+            print(f"[banner] ERROR: {error}")
+            await pool.execute(
+                "UPDATE video_banners SET status='error', error=$1 WHERE video_id=$2",
+                error, video_id,
+            )
+            return
+
+        if not os.path.exists(banner_output):
+            await pool.execute(
+                "UPDATE video_banners SET status='error', error='Banner video file not created' WHERE video_id=$1",
+                video_id,
+            )
+            return
+
+        print(f"[banner] Banner rendered: {os.path.getsize(banner_output)} bytes")
+
+        # Prepend banner to the original video using ffmpeg concat
+        raw_path = os.path.join(video_dir, "raw", "original.mp4")
+        # Use the backup if it exists (from a previous banner insert)
+        backup_path = os.path.join(video_dir, "raw", "original_no_banner.mp4")
+        source_path = backup_path if os.path.exists(backup_path) else raw_path
+
+        if os.path.exists(source_path):
+            # Probe original video to get resolution, fps, and whether it has audio
+            probe_cmd = [
+                settings.FFMPEG_PATH.replace("ffmpeg", "ffprobe"),
+                "-v", "quiet",
+                "-print_format", "json",
+                "-show_streams",
+                source_path,
+            ]
+            probe_result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30)
+            orig_w, orig_h, orig_fps = 1920, 1080, 30
+            has_audio = False
+            audio_sample_rate = 44100
+            if probe_result.returncode == 0:
+                try:
+                    probe_data = json.loads(probe_result.stdout)
+                    for stream in probe_data.get("streams", []):
+                        if stream.get("codec_type") == "video":
+                            orig_w = int(stream.get("width", 1920))
+                            orig_h = int(stream.get("height", 1080))
+                            fps_str = stream.get("r_frame_rate", "30/1")
+                            if "/" in fps_str:
+                                num, den = fps_str.split("/")
+                                orig_fps = round(int(num) / int(den))
+                            else:
+                                orig_fps = int(float(fps_str))
+                        if stream.get("codec_type") == "audio":
+                            has_audio = True
+                            audio_sample_rate = int(stream.get("sample_rate", 44100))
+                except Exception as e:
+                    print(f"[banner] Probe parse error: {e}, using defaults")
+
+            print(f"[banner] Original video: {orig_w}x{orig_h} @ {orig_fps}fps, has_audio={has_audio}")
+
+            # Re-encode banner to match original video resolution and fps
+            # Add silent audio ONLY if original has audio; otherwise video-only
+            banner_reenc = os.path.join(banner_dir, "banner_reenc.mp4")
+            reencode_cmd = [settings.FFMPEG_PATH, "-y", "-i", banner_output]
+            if has_audio:
+                reencode_cmd += ["-f", "lavfi", "-i", f"anullsrc=channel_layout=stereo:sample_rate={audio_sample_rate}"]
+            reencode_cmd += [
+                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                "-vf", f"scale={orig_w}:{orig_h}:force_original_aspect_ratio=decrease,pad={orig_w}:{orig_h}:(ow-iw)/2:(oh-ih)/2",
+                "-pix_fmt", "yuv420p",
+                "-r", str(orig_fps),
+            ]
+            if has_audio:
+                reencode_cmd += ["-c:a", "aac", "-b:a", "128k", "-shortest"]
+            else:
+                reencode_cmd += ["-an"]
+            reencode_cmd.append(banner_reenc)
+
+            print(f"[banner] Re-encoding banner to {orig_w}x{orig_h}...")
+            reenc_result = subprocess.run(reencode_cmd, capture_output=True, text=True, timeout=60)
+            if reenc_result.returncode != 0:
+                print(f"[banner] Re-encode stderr: {reenc_result.stderr[-300:]}")
+
+            # Re-encode original to ensure matching codec params for concat
+            orig_reenc = os.path.join(banner_dir, "orig_reenc.mp4")
+            orig_reencode_cmd = [
+                settings.FFMPEG_PATH, "-y",
+                "-i", source_path,
+                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                "-pix_fmt", "yuv420p",
+                "-r", str(orig_fps),
+            ]
+            if has_audio:
+                orig_reencode_cmd += ["-c:a", "aac", "-b:a", "128k"]
+            else:
+                orig_reencode_cmd += ["-an"]
+            orig_reencode_cmd.append(orig_reenc)
+
+            print(f"[banner] Re-encoding original for concat compatibility...")
+            orig_reenc_result = subprocess.run(orig_reencode_cmd, capture_output=True, text=True, timeout=600)
+
+            if orig_reenc_result.returncode != 0:
+                # Fallback: use source directly
+                print(f"[banner] Original re-encode failed, using source directly")
+                orig_reenc = source_path
+
+            # Create concat list
+            concat_list = os.path.join(banner_dir, "concat.txt")
+            with open(concat_list, "w") as f:
+                f.write(f"file '{banner_reenc}'\n")
+                f.write(f"file '{orig_reenc}'\n")
+
+            # Concat with copy (both files now have matching stream layouts)
+            combined_path = os.path.join(video_dir, "raw", "original_with_banner.mp4")
+            concat_cmd = [
+                settings.FFMPEG_PATH, "-y",
+                "-f", "concat", "-safe", "0",
+                "-i", concat_list,
+                "-c", "copy",
+                combined_path,
+            ]
+            print(f"[banner] Concatenating banner + video...")
+            concat_result = subprocess.run(concat_cmd, capture_output=True, text=True, timeout=300)
+
+            if concat_result.returncode != 0:
+                print(f"[banner] Copy-concat failed, trying re-encode concat...")
+                # Fallback: re-encode concat
+                fallback_cmd = [
+                    settings.FFMPEG_PATH, "-y",
+                    "-f", "concat", "-safe", "0",
+                    "-i", concat_list,
+                    "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+                    "-pix_fmt", "yuv420p",
+                ]
+                if has_audio:
+                    fallback_cmd += ["-c:a", "aac", "-b:a", "128k"]
+                else:
+                    fallback_cmd += ["-an"]
+                fallback_cmd.append(combined_path)
+                concat_result = subprocess.run(fallback_cmd, capture_output=True, text=True, timeout=600)
+
+            if concat_result.returncode == 0 and os.path.exists(combined_path):
+                # Backup original (only first time)
+                if not os.path.exists(backup_path):
+                    shutil.copy2(raw_path, backup_path)
+                shutil.move(combined_path, raw_path)
+
+                # Clean up temp files
+                for f in [banner_reenc, orig_reenc]:
+                    if f != source_path and os.path.exists(f):
+                        try:
+                            os.remove(f)
+                        except Exception:
+                            pass
+
+                # Trigger re-transcode
+                await pool.execute("UPDATE videos SET status='processing' WHERE id=$1", video_id)
+                await pool.execute("INSERT INTO transcode_jobs (video_id) VALUES ($1)", video_id)
+                print(f"[banner] Banner prepended, re-transcode queued for {video_id}")
+            else:
+                error = f"FFmpeg concat failed: {concat_result.stderr[-300:]}"
+                print(f"[banner] ERROR: {error}")
+                await pool.execute(
+                    "UPDATE video_banners SET status='error', error=$1 WHERE video_id=$2",
+                    error, video_id,
+                )
+                return
+
+        banner_hls_path = f"/streams/{video_id}/banner/banner.mp4"
+        await pool.execute(
+            "UPDATE video_banners SET status='ready', banner_video_path=$1 WHERE video_id=$2",
+            banner_hls_path, video_id,
+        )
+        print(f"[banner] Banner generation complete for {video_id}")
+
+    except Exception as e:
+        print(f"[banner] Unexpected error: {e}")
+        try:
+            await pool.execute(
+                "UPDATE video_banners SET status='error', error=$1 WHERE video_id=$2",
+                str(e)[:500], video_id,
+            )
+        except Exception:
+            pass
+    finally:
+        await pool.close()
+
+
+@router.post("/videos/{video_id}/banner/generate")
+async def admin_generate_banner(
+    video_id: str, background_tasks: BackgroundTasks, admin: dict = Depends(require_admin)
+):
+    db = await get_db()
+    banner = await db.fetchrow("SELECT * FROM video_banners WHERE video_id = $1", video_id)
+    if not banner:
+        raise HTTPException(status_code=404, detail="No banner config found. Save banner settings first.")
+
+    if banner["status"] == "generating":
+        raise HTTPException(status_code=409, detail="Banner is already being generated")
+
+    await db.execute(
+        "UPDATE video_banners SET status='generating', error=NULL WHERE video_id=$1", video_id
+    )
+
+    background_tasks.add_task(_generate_banner_video, video_id, settings.DATABASE_URL)
+    return {"message": "Banner generation started"}

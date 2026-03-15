@@ -42,7 +42,7 @@ export const Ignite: React.FC = () => {
   const [activeVideo, setActiveVideo] = useState<Video>(ALL_VIDEOS[0]);
   const [currentTime, setCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
-  const [activeTab, setActiveTab] = useState<'chapters' | 'notes' | 'howto'>('notes');
+  const [activeTab, setActiveTab] = useState<'notes' | 'howto'>('notes');
   const [noteText, setNoteText] = useState('');
   const [notes, setNotes] = useState<Note[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -109,7 +109,7 @@ export const Ignite: React.FC = () => {
     } catch { /* ignore */ }
   };
 
-  const handleTabClick = (tab: 'chapters' | 'notes' | 'howto') => setActiveTab(tab);
+  const handleTabClick = (tab: 'notes' | 'howto') => setActiveTab(tab);
   const handleFormatBold = () => {};
   const handleFormatCode = () => {};
   const handleFormatList = () => {};
@@ -124,15 +124,57 @@ export const Ignite: React.FC = () => {
         <main className="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark relative p-6 lg:p-10">
           <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
 
-          <div className="max-w-5xl mx-auto flex flex-col gap-8 relative z-10">
-            {/* Video Player */}
-            <HlsPlayer
-              ref={playerRef}
-              hlsPath={activeVideo.hls_path}
-              chapters={chapters}
-              onTimeUpdate={handleTimeUpdate}
-              className="shadow-2xl border border-slate-300 dark:border-slate-800"
-            />
+          <div className="max-w-7xl mx-auto flex flex-col gap-8 relative z-10">
+            {/* Video Player + Chapters Side by Side */}
+            <div className="flex flex-col lg:flex-row gap-6">
+              <div className="flex-1 min-w-0">
+                <HlsPlayer
+                  ref={playerRef}
+                  hlsPath={activeVideo.hls_path}
+                  chapters={chapters}
+                  onTimeUpdate={handleTimeUpdate}
+                  className="shadow-2xl border border-slate-300 dark:border-slate-800"
+                />
+              </div>
+
+              {/* Chapters Panel */}
+              <div className="w-full lg:w-[300px] shrink-0 bg-card-light dark:bg-card-dark border border-slate-400 dark:border-white/5 rounded-xl overflow-hidden flex flex-col max-h-[500px]">
+                <div className="p-4 border-b border-slate-400 dark:border-white/5 bg-slate-50 dark:bg-slate-800/20">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <span className="material-symbols-outlined text-base text-primary">format_list_bulleted</span>
+                    Video Chapters
+                  </h3>
+                </div>
+                <div className="flex-1 overflow-y-auto p-3">
+                  {chapters.length > 0 ? (
+                    <div className="space-y-1">
+                      {chapters.map((chapter) => {
+                        const isActive = currentTime >= chapter.start_time &&
+                          !chapters.find((c) => c.start_time > chapter.start_time && currentTime >= c.start_time);
+                        return (
+                          <button
+                            key={chapter.id}
+                            onClick={() => handleChapterSeek(chapter.start_time)}
+                            className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-colors text-left ${
+                              isActive
+                                ? 'bg-primary/10 border border-primary/20'
+                                : 'hover:bg-slate-100 dark:hover:bg-slate-800/50 border border-transparent'
+                            }`}
+                          >
+                            <span className="font-mono text-xs text-primary min-w-[36px]">{fmtTime(chapter.start_time)}</span>
+                            <span className={`text-sm leading-tight ${isActive ? 'text-slate-900 dark:text-white font-bold' : 'text-slate-600 dark:text-slate-300'}`}>
+                              {chapter.title}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-slate-500 text-sm text-center py-4">No chapters available yet.</p>
+                  )}
+                </div>
+              </div>
+            </div>
 
             {/* Video Info & Tabs */}
             <div className="flex flex-col gap-6">
@@ -148,17 +190,6 @@ export const Ignite: React.FC = () => {
 
               {/* Tab Navigation */}
               <div className="flex items-center gap-1 border-b border-slate-300 dark:border-white/10">
-                <button
-                  onClick={() => handleTabClick('chapters')}
-                  className={`px-6 py-3 text-sm font-medium border-b-2 rounded-t-lg transition-all flex items-center gap-2 ${
-                    activeTab === 'chapters'
-                      ? 'text-primary border-primary bg-primary/5 font-bold'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border-transparent hover:bg-slate-100 dark:hover:bg-slate-800/30'
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-base">format_list_bulleted</span>
-                  Chapters
-                </button>
                 <button
                   onClick={() => handleTabClick('notes')}
                   className={`px-6 py-3 text-sm font-medium border-b-2 rounded-t-lg transition-all flex items-center gap-2 ${
@@ -267,38 +298,6 @@ export const Ignite: React.FC = () => {
                       </button>
                     </div>
                   </div>
-                </div>
-              )}
-
-              {activeTab === 'chapters' && (
-                <div className="bg-card-light dark:bg-card-dark border border-slate-400 dark:border-white/5 rounded-xl overflow-hidden p-6">
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Video Chapters</h3>
-                  {chapters.length > 0 ? (
-                    <div className="space-y-3">
-                      {chapters.map((chapter) => {
-                        const isActive = currentTime >= chapter.start_time &&
-                          !chapters.find((c) => c.start_time > chapter.start_time && currentTime >= c.start_time);
-                        return (
-                          <button
-                            key={chapter.id}
-                            onClick={() => handleChapterSeek(chapter.start_time)}
-                            className={`w-full flex items-center gap-4 p-3 rounded-lg transition-colors ${
-                              isActive
-                                ? 'bg-primary/10 border border-primary/20'
-                                : 'hover:bg-slate-100 dark:hover:bg-slate-800/50 border border-transparent'
-                            }`}
-                          >
-                            <span className="font-mono text-xs text-primary min-w-[40px]">{fmtTime(chapter.start_time)}</span>
-                            <span className={`text-sm ${isActive ? 'text-slate-900 dark:text-white font-bold' : 'text-slate-600 dark:text-slate-300'}`}>
-                              {chapter.title}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-slate-500 text-sm">No chapters available for this video yet.</p>
-                  )}
                 </div>
               )}
 

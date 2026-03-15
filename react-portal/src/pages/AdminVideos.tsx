@@ -52,7 +52,24 @@ interface QualitySetting {
   crf: number;
 }
 
-type Tab = 'metadata' | 'chapters' | 'howto' | 'quality' | 'seed-notes';
+interface BannerConfig {
+  id: string;
+  video_id: string;
+  variant: string;
+  company_logo: string;
+  series_tag: string;
+  topic: string;
+  subtopic: string;
+  episode: string;
+  duration: string;
+  presenter: string;
+  presenter_initial: string;
+  status: string;
+  banner_video_path: string | null;
+  error: string | null;
+}
+
+type Tab = 'metadata' | 'chapters' | 'howto' | 'quality' | 'seed-notes' | 'banner';
 
 export const AdminVideos: React.FC = () => {
   const [videos, setVideos] = useState<Video[]>([]);
@@ -86,6 +103,16 @@ export const AdminVideos: React.FC = () => {
   // Seed notes
   const [seedNotes, setSeedNotes] = useState<SeedNote[]>([]);
   const [newSeedNote, setNewSeedNote] = useState({ timestamp_s: 0, content: '' });
+
+  // Banner
+  const [bannerConfig, setBannerConfig] = useState<BannerConfig | null>(null);
+  const [bannerForm, setBannerForm] = useState({
+    variant: 'A', company_logo: 'SAMSUNG', series_tag: 'KNOWLEDGE SERIES',
+    topic: '', subtopic: '', episode: 'EP 01', duration: '3:15',
+    presenter: '', presenter_initial: '',
+  });
+  const [bannerGenerating, setBannerGenerating] = useState(false);
+  const bannerPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Upload
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -151,6 +178,30 @@ export const AdminVideos: React.FC = () => {
     } catch {
       setHowtoTitle('');
       setHowtoContent('');
+    }
+    // Load banner config
+    try {
+      const banner = await api.get<BannerConfig | null>(`/admin/videos/${video.id}/banner`);
+      setBannerConfig(banner);
+      if (banner) {
+        setBannerForm({
+          variant: banner.variant, company_logo: banner.company_logo,
+          series_tag: banner.series_tag, topic: banner.topic,
+          subtopic: banner.subtopic, episode: banner.episode,
+          duration: banner.duration, presenter: banner.presenter,
+          presenter_initial: banner.presenter_initial,
+        });
+        setBannerGenerating(banner.status === 'generating');
+      } else {
+        setBannerForm({
+          variant: 'A', company_logo: 'SAMSUNG', series_tag: 'KNOWLEDGE SERIES',
+          topic: video.title, subtopic: '', episode: 'EP 01', duration: '3:15',
+          presenter: '', presenter_initial: '',
+        });
+        setBannerGenerating(false);
+      }
+    } catch {
+      setBannerConfig(null);
     }
   };
 
@@ -318,6 +369,159 @@ export const AdminVideos: React.FC = () => {
       showMsg('error', err.message);
     }
   };
+
+  // ── Banner Handlers ─────────────────────────────────────
+
+  const handleSaveBanner = async () => {
+    if (!selected) return;
+    try {
+      const result = await api.put<BannerConfig>(`/admin/videos/${selected.id}/banner`, bannerForm);
+      setBannerConfig(result);
+      showMsg('success', 'Banner config saved');
+    } catch (err: any) {
+      showMsg('error', err.message);
+    }
+  };
+
+  const handleGenerateBanner = async () => {
+    if (!selected) return;
+    try {
+      // Save first
+      await api.put(`/admin/videos/${selected.id}/banner`, bannerForm);
+      // Then generate
+      await api.post(`/admin/videos/${selected.id}/banner/generate`);
+      setBannerGenerating(true);
+      showMsg('success', 'Banner generation started...');
+
+      // Poll for status
+      if (bannerPollRef.current) clearInterval(bannerPollRef.current);
+      bannerPollRef.current = setInterval(async () => {
+        try {
+          const b = await api.get<BannerConfig | null>(`/admin/videos/${selected.id}/banner`);
+          if (b && b.status !== 'generating') {
+            setBannerGenerating(false);
+            setBannerConfig(b);
+            if (bannerPollRef.current) clearInterval(bannerPollRef.current);
+            if (b.status === 'ready') {
+              showMsg('success', 'Banner generated & prepended to video! Re-transcode queued.');
+              fetchVideos();
+            } else if (b.status === 'error') {
+              showMsg('error', `Banner generation failed: ${b.error || 'Unknown error'}`);
+            }
+          }
+        } catch { /* ignore */ }
+      }, 3000);
+    } catch (err: any) {
+      showMsg('error', err.message);
+    }
+  };
+
+  // Cleanup poll on unmount
+  useEffect(() => {
+    return () => {
+      if (bannerPollRef.current) clearInterval(bannerPollRef.current);
+    };
+  }, []);
+
+  const bannerPreviewHtml = `
+    <!DOCTYPE html><html><head>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&family=Space+Grotesk:wght@600;700&display=swap');
+      *{margin:0;padding:0;box-sizing:border-box;}
+      html,body{width:100%;height:100%;overflow:hidden;font-family:'DM Sans',sans-serif;background:#1e293b;}
+      #wrap{width:1920px;height:1080px;transform-origin:top left;overflow:hidden;}
+      .banner{width:1920px;height:1080px;background:#fff;position:relative;display:flex;align-items:center;justify-content:center;}
+      .samsung-text-lbl{font-family:'Space Grotesk',sans-serif;font-weight:600;letter-spacing:0.36em;color:#1428A0;font-size:36px;text-transform:uppercase;}
+      .icon-entrance{animation:iconPop .55s cubic-bezier(.22,1,.36,1) both;animation-delay:.25s;}
+      @keyframes iconPop{from{opacity:0;transform:scale(0.65) rotate(-12deg)}to{opacity:1;transform:scale(1) rotate(0)}}
+      .ring-pulse{transform-box:fill-box;transform-origin:center;animation:ringPulse 2.2s ease-in-out infinite;}
+      @keyframes ringPulse{0%{opacity:.5;transform:scale(1)}55%{opacity:0;transform:scale(1.25)}100%{opacity:.5;transform:scale(1)}}
+      .bar1{stroke-dasharray:26;stroke-dashoffset:26;animation:drawBar .38s ease .5s forwards;}
+      .bar2{stroke-dasharray:26;stroke-dashoffset:26;animation:drawBar .38s ease .56s forwards;}
+      @keyframes drawBar{to{stroke-dashoffset:0}}
+      .dot-pop{opacity:0;transform-box:fill-box;transform-origin:center;animation:dotPop .25s cubic-bezier(.22,1,.36,1) .82s forwards;}
+      @keyframes dotPop{from{opacity:0;transform:scale(0)}to{opacity:1;transform:scale(1)}}
+      .tri-fade{opacity:0;animation:triFade .28s ease .88s forwards;}
+      @keyframes triFade{to{opacity:1}}
+      @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+      @keyframes growV{from{transform:scaleY(0);opacity:0}to{transform:scaleY(1);opacity:1}}
+      @keyframes barUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
+      @keyframes slideRight{from{transform:translateX(-100%);opacity:0}to{transform:translateX(0);opacity:1}}
+      @keyframes fadeInScale{from{opacity:0;transform:scale(0.92)}to{opacity:1;transform:scale(1)}}
+      .va .corner{position:absolute;width:120px;height:120px;}
+      .va .corner.tl{top:0;left:0;border-top:4px solid #0a2a5e;border-left:4px solid #0a2a5e;}
+      .va .corner.br{bottom:0;right:0;border-bottom:4px solid #0a2a5e;border-right:4px solid #0a2a5e;}
+      .va .hline{position:absolute;width:100%;height:1px;background:linear-gradient(90deg,transparent,#0a2a5e28,#0a2a5e48,#0a2a5e28,transparent);}
+      .va .hline.t{top:18%}.va .hline.b{bottom:20%}
+      .va .samsung-top{position:absolute;top:8%;left:0;right:0;display:flex;justify-content:center;animation:fadeInScale .45s ease both;animation-delay:.05s;}
+      .va .center{display:flex;align-items:center;gap:50px;animation:fadeUp .65s cubic-bezier(.22,1,.36,1) both;animation-delay:.15s;}
+      .va .vdiv{width:3px;height:160px;background:linear-gradient(180deg,transparent,#0a2a5e55,transparent);animation:growV .45s ease both;animation-delay:.35s;}
+      .va .brand{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:120px;letter-spacing:-0.03em;color:#0a2a5e;line-height:1;}
+      .va .brand span{color:#e35a1a;}
+      .va .stag{font-weight:300;font-size:28px;letter-spacing:0.22em;color:#6b7a99;text-transform:uppercase;margin-top:8px;}
+      .va .btm{position:absolute;bottom:0;left:0;right:0;background:#0a2a5e;display:flex;align-items:center;justify-content:space-between;padding:24px 60px;animation:barUp .5s cubic-bezier(.22,1,.36,1) both;animation-delay:.55s;}
+      .va .bleft{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0;}
+      .va .topic{font-family:'Space Grotesk',sans-serif;font-weight:600;color:#fff;font-size:36px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+      .va .sub{font-weight:300;color:#8aadd6;font-size:26px;}
+      .va .bmid{display:flex;align-items:center;gap:24px;flex-shrink:0;}
+      .va .pill{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:30px;padding:8px 22px;font-size:26px;color:#b8cee8;white-space:nowrap;}
+      .va .pill.ep{background:rgba(227,90,26,0.3);border-color:rgba(227,90,26,0.45);color:#f8a87a;}
+      .va .bright{display:flex;align-items:center;gap:16px;flex-shrink:0;margin-left:30px;}
+      .va .avatar{width:60px;height:60px;border-radius:50%;background:#e35a1a;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:28px;color:#fff;}
+      .va .pname{font-size:26px;color:#b8cee8;}
+      .vb .lpanel{position:absolute;top:0;left:0;bottom:0;width:36%;background:#0a2a5e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:40px;animation:slideRight .6s cubic-bezier(.22,1,.36,1) both;animation-delay:.1s;}
+      .vb .samsung-lbl{font-family:'Space Grotesk',sans-serif;font-weight:600;letter-spacing:0.2em;color:#fff;font-size:28px;text-transform:uppercase;opacity:.6;}
+      .vb .brand-vb{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:80px;letter-spacing:-0.03em;color:#fff;line-height:1;text-align:center;}
+      .vb .brand-vb span{color:#e35a1a;}
+      .vb .stag-vb{font-weight:300;font-size:22px;letter-spacing:0.2em;color:rgba(255,255,255,0.4);text-transform:uppercase;}
+      .vb .rpanel{position:absolute;top:0;left:36%;right:0;bottom:0;display:flex;flex-direction:column;justify-content:center;padding:80px;gap:24px;animation:fadeUp .65s cubic-bezier(.22,1,.36,1) both;animation-delay:.35s;}
+      .vb .epbadge{background:#e35a1a;color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:28px;padding:8px 22px;border-radius:6px;}
+      .vb .durbadge{background:#f0f3fa;color:#0a2a5e;font-size:26px;padding:8px 22px;border-radius:6px;border:1px solid #d0d8ee;}
+      .vb .topic-vb{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:64px;color:#0a2a5e;line-height:1.15;}
+      .vb .divh{width:70px;height:4px;background:#e35a1a;border-radius:2px;}
+      .vb .sub-vb{font-weight:400;font-size:32px;color:#6b7a99;}
+      .vb .av-vb{width:60px;height:60px;border-radius:50%;background:#0a2a5e;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:28px;color:#fff;}
+      .vb .pn-vb{font-size:28px;color:#0a2a5e;font-weight:500;}
+      .vb .pd-vb{font-size:22px;color:#9aa;}
+      .vc .stripe-top{position:absolute;top:0;left:0;right:0;height:8px;background:linear-gradient(90deg,#0a2a5e,#1a52b0,#e35a1a);}
+      .vc .stripe-bot{position:absolute;bottom:0;left:0;right:0;height:5px;background:#0a2a5e;}
+      .vc .samsung-vc{position:absolute;top:10%;left:0;right:0;display:flex;justify-content:center;animation:fadeInScale .45s ease both;}
+      .vc .cblock{display:flex;flex-direction:column;align-items:center;gap:32px;animation:fadeUp .65s cubic-bezier(.22,1,.36,1) both;animation-delay:.15s;}
+      .vc .logo-row{display:flex;align-items:center;gap:36px;}
+      .vc .brand-vc{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:110px;letter-spacing:-0.03em;color:#0a2a5e;line-height:1;}
+      .vc .brand-vc span{color:#e35a1a;}
+      .vc .topic-vc{font-weight:500;font-size:48px;color:#0a2a5e;text-align:center;}
+      .vc .sub-vc{font-weight:300;font-size:30px;color:#8090a8;text-align:center;}
+      .vc .meta-row{display:flex;align-items:center;gap:36px;}
+      .vc .mdot{width:8px;height:8px;border-radius:50%;background:#e35a1a;}
+      .vc .mi{font-size:26px;color:#6b7a99;letter-spacing:0.06em;}
+      .vc .mi.bold{font-weight:600;color:#0a2a5e;}
+    </style></head><body>
+    <div id="wrap"><div id="root"></div></div>
+    <script>
+      // Scale the 1920x1080 canvas to fit the iframe
+      function scaleWrap(){
+        var w=document.getElementById('wrap');
+        var s=Math.min(window.innerWidth/1920,window.innerHeight/1080);
+        w.style.transform='scale('+s+')';
+      }
+      scaleWrap();
+      window.addEventListener('resize',scaleWrap);
+
+      const P = ${JSON.stringify(bannerForm)};
+      const V = P.variant;
+      let html = '';
+      const logo = '<svg width="160" height="160" viewBox="0 0 72 72"><circle cx="36" cy="36" r="34" fill="'+(V==='B'?'rgba(255,255,255,0.08)':'#0d2d6b')+'"/><circle cx="36" cy="36" r="34" fill="none" stroke="'+(V==='B'?'rgba(255,255,255,0.2)':'#1e4282')+'" stroke-width="2"/><circle class="ring-pulse" cx="36" cy="36" r="34" fill="none" stroke="#e05018" stroke-width="1.5" opacity=".5"/><line class="bar1" x1="24.5" y1="23" x2="24.5" y2="49" stroke="#c03010" stroke-width="5" stroke-linecap="round"/><line class="bar2" x1="24.5" y1="23" x2="24.5" y2="49" stroke="#e85520" stroke-width="2.5" stroke-linecap="round"/><circle class="dot-pop" cx="24.5" cy="36" r="4.5" fill="#e06030"/><circle class="dot-pop" cx="24.5" cy="36" r="3" fill="#f07840" style="animation-delay:.84s"/><polygon class="tri-fade" points="28,23 50,36 28,49" fill="white"/></svg>';
+      if(V==='A'){
+        html='<div class="banner va"><div class="corner tl"></div><div class="corner br"></div><div class="hline t"></div><div class="hline b"></div><div class="samsung-top"><span class="samsung-text-lbl">'+P.company_logo+'</span></div><div class="center"><div class="icon-entrance">'+logo+'</div><div class="vdiv"></div><div><div class="brand">AI <span>Ignite</span></div><div class="stag">'+P.series_tag+'</div></div></div><div class="btm"><div class="bleft"><div class="topic">'+P.topic+'</div><div class="sub">'+P.subtopic+'</div></div><div class="bmid"><div class="pill ep">'+P.episode+'</div><div class="pill">'+P.duration+'</div></div><div class="bright"><div class="avatar">'+P.presenter_initial+'</div><div class="pname">'+P.presenter+'</div></div></div></div>';
+      } else if(V==='B'){
+        html='<div class="banner vb"><div class="lpanel"><span class="samsung-lbl">'+P.company_logo+'</span><div class="icon-entrance">'+logo+'</div><div class="brand-vb">AI <span>Ignite</span></div><div class="stag-vb">'+P.series_tag+'</div></div><div class="rpanel"><div style="display:flex;gap:16px;align-items:center"><div class="epbadge">'+P.episode+'</div><div class="durbadge">'+P.duration+'</div></div><div class="topic-vb">'+P.topic+'</div><div class="divh"></div><div class="sub-vb">'+P.subtopic+'</div><div style="display:flex;align-items:center;gap:20px;margin-top:8px"><div class="av-vb">'+P.presenter_initial+'</div><div><div class="pn-vb">'+P.presenter+'</div><div class="pd-vb">Presenter</div></div></div></div></div>';
+      } else {
+        html='<div class="banner vc"><div class="stripe-top"></div><div class="stripe-bot"></div><div class="samsung-vc"><span class="samsung-text-lbl">'+P.company_logo+'</span></div><div class="cblock"><div class="logo-row"><div class="icon-entrance">'+logo+'</div><div class="brand-vc">AI <span>Ignite</span></div></div><div class="topic-vc">'+P.topic+'</div><div class="sub-vc">'+P.subtopic+'</div><div class="meta-row"><span class="mi bold">'+P.episode+'</span><div class="mdot"></div><span class="mi">'+P.duration+'</span><div class="mdot"></div><span class="mi">'+P.presenter+'</span><div class="mdot"></div><span class="mi">'+P.series_tag+'</span></div></div></div>';
+      }
+      document.getElementById('root').innerHTML=html;
+    <\/script></body></html>
+  `;
 
   // ── Helpers ───────────────────────────────────────────
 
@@ -545,7 +749,7 @@ export const AdminVideos: React.FC = () => {
 
             {/* Tabs */}
             <div className="flex items-center gap-1 border-b border-slate-200 dark:border-white/10 mb-6">
-              {(['metadata', 'chapters', 'howto', 'quality', 'seed-notes'] as Tab[]).map((tab) => (
+              {(['metadata', 'chapters', 'howto', 'quality', 'seed-notes', 'banner'] as Tab[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -555,7 +759,7 @@ export const AdminVideos: React.FC = () => {
                       : 'text-slate-400 hover:text-white border-transparent'
                   }`}
                 >
-                  {tab === 'seed-notes' ? 'Seed Notes' : tab === 'howto' ? 'How-To' : tab}
+                  {tab === 'seed-notes' ? 'Seed Notes' : tab === 'howto' ? 'How-To' : tab === 'banner' ? '🎬 Banner' : tab}
                 </button>
               ))}
             </div>
@@ -815,6 +1019,161 @@ export const AdminVideos: React.FC = () => {
                   <button onClick={handleAddSeedNote} className="px-4 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
                     Add
                   </button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'banner' && (
+              <div className="space-y-4">
+                {/* Status bar */}
+                {bannerConfig && (
+                  <div className={`flex items-center gap-3 p-3 rounded-lg border text-sm ${
+                    bannerConfig.status === 'ready' ? 'bg-green-500/10 border-green-500/30 text-green-400' :
+                    bannerConfig.status === 'generating' ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' :
+                    bannerConfig.status === 'error' ? 'bg-red-500/10 border-red-500/30 text-red-400' :
+                    'bg-slate-800/30 border-white/5 text-slate-400'
+                  }`}>
+                    <span className="material-symbols-outlined text-base">
+                      {bannerConfig.status === 'ready' ? 'check_circle' :
+                       bannerConfig.status === 'generating' ? 'hourglass_top' :
+                       bannerConfig.status === 'error' ? 'error' : 'edit'}
+                    </span>
+                    <span>
+                      {bannerConfig.status === 'ready' ? 'Banner generated and prepended to video' :
+                       bannerConfig.status === 'generating' ? 'Generating banner video...' :
+                       bannerConfig.status === 'error' ? `Error: ${bannerConfig.error}` :
+                       'Banner config saved (not yet generated)'}
+                    </span>
+                  </div>
+                )}
+
+                {/* Variant Selector — compact row */}
+                <div className="flex gap-2">
+                  {[
+                    { key: 'A', label: 'Classic' },
+                    { key: 'B', label: 'Split' },
+                    { key: 'C', label: 'Minimal' },
+                  ].map((v) => (
+                    <button
+                      key={v.key}
+                      onClick={() => setBannerForm((f) => ({ ...f, variant: v.key }))}
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                        bannerForm.variant === v.key
+                          ? 'bg-primary text-white'
+                          : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700 border border-white/10'
+                      }`}
+                    >
+                      {v.key}: {v.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Two-column layout: Preview (left) + Settings (right) */}
+                <div className="flex gap-5">
+                  {/* Left: Live Preview */}
+                  <div className="flex-1 min-w-0">
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Live Preview</label>
+                    <div className="rounded-xl overflow-hidden border border-white/10 bg-slate-900">
+                      <iframe
+                        srcDoc={bannerPreviewHtml}
+                        className="w-full aspect-video border-0"
+                        sandbox="allow-scripts"
+                        title="Banner Preview"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Right: Settings */}
+                  <div className="w-[320px] shrink-0 space-y-3">
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Settings</label>
+                    <div className="space-y-2.5">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Company Logo</label>
+                        <input value={bannerForm.company_logo} onChange={(e) => setBannerForm((f) => ({ ...f, company_logo: e.target.value }))}
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Series Tag</label>
+                        <input value={bannerForm.series_tag} onChange={(e) => setBannerForm((f) => ({ ...f, series_tag: e.target.value }))}
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Topic (Main Title)</label>
+                        <input value={bannerForm.topic} onChange={(e) => setBannerForm((f) => ({ ...f, topic: e.target.value }))}
+                          placeholder="e.g. Intro to AI Agents"
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Subtopic</label>
+                        <input value={bannerForm.subtopic} onChange={(e) => setBannerForm((f) => ({ ...f, subtopic: e.target.value }))}
+                          placeholder="e.g. Environment Setup & First Run"
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                      </div>
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Episode</label>
+                          <input value={bannerForm.episode} onChange={(e) => setBannerForm((f) => ({ ...f, episode: e.target.value }))}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Duration</label>
+                          <input value={bannerForm.duration} onChange={(e) => setBannerForm((f) => ({ ...f, duration: e.target.value }))}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Presenter</label>
+                          <input value={bannerForm.presenter} onChange={(e) => setBannerForm((f) => ({ ...f, presenter: e.target.value, presenter_initial: e.target.value.charAt(0).toUpperCase() || '' }))}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                        </div>
+                        <div className="w-16 shrink-0">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Initial</label>
+                          <input value={bannerForm.presenter_initial} onChange={(e) => setBannerForm((f) => ({ ...f, presenter_initial: e.target.value }))}
+                            maxLength={2}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none text-center" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-3 pt-3 border-t border-white/5">
+                  <button
+                    onClick={handleSaveBanner}
+                    className="px-5 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold rounded-lg transition-colors"
+                  >
+                    Save Config
+                  </button>
+                  <button
+                    onClick={handleGenerateBanner}
+                    disabled={bannerGenerating}
+                    className="flex items-center gap-2 px-5 py-2 bg-primary hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-bold rounded-lg transition-colors"
+                  >
+                    {bannerGenerating ? (
+                      <>
+                        <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-sm">movie</span>
+                        Generate & Insert Banner
+                      </>
+                    )}
+                  </button>
+                  {bannerConfig?.banner_video_path && bannerConfig.status === 'ready' && (
+                    <a
+                      href={bannerConfig.banner_video_path}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-4 py-2 text-xs text-primary hover:text-white transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-sm">play_circle</span>
+                      Preview Banner Video
+                    </a>
+                  )}
                 </div>
               </div>
             )}

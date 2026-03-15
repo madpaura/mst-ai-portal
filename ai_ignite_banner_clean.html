@@ -1,0 +1,189 @@
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&family=Space+Grotesk:wght@600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:#e8e8e8;font-family:'DM Sans',sans-serif;padding:16px;display:flex;flex-direction:column;gap:14px;}
+
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;}
+  .tab{padding:6px 16px;border-radius:20px;border:1px solid #ccc;background:#fff;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;color:#555;transition:all .2s;}
+  .tab.active{background:#0a2a5e;color:#fff;border-color:#0a2a5e;}
+
+  .banner-variant{display:none;}
+  .banner-variant.active{display:flex;flex-direction:column;}
+  .banner{width:100%;aspect-ratio:16/9;background:#fff;border:0.5px solid #c0c0c0;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;}
+
+  /* LOGO ANIMATIONS */
+  .icon-entrance{animation:iconPop .55s cubic-bezier(.22,1,.36,1) both;animation-delay:.25s;}
+  @keyframes iconPop{from{opacity:0;transform:scale(0.65) rotate(-12deg)}to{opacity:1;transform:scale(1) rotate(0)}}
+  .ring-pulse{transform-box:fill-box;transform-origin:center;animation:ringPulse 2.2s ease-in-out infinite;}
+  .ring-pulse2{transform-box:fill-box;transform-origin:center;animation:ringPulse 2.2s ease-in-out infinite;animation-delay:.75s;}
+  @keyframes ringPulse{0%{opacity:.5;transform:scale(1)}55%{opacity:0;transform:scale(1.25)}100%{opacity:.5;transform:scale(1)}}
+  .bar1{stroke-dasharray:26;stroke-dashoffset:26;animation:drawBar .38s ease .5s forwards;}
+  .bar2{stroke-dasharray:26;stroke-dashoffset:26;animation:drawBar .38s ease .56s forwards;}
+  @keyframes drawBar{to{stroke-dashoffset:0}}
+  .dot-pop{opacity:0;transform-box:fill-box;transform-origin:center;animation:dotPop .25s cubic-bezier(.22,1,.36,1) .82s forwards;}
+  @keyframes dotPop{from{opacity:0;transform:scale(0)}to{opacity:1;transform:scale(1)}}
+  .tri-fade{opacity:0;animation:triFade .28s ease .88s forwards;}
+  @keyframes triFade{to{opacity:1}}
+
+  @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes growV{from{transform:scaleY(0);opacity:0}to{transform:scaleY(1);opacity:1}}
+  @keyframes barUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
+  @keyframes slideRight{from{transform:translateX(-100%)}to{transform:translateX(0)}}
+  @keyframes fadeInScale{from{opacity:0;transform:scale(0.92)}to{opacity:1;transform:scale(1)}}
+
+  .replay-btn{position:absolute;top:9px;right:11px;background:rgba(255,255,255,0.88);border:0.5px solid #ccc;border-radius:4px;padding:3px 9px;font-size:10px;color:#888;cursor:pointer;font-family:'DM Sans',sans-serif;z-index:10;}
+  .replay-btn:hover{color:#0a2a5e;border-color:#0a2a5e;}
+  .samsung-text-lbl{font-family:'Space Grotesk',sans-serif;font-weight:600;letter-spacing:0.36em;color:#1428A0;font-size:clamp(10px,1.4vw,15px);text-transform:uppercase;}
+
+  /* LOGO SVG — shared inline */
+  .ai-logo svg{display:block;}
+
+  /* ══ VARIANT A — Classic ══ */
+  .va .corner{position:absolute;width:68px;height:68px;}
+  .va .corner.tl{top:0;left:0;border-top:3px solid #0a2a5e;border-left:3px solid #0a2a5e;}
+  .va .corner.br{bottom:0;right:0;border-bottom:3px solid #0a2a5e;border-right:3px solid #0a2a5e;}
+  .va .hline{position:absolute;width:100%;height:1px;background:linear-gradient(90deg,transparent,#0a2a5e28,#0a2a5e48,#0a2a5e28,transparent);}
+  .va .hline.t{top:18%;}.va .hline.b{bottom:20%;}
+  .va .samsung-top{position:absolute;top:8%;left:0;right:0;display:flex;justify-content:center;animation:fadeInScale .45s ease both;animation-delay:.05s;}
+  .va .center{display:flex;align-items:center;gap:clamp(14px,2.5vw,28px);animation:fadeUp .65s cubic-bezier(.22,1,.36,1) both;animation-delay:.15s;}
+  .va .vdiv{width:1.5px;height:clamp(52px,9vw,80px);background:linear-gradient(180deg,transparent,#0a2a5e55,transparent);animation:growV .45s ease both;animation-delay:.35s;}
+  .va .brand{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(24px,4.5vw,52px);letter-spacing:-0.03em;color:#0a2a5e;line-height:1;}
+  .va .brand span{color:#e35a1a;}
+  .va .stag{font-family:'DM Sans',sans-serif;font-weight:300;font-size:clamp(9px,1.2vw,13px);letter-spacing:0.22em;color:#6b7a99;text-transform:uppercase;margin-top:3px;}
+  .va .btm{position:absolute;bottom:0;left:0;right:0;background:#0a2a5e;display:flex;align-items:center;justify-content:space-between;padding:clamp(7px,1.3vw,12px) clamp(16px,3vw,32px);animation:barUp .5s cubic-bezier(.22,1,.36,1) both;animation-delay:.55s;}
+  .va .bleft{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;}
+  .va .topic{font-family:'Space Grotesk',sans-serif;font-weight:600;color:#fff;font-size:clamp(10px,1.6vw,16px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .va .sub{font-family:'DM Sans',sans-serif;font-weight:300;color:#8aadd6;font-size:clamp(8px,1.1vw,12px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .va .bmid{display:flex;align-items:center;gap:clamp(6px,1.2vw,14px);flex-shrink:0;}
+  .va .pill{background:rgba(255,255,255,0.1);border:0.5px solid rgba(255,255,255,0.2);border-radius:20px;padding:3px 11px;font-size:clamp(8px,1.1vw,12px);color:#b8cee8;white-space:nowrap;font-family:'DM Sans',sans-serif;}
+  .va .pill.ep{background:rgba(227,90,26,0.3);border-color:rgba(227,90,26,0.45);color:#f8a87a;}
+  .va .bright{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+  .va .avatar{width:clamp(22px,3.2vw,30px);height:clamp(22px,3.2vw,30px);border-radius:50%;background:#e35a1a;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(9px,1.2vw,13px);color:#fff;flex-shrink:0;}
+  .va .pname{font-size:clamp(8px,1.1vw,12px);color:#b8cee8;white-space:nowrap;font-family:'DM Sans',sans-serif;}
+
+  /* ══ VARIANT B — Split ══ */
+  .vb .lpanel{position:absolute;top:0;left:0;bottom:0;width:36%;background:#0a2a5e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:18px;animation:slideRight .6s cubic-bezier(.22,1,.36,1) both;animation-delay:.1s;}
+  .vb .stag-vb{font-family:'DM Sans',sans-serif;font-weight:300;font-size:clamp(8px,1vw,11px);letter-spacing:0.2em;color:rgba(255,255,255,0.4);text-transform:uppercase;}
+  .vb .brand-vb{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(18px,3.2vw,38px);letter-spacing:-0.03em;color:#fff;line-height:1;text-align:center;}
+  .vb .brand-vb span{color:#e35a1a;}
+  .vb .rpanel{position:absolute;top:0;left:36%;right:0;bottom:0;display:flex;flex-direction:column;justify-content:center;padding:clamp(14px,2.8vw,38px);gap:clamp(5px,1vw,12px);animation:fadeUp .65s cubic-bezier(.22,1,.36,1) both;animation-delay:.35s;}
+  .vb .ep-row{display:flex;align-items:center;gap:8px;}
+  .vb .epbadge{background:#e35a1a;color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(9px,1.2vw,13px);padding:3px 10px;border-radius:4px;}
+  .vb .durbadge{background:#f0f3fa;color:#0a2a5e;font-family:'DM Sans',sans-serif;font-size:clamp(9px,1.1vw,12px);padding:3px 10px;border-radius:4px;border:0.5px solid #d0d8ee;}
+  .vb .topic-vb{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(13px,2.3vw,27px);color:#0a2a5e;line-height:1.15;}
+  .vb .divh{width:38px;height:2.5px;background:#e35a1a;border-radius:2px;}
+  .vb .sub-vb{font-family:'DM Sans',sans-serif;font-weight:400;font-size:clamp(9px,1.2vw,14px);color:#6b7a99;}
+  .vb .prow{display:flex;align-items:center;gap:10px;margin-top:2px;}
+  .vb .av-vb{width:clamp(22px,3vw,30px);height:clamp(22px,3vw,30px);border-radius:50%;background:#0a2a5e;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(9px,1.1vw,12px);color:#fff;flex-shrink:0;}
+  .vb .pn-vb{font-size:clamp(9px,1.2vw,13px);color:#0a2a5e;font-weight:500;font-family:'DM Sans',sans-serif;}
+  .vb .pd-vb{font-size:clamp(8px,1vw,11px);color:#9aa;font-family:'DM Sans',sans-serif;}
+
+  /* ══ VARIANT C — Minimal ══ */
+  .vc .stripe-top{position:absolute;top:0;left:0;right:0;height:5px;background:linear-gradient(90deg,#0a2a5e,#1a52b0,#e35a1a);}
+  .vc .stripe-bot{position:absolute;bottom:0;left:0;right:0;height:3px;background:#0a2a5e;}
+  .vc .samsung-vc{position:absolute;top:13%;left:0;right:0;display:flex;justify-content:center;animation:fadeInScale .45s ease both;}
+  .vc .cblock{display:flex;flex-direction:column;align-items:center;gap:clamp(6px,1.2vw,16px);animation:fadeUp .65s cubic-bezier(.22,1,.36,1) both;animation-delay:.15s;}
+  .vc .logo-row{display:flex;align-items:center;gap:clamp(10px,1.8vw,18px);}
+  .vc .brand-vc{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(20px,4vw,46px);letter-spacing:-0.03em;color:#0a2a5e;line-height:1;}
+  .vc .brand-vc span{color:#e35a1a;}
+  .vc .topic-vc{font-family:'DM Sans',sans-serif;font-weight:500;font-size:clamp(11px,1.8vw,20px);color:#0a2a5e;text-align:center;}
+  .vc .sub-vc{font-family:'DM Sans',sans-serif;font-weight:300;font-size:clamp(9px,1.1vw,13px);color:#8090a8;text-align:center;}
+  .vc .meta-row{display:flex;align-items:center;gap:clamp(6px,1.2vw,18px);}
+  .vc .mdot{width:4px;height:4px;border-radius:50%;background:#e35a1a;}
+  .vc .mi{font-family:'DM Sans',sans-serif;font-size:clamp(8px,1.1vw,12px);color:#6b7a99;letter-spacing:0.06em;}
+  .vc .mi.bold{font-weight:600;color:#0a2a5e;}
+</style>
+
+<div>
+  <div class="tabs" style="margin-bottom:12px;">
+    <button class="tab active" onclick="switchTab('a',this)">Variant A — Classic</button>
+    <button class="tab" onclick="switchTab('b',this)">Variant B — Split</button>
+    <button class="tab" onclick="switchTab('c',this)">Variant C — Minimal</button>
+  </div>
+
+  <!-- VARIANT A -->
+  <div class="banner-variant active" id="var-a">
+    <div class="banner va">
+      <div class="corner tl"></div><div class="corner br"></div>
+      <div class="hline t"></div><div class="hline b"></div>
+      <svg style="position:absolute;right:4%;top:50%;transform:translateY(-50%);opacity:.055;" width="110" height="110" viewBox="0 0 110 110"><pattern id="dpa" x="0" y="0" width="12" height="12" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.2" fill="#0a2a5e"/></pattern><rect width="110" height="110" fill="url(#dpa)"/></svg>
+      <div class="samsung-top"><span class="samsung-text-lbl">{{COMPANY_LOGO}}</span></div>
+      <div class="center" id="la-a">
+        <div class="ai-logo icon-entrance">
+          <svg width="72" height="72" viewBox="0 0 72 72"><circle cx="36" cy="36" r="34" fill="#0d2d6b"/><circle cx="36" cy="36" r="34" fill="none" stroke="#1e4282" stroke-width="2"/><circle class="ring-pulse" cx="36" cy="36" r="34" fill="none" stroke="#e05018" stroke-width="1.5" opacity=".5"/><circle class="ring-pulse2" cx="36" cy="36" r="34" fill="none" stroke="#1e4282" stroke-width="1" opacity=".4"/><line class="bar1" x1="24.5" y1="23" x2="24.5" y2="49" stroke="#c03010" stroke-width="5" stroke-linecap="round"/><line class="bar2" x1="24.5" y1="23" x2="24.5" y2="49" stroke="#e85520" stroke-width="2.5" stroke-linecap="round"/><circle class="dot-pop" cx="24.5" cy="36" r="4.5" fill="#e06030"/><circle class="dot-pop" cx="24.5" cy="36" r="3" fill="#f07840" style="animation-delay:.84s"/><polygon class="tri-fade" points="28,23 50,36 28,49" fill="white"/></svg>
+        </div>
+        <div class="vdiv"></div>
+        <div><div class="brand">AI <span>Ignite</span></div><div class="stag">{{SERIES_TAG}}</div></div>
+      </div>
+      <div class="btm">
+        <div class="bleft"><div class="topic">{{TOPIC}}</div><div class="sub">{{SUBTOPIC}}</div></div>
+        <div class="bmid"><div class="pill ep">{{EPISODE}}</div><div class="pill">{{DURATION}}</div></div>
+        <div class="bright"><div class="avatar">{{PRESENTER_INITIAL}}</div><div class="pname">{{PRESENTER}}</div></div>
+      </div>
+      <button class="replay-btn" onclick="replayAll()">↺ replay</button>
+    </div>
+  </div>
+
+  <!-- VARIANT B -->
+  <div class="banner-variant" id="var-b">
+    <div class="banner vb">
+      <div class="lpanel">
+        <div style="animation:fadeInScale .5s ease both;animation-delay:.15s;opacity:.6;"><span class="samsung-text-lbl" style="color:#fff;font-size:clamp(8px,1.2vw,13px);">{{COMPANY_LOGO}}</span></div>
+        <div class="ai-logo icon-entrance">
+          <svg width="64" height="64" viewBox="0 0 72 72"><circle cx="36" cy="36" r="34" fill="rgba(255,255,255,0.08)"/><circle cx="36" cy="36" r="34" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="2"/><circle class="ring-pulse" cx="36" cy="36" r="34" fill="none" stroke="#e05018" stroke-width="1.5" opacity=".5"/><line class="bar1" x1="24.5" y1="23" x2="24.5" y2="49" stroke="#c03010" stroke-width="5" stroke-linecap="round"/><line class="bar2" x1="24.5" y1="23" x2="24.5" y2="49" stroke="#e85520" stroke-width="2.5" stroke-linecap="round"/><circle class="dot-pop" cx="24.5" cy="36" r="4.5" fill="#e06030"/><circle class="dot-pop" cx="24.5" cy="36" r="3" fill="#f07840" style="animation-delay:.84s"/><polygon class="tri-fade" points="28,23 50,36 28,49" fill="white"/></svg>
+        </div>
+        <div class="brand-vb">AI <span>Ignite</span></div>
+        <div class="stag-vb">{{SERIES_TAG}}</div>
+      </div>
+      <div class="rpanel" id="la-b">
+        <div class="ep-row"><div class="epbadge">{{EPISODE}}</div><div class="durbadge">{{DURATION}}</div></div>
+        <div class="topic-vb">{{TOPIC}}</div>
+        <div class="divh"></div>
+        <div class="sub-vb">{{SUBTOPIC}}</div>
+        <div class="prow"><div class="av-vb">{{PRESENTER_INITIAL}}</div><div><div class="pn-vb">{{PRESENTER}}</div><div class="pd-vb">Presenter</div></div></div>
+      </div>
+      <button class="replay-btn" onclick="replayAll()">↺ replay</button>
+    </div>
+  </div>
+
+  <!-- VARIANT C -->
+  <div class="banner-variant" id="var-c">
+    <div class="banner vc">
+      <div class="stripe-top"></div><div class="stripe-bot"></div>
+      <div class="samsung-vc"><span class="samsung-text-lbl">{{COMPANY_LOGO}}</span></div>
+      <div class="cblock" id="la-c">
+        <div class="logo-row">
+          <div class="ai-logo icon-entrance">
+            <svg width="56" height="56" viewBox="0 0 72 72"><circle cx="36" cy="36" r="34" fill="#0d2d6b"/><circle cx="36" cy="36" r="34" fill="none" stroke="#1e4282" stroke-width="2"/><circle class="ring-pulse" cx="36" cy="36" r="34" fill="none" stroke="#e05018" stroke-width="1.5" opacity=".5"/><line class="bar1" x1="24.5" y1="23" x2="24.5" y2="49" stroke="#c03010" stroke-width="5" stroke-linecap="round"/><line class="bar2" x1="24.5" y1="23" x2="24.5" y2="49" stroke="#e85520" stroke-width="2.5" stroke-linecap="round"/><circle class="dot-pop" cx="24.5" cy="36" r="4.5" fill="#e06030"/><circle class="dot-pop" cx="24.5" cy="36" r="3" fill="#f07840" style="animation-delay:.84s"/><polygon class="tri-fade" points="28,23 50,36 28,49" fill="white"/></svg>
+          </div>
+          <div class="brand-vc">AI <span>Ignite</span></div>
+        </div>
+        <div class="topic-vc">{{TOPIC}}</div>
+        <div class="sub-vc">{{SUBTOPIC}}</div>
+        <div class="meta-row">
+          <span class="mi bold">{{EPISODE}}</span><div class="mdot"></div>
+          <span class="mi">{{DURATION}}</span><div class="mdot"></div>
+          <span class="mi">{{PRESENTER}}</span><div class="mdot"></div>
+          <span class="mi">{{SERIES_TAG}}</span>
+        </div>
+      </div>
+      <button class="replay-btn" onclick="replayAll()">↺ replay</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function switchTab(v,btn){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.banner-variant').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('var-'+v).classList.add('active');
+}
+function replayAll(){
+  const sel='.bar1,.bar2,.dot-pop,.tri-fade,.ring-pulse,.ring-pulse2,.icon-entrance,.btm,.lpanel,.cblock,.vdiv,.samsung-top,.samsung-vc,#la-b,#la-a,#la-c';
+  document.querySelectorAll(sel).forEach(e=>e.style.animation='none');
+  void document.body.offsetWidth;
+  document.querySelectorAll(sel).forEach(e=>e.style.animation='');
+}
+</script>
