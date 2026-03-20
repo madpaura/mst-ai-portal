@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
 
 interface ForgeSetting {
@@ -26,6 +26,7 @@ interface SyncJob {
   components_updated: number;
   components_created: number;
   error: string | null;
+  log: string | null;
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
@@ -59,6 +60,12 @@ export const AdminSettings: React.FC = () => {
   const [jobs, setJobs] = useState<SyncJob[]>([]);
   const [selectedSettingId, setSelectedSettingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [verifyResults, setVerifyResults] = useState<Record<string, { git: any; llm: any } | null>>({});
+  const [verifying, setVerifying] = useState<Record<string, boolean>>({});
+  const [syncing, setSyncing] = useState<Record<string, boolean>>({});
+  const [expandedJobId, setExpandedJobId] = useState<number | null>(null);
+  const logEndRef = useRef<HTMLDivElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
@@ -159,12 +166,55 @@ export const AdminSettings: React.FC = () => {
   };
 
   const handleSync = async (settingId: string) => {
+    setSyncing((v) => ({ ...v, [settingId]: true }));
     try {
       await api.post(`/admin/forge/settings/${settingId}/sync`);
-      showMsg('success', 'Sync job created');
+      showMsg('success', 'Sync job started');
+      setSelectedSettingId(settingId);
       fetchJobs(settingId);
+      // Start polling for live updates
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(async () => {
+        try {
+          const data = await api.get<SyncJob[]>(`/admin/forge/settings/${settingId}/jobs`);
+          setJobs(data);
+          const running = data.some((j) => j.status === 'running' || j.status === 'pending');
+          if (!running) {
+            if (pollRef.current) clearInterval(pollRef.current);
+            pollRef.current = null;
+            setSyncing((v) => ({ ...v, [settingId]: false }));
+          }
+          // Auto-expand the latest running job
+          const runningJob = data.find((j) => j.status === 'running');
+          if (runningJob) setExpandedJobId(runningJob.id);
+        } catch { /* ignore */ }
+      }, 2000);
     } catch (err: any) {
       showMsg('error', err.message);
+      setSyncing((v) => ({ ...v, [settingId]: false }));
+    }
+  };
+
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  useEffect(() => {
+    if (expandedJobId && logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [jobs, expandedJobId]);
+
+  const handleVerify = async (settingId: string) => {
+    setVerifying((v) => ({ ...v, [settingId]: true }));
+    setVerifyResults((v) => ({ ...v, [settingId]: null }));
+    try {
+      const res = await api.post<{ git: any; llm: any }>(`/admin/forge/settings/${settingId}/verify`);
+      setVerifyResults((v) => ({ ...v, [settingId]: res }));
+    } catch (err: any) {
+      showMsg('error', err.message);
+    } finally {
+      setVerifying((v) => ({ ...v, [settingId]: false }));
     }
   };
 
@@ -252,11 +302,24 @@ export const AdminSettings: React.FC = () => {
               </div>
               <div className="flex items-center gap-1">
                 <button
+                  onClick={() => handleVerify(s.id)}
+                  disabled={verifying[s.id]}
+                  className="p-2 rounded hover:bg-slate-700 text-slate-400 hover:text-green-400 transition-colors disabled:opacity-40"
+                  title="Verify connection"
+                >
+                  <span className={`material-symbols-outlined text-sm ${verifying[s.id] ? 'animate-spin' : ''}`}>
+                    {verifying[s.id] ? 'progress_activity' : 'verified'}
+                  </span>
+                </button>
+                <button
                   onClick={() => handleSync(s.id)}
-                  className="p-2 rounded hover:bg-slate-700 text-slate-400 hover:text-primary transition-colors"
+                  disabled={syncing[s.id]}
+                  className="p-2 rounded hover:bg-slate-700 text-slate-400 hover:text-primary transition-colors disabled:opacity-40"
                   title="Trigger sync"
                 >
-                  <span className="material-symbols-outlined text-sm">sync</span>
+                  <span className={`material-symbols-outlined text-sm ${syncing[s.id] ? 'animate-spin' : ''}`}>
+                    {syncing[s.id] ? 'progress_activity' : 'sync'}
+                  </span>
                 </button>
                 <button
                   onClick={() => setSelectedSettingId(selectedSettingId === s.id ? null : s.id)}
@@ -274,6 +337,37 @@ export const AdminSettings: React.FC = () => {
               </div>
             </div>
 
+            {/* Verify Results */}
+            {verifyResults[s.id] && (
+              <div className="mt-4 pt-4 border-t border-white/5">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Connection Verification</h4>
+                  <button onClick={() => setVerifyResults((v) => ({ ...v, [s.id]: null }))} className="text-slate-500 hover:text-white transition-colors">
+                    <span className="material-symbols-outlined text-sm">close</span>
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {(['git', 'llm'] as const).map((key) => {
+                    const r = verifyResults[s.id]?.[key];
+                    if (!r) return null;
+                    const icon = r.status === 'ok' ? 'check_circle' : r.status === 'warning' ? 'warning' : 'error';
+                    const colors = r.status === 'ok' ? 'bg-green-500/10 text-green-400 border-green-500/30'
+                      : r.status === 'warning' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                      : 'bg-red-500/10 text-red-400 border-red-500/30';
+                    return (
+                      <div key={key} className={`flex items-start gap-3 p-3 rounded-lg border ${colors}`}>
+                        <span className="material-symbols-outlined text-base mt-0.5">{icon}</span>
+                        <div>
+                          <span className="text-xs font-bold uppercase tracking-wider">{key === 'git' ? 'Git Repository' : 'LLM Provider'}</span>
+                          <p className="text-xs mt-0.5 opacity-80">{r.message}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Sync Jobs */}
             {selectedSettingId === s.id && (
               <div className="mt-4 pt-4 border-t border-white/5">
@@ -283,24 +377,45 @@ export const AdminSettings: React.FC = () => {
                 ) : (
                   <div className="space-y-2">
                     {jobs.map((job) => (
-                      <div key={job.id} className="flex items-center justify-between bg-slate-900/50 rounded-lg px-3 py-2 text-xs">
-                        <div className="flex items-center gap-3">
-                          <span className={`px-2 py-0.5 rounded font-bold ${
-                            job.status === 'completed' ? 'bg-green-500/10 text-green-400' :
-                            job.status === 'running' ? 'bg-blue-500/10 text-blue-400' :
-                            job.status === 'failed' ? 'bg-red-500/10 text-red-400' :
-                            'bg-slate-700 text-slate-400'
-                          }`}>
-                            {job.status}
-                          </span>
-                          <span className="text-slate-400 capitalize">{job.trigger_type}</span>
+                      <div key={job.id} className="bg-slate-900/50 rounded-lg overflow-hidden">
+                        <div
+                          className="flex items-center justify-between px-3 py-2 text-xs cursor-pointer hover:bg-slate-800/50 transition-colors"
+                          onClick={() => setExpandedJobId(expandedJobId === job.id ? null : job.id)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className={`px-2 py-0.5 rounded font-bold ${
+                              job.status === 'completed' ? 'bg-green-500/10 text-green-400' :
+                              job.status === 'running' ? 'bg-blue-500/10 text-blue-400 animate-pulse' :
+                              job.status === 'failed' ? 'bg-red-500/10 text-red-400' :
+                              'bg-slate-700 text-slate-400'
+                            }`}>
+                              {job.status === 'running' ? '● running' : job.status}
+                            </span>
+                            <span className="text-slate-400 capitalize">{job.trigger_type}</span>
+                          </div>
+                          <div className="flex items-center gap-4 text-slate-500">
+                            <span>Found: {job.components_found}</span>
+                            <span>Created: {job.components_created}</span>
+                            <span>Updated: {job.components_updated}</span>
+                            <span>{new Date(job.created_at).toLocaleString()}</span>
+                            <span className="material-symbols-outlined text-xs">
+                              {expandedJobId === job.id ? 'expand_less' : 'expand_more'}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-4 text-slate-500">
-                          <span>Found: {job.components_found}</span>
-                          <span>Created: {job.components_created}</span>
-                          <span>Updated: {job.components_updated}</span>
-                          <span>{new Date(job.created_at).toLocaleString()}</span>
-                        </div>
+                        {expandedJobId === job.id && (
+                          <div className="border-t border-white/5 px-3 py-2">
+                            {job.error && (
+                              <div className="text-xs text-red-400 mb-2 bg-red-500/10 border border-red-500/30 rounded p-2">
+                                <span className="font-bold">Error: </span>{job.error}
+                              </div>
+                            )}
+                            <div className="bg-black/40 rounded p-3 max-h-60 overflow-y-auto font-mono text-[11px] text-slate-400 leading-relaxed whitespace-pre-wrap">
+                              {job.log || (job.status === 'pending' ? 'Waiting to start...' : 'No logs available')}
+                              <div ref={logEndRef} />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

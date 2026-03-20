@@ -19,6 +19,16 @@ from typing import Optional
 import asyncpg
 
 
+async def _append_log(pool, job_id: int, message: str):
+    """Append a timestamped line to the sync job log."""
+    ts = datetime.utcnow().strftime("%H:%M:%S")
+    line = f"[{ts}] {message}\n"
+    await pool.execute(
+        "UPDATE forge_sync_jobs SET log = COALESCE(log, '') || $1 WHERE id = $2",
+        line, job_id,
+    )
+
+
 async def run_sync_job(job_id: int, db_url: str):
     """Execute a single sync job in the background."""
     pool = await asyncpg.create_pool(db_url, min_size=1, max_size=3)
@@ -38,9 +48,10 @@ async def run_sync_job(job_id: int, db_url: str):
             return
 
         await pool.execute(
-            "UPDATE forge_sync_jobs SET status='running', started_at=now() WHERE id=$1",
+            "UPDATE forge_sync_jobs SET status='running', started_at=now(), log='' WHERE id=$1",
             job_id,
         )
+        await _append_log(pool, job_id, "Sync job started")
 
         git_url = settings["git_url"]
         git_token = settings.get("git_token")
@@ -56,6 +67,7 @@ async def run_sync_job(job_id: int, db_url: str):
             elif git_token and "gitlab" in git_url:
                 clone_url = git_url.replace("https://", f"https://oauth2:{git_token}@")
 
+            await _append_log(pool, job_id, f"Cloning {git_url} (branch: {git_branch})...")
             clone_cmd = [
                 "git", "clone", "--depth", "1", "--branch", git_branch,
                 clone_url, tmpdir,
@@ -65,26 +77,35 @@ async def run_sync_job(job_id: int, db_url: str):
                 env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
             )
             if result.returncode != 0:
+                await _append_log(pool, job_id, f"ERROR: Git clone failed: {result.stderr[:300]}")
                 await pool.execute(
                     "UPDATE forge_sync_jobs SET status='failed', error=$1, completed_at=now() WHERE id=$2",
                     f"Git clone failed: {result.stderr[:500]}", job_id,
                 )
                 return
 
+            await _append_log(pool, job_id, "Repository cloned successfully")
+
             # Get latest release tag
             latest_tag = _get_latest_tag(tmpdir)
+            if latest_tag:
+                await _append_log(pool, job_id, f"Latest release tag: {latest_tag}")
 
             # Scan for components
             components_found = 0
             components_created = 0
             components_updated = 0
 
+            await _append_log(pool, job_id, f"Scanning paths: {', '.join(scan_paths)}")
+
             for scan_path in scan_paths:
                 full_scan = os.path.join(tmpdir, scan_path.strip())
                 if not os.path.isdir(full_scan):
+                    await _append_log(pool, job_id, f"WARNING: Scan path '{scan_path}' not found, skipping")
                     continue
 
                 found = _discover_components(full_scan, tmpdir)
+                await _append_log(pool, job_id, f"Found {len(found)} component(s) in '{scan_path}'")
                 for comp in found:
                     components_found += 1
                     comp["git_repo_url"] = git_url
@@ -110,6 +131,7 @@ async def run_sync_job(job_id: int, db_url: str):
                             comp["slug"],
                         )
                         components_updated += 1
+                        await _append_log(pool, job_id, f"  Updated: {comp['name']} ({comp['slug']})")
                     else:
                         # Create new
                         await pool.execute(
@@ -128,7 +150,9 @@ async def run_sync_job(job_id: int, db_url: str):
                             git_url, comp["git_ref"], comp.get("howto_guide"),
                         )
                         components_created += 1
+                        await _append_log(pool, job_id, f"  Created: {comp['name']} ({comp['slug']})")
 
+            await _append_log(pool, job_id, f"Sync complete: {components_found} found, {components_created} created, {components_updated} updated")
             await pool.execute(
                 """UPDATE forge_sync_jobs SET
                     status='completed', completed_at=now(),
@@ -143,6 +167,7 @@ async def run_sync_job(job_id: int, db_url: str):
     except Exception as e:
         print(f"[sync] Error in job {job_id}: {e}")
         try:
+            await _append_log(pool, job_id, f"FATAL ERROR: {str(e)[:400]}")
             await pool.execute(
                 "UPDATE forge_sync_jobs SET status='failed', error=$1, completed_at=now() WHERE id=$2",
                 str(e)[:500], job_id,
@@ -217,7 +242,8 @@ def _discover_components(scan_dir: str, repo_root: str) -> list[dict]:
 
 def _find_readme(directory: str) -> Optional[str]:
     """Find README file in a directory."""
-    for name in ["README.md", "readme.md", "README.MD", "README.rst", "README.txt", "README"]:
+    for name in ["README.md", "readme.md", "README.MD", "README.rst", "README.txt", "README",
+                  "SKILL.md", "skill.md", "AGENT.md", "agent.md"]:
         path = os.path.join(directory, name)
         if os.path.isfile(path):
             return path
@@ -225,7 +251,19 @@ def _find_readme(directory: str) -> Optional[str]:
 
 
 def _parse_component_from_readme(dirname: str, readme: str, dirpath: str) -> Optional[dict]:
-    """Parse component metadata from a README file."""
+    """Parse component metadata from a README or SKILL.md file."""
+    # Parse YAML frontmatter if present (---\n...\n---)
+    frontmatter: dict = {}
+    body = readme
+    fm_match = re.match(r'^---\s*\n(.*?)\n---\s*\n?(.*)', readme, re.DOTALL)
+    if fm_match:
+        fm_text = fm_match.group(1)
+        body = fm_match.group(2)
+        for line in fm_text.split("\n"):
+            m = re.match(r'^(\w[\w-]*)\s*:\s*(.+)$', line.strip())
+            if m:
+                frontmatter[m.group(1).strip()] = m.group(2).strip()
+
     # Try to determine component type from directory name or content
     component_type = "skill"
     dirname_lower = dirname.lower()
@@ -238,20 +276,27 @@ def _parse_component_from_readme(dirname: str, readme: str, dirpath: str) -> Opt
     elif "skill" in dirname_lower or "skill" in readme_lower[:200]:
         component_type = "skill"
 
-    # Extract title from first H1
-    title_match = re.search(r'^#\s+(.+)$', readme, re.MULTILINE)
-    name = title_match.group(1).strip() if title_match else dirname.replace("-", " ").replace("_", " ").title()
+    # Extract name: prefer frontmatter > H1 > dirname
+    name = frontmatter.get("name")
+    if name:
+        name = name.replace("-", " ").replace("_", " ").title()
+    else:
+        title_match = re.search(r'^#\s+(.+)$', body, re.MULTILINE)
+        name = title_match.group(1).strip() if title_match else dirname.replace("-", " ").replace("_", " ").title()
 
-    # Extract first paragraph as description
-    paragraphs = re.split(r'\n\s*\n', readme)
-    description = ""
-    for p in paragraphs:
-        p = p.strip()
-        if p and not p.startswith("#") and not p.startswith("![") and len(p) > 20:
-            description = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', p)
-            description = re.sub(r'[*_`]', '', description)
-            description = description[:300]
-            break
+    # Extract description: prefer frontmatter > first paragraph
+    description = frontmatter.get("description", "")
+    if description:
+        description = description[:300]
+    else:
+        paragraphs = re.split(r'\n\s*\n', body)
+        for p in paragraphs:
+            p = p.strip()
+            if p and not p.startswith("#") and not p.startswith("![") and len(p) > 20:
+                description = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', p)
+                description = re.sub(r'[*_`]', '', description)
+                description = description[:300]
+                break
 
     if not description:
         description = f"Auto-discovered {component_type} from {dirname}"
@@ -316,7 +361,7 @@ def _parse_component_from_readme(dirname: str, readme: str, dirpath: str) -> Opt
         "component_type": component_type,
         "description": description,
         "long_description": readme[:5000],
-        "version": f"v{version}" if version and not version.startswith("v") else (version or None),
+        "version": f"v{version}" if version and not version.startswith("v") else (version or "v1.0.0"),
         "install_command": f"forge install {slug}",
         "author": author,
         "tags": tags,

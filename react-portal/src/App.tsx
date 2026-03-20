@@ -12,6 +12,7 @@ import { AdminMarketplace } from './pages/AdminMarketplace';
 import { AdminSolutions } from './pages/AdminSolutions';
 import { AdminSettings } from './pages/AdminSettings';
 import { SolutionDetail } from './pages/SolutionDetail';
+import { News } from './pages/News';
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
           <Route path="/ignite" element={<Ignite />} />
           <Route path="/howto" element={<Howto />} />
           <Route path="/solutions/:cardId" element={<SolutionDetail />} />
+          <Route path="/news" element={<News />} />
           <Route path="/login" element={<Login />} />
 
           {/* Admin pages (protected by AdminLayout) */}

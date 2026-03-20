@@ -98,12 +98,12 @@ async def admin_update_component(
 async def admin_delete_component(component_id: str, admin: dict = Depends(require_admin)):
     db = await get_db()
     result = await db.execute(
-        "UPDATE forge_components SET is_active = false, updated_at = now() WHERE id = $1",
+        "DELETE FROM forge_components WHERE id = $1",
         component_id,
     )
-    if result == "UPDATE 0":
+    if result == "DELETE 0":
         raise HTTPException(status_code=404, detail="Component not found")
-    return {"message": "Component deactivated"}
+    return {"message": "Component deleted"}
 
 
 @router.post("/components/{component_id}/activate")

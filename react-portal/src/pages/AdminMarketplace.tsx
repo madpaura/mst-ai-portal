@@ -161,11 +161,11 @@ export const AdminMarketplace: React.FC = () => {
   };
 
   const handleDelete = async (comp: ForgeComponent) => {
-    if (!confirm(`Deactivate "${comp.name}"?`)) return;
+    if (!confirm(`Permanently delete "${comp.name}" from the registry? This cannot be undone.`)) return;
     try {
       await api.delete(`/admin/forge/components/${comp.id}`);
       await fetchComponents();
-      showMsg('success', 'Component deactivated');
+      showMsg('success', 'Component deleted');
     } catch (err: any) {
       showMsg('error', err.message);
     }

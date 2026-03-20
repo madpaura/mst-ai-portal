@@ -133,12 +133,118 @@ async def list_sync_jobs(setting_id: str, admin: dict = Depends(require_admin)):
             components_updated=r["components_updated"],
             components_created=r["components_created"],
             error=r.get("error"),
+            log=r.get("log"),
             started_at=r.get("started_at"),
             completed_at=r.get("completed_at"),
             created_at=r["created_at"],
         )
         for r in rows
     ]
+
+
+@router.post("/settings/{setting_id}/verify")
+async def verify_setting(setting_id: str, admin: dict = Depends(require_admin)):
+    """Check git access, permissions, and LLM connectivity for a setting."""
+    db = await get_db()
+    row = await db.fetchrow("SELECT * FROM forge_settings WHERE id = $1", setting_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Setting not found")
+
+    results: dict = {"git": None, "llm": None}
+
+    # ── Git check ────────────────────────────────────────
+    import asyncio, subprocess
+    git_url = row["git_url"]
+    git_token = row.get("git_token")
+    if git_token and "github.com" in git_url:
+        auth_url = git_url.replace("https://", f"https://x-access-token:{git_token}@")
+    elif git_token and "gitlab" in git_url:
+        auth_url = git_url.replace("https://", f"https://oauth2:{git_token}@")
+    elif git_token:
+        auth_url = git_url.replace("https://", f"https://{git_token}@")
+    else:
+        auth_url = git_url
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "git", "ls-remote", "--heads", auth_url,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15)
+        if proc.returncode == 0:
+            branches = [l.split("\t")[-1].replace("refs/heads/", "") for l in stdout.decode().strip().split("\n") if l.strip()]
+            target_branch = row["git_branch"]
+            if target_branch in branches:
+                results["git"] = {"status": "ok", "message": f"Repository accessible. Branch '{target_branch}' found.", "branches": branches[:10]}
+            else:
+                results["git"] = {"status": "warning", "message": f"Repository accessible but branch '{target_branch}' not found. Available: {', '.join(branches[:5])}", "branches": branches[:10]}
+        else:
+            results["git"] = {"status": "error", "message": f"Git access failed: {stderr.decode().strip()[:200]}"}
+    except asyncio.TimeoutError:
+        results["git"] = {"status": "error", "message": "Git connection timed out after 15s"}
+    except Exception as e:
+        results["git"] = {"status": "error", "message": f"Git check error: {str(e)[:200]}"}
+
+    # ── LLM check ────────────────────────────────────────
+    llm_provider = row["llm_provider"]
+    llm_model = row["llm_model"]
+    llm_key = row.get("llm_api_key")
+
+    if llm_provider == "ollama":
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get("http://localhost:11434/api/tags")
+                if resp.status_code == 200:
+                    models = [m["name"] for m in resp.json().get("models", [])]
+                    if any(llm_model in m for m in models):
+                        results["llm"] = {"status": "ok", "message": f"Ollama running. Model '{llm_model}' available."}
+                    else:
+                        results["llm"] = {"status": "warning", "message": f"Ollama running but model '{llm_model}' not found. Available: {', '.join(models[:5])}"}
+                else:
+                    results["llm"] = {"status": "error", "message": f"Ollama returned status {resp.status_code}"}
+        except Exception as e:
+            results["llm"] = {"status": "error", "message": f"Cannot reach Ollama at localhost:11434: {str(e)[:150]}"}
+    elif llm_key:
+        import httpx
+        try:
+            if llm_provider == "openai":
+                async with httpx.AsyncClient(timeout=10) as client:
+                    resp = await client.get(
+                        "https://api.openai.com/v1/models",
+                        headers={"Authorization": f"Bearer {llm_key}"},
+                    )
+                    if resp.status_code == 200:
+                        models = [m["id"] for m in resp.json().get("data", [])]
+                        if llm_model in models:
+                            results["llm"] = {"status": "ok", "message": f"OpenAI key valid. Model '{llm_model}' available."}
+                        else:
+                            results["llm"] = {"status": "warning", "message": f"OpenAI key valid but model '{llm_model}' not in account. Check model name."}
+                    elif resp.status_code == 401:
+                        results["llm"] = {"status": "error", "message": "OpenAI API key is invalid or expired."}
+                    else:
+                        results["llm"] = {"status": "error", "message": f"OpenAI returned status {resp.status_code}: {resp.text[:150]}"}
+            elif llm_provider == "anthropic":
+                async with httpx.AsyncClient(timeout=10) as client:
+                    resp = await client.post(
+                        "https://api.anthropic.com/v1/messages",
+                        headers={"x-api-key": llm_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+                        json={"model": llm_model, "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]},
+                    )
+                    if resp.status_code == 200:
+                        results["llm"] = {"status": "ok", "message": f"Anthropic key valid. Model '{llm_model}' responded."}
+                    elif resp.status_code == 401:
+                        results["llm"] = {"status": "error", "message": "Anthropic API key is invalid."}
+                    else:
+                        results["llm"] = {"status": "warning", "message": f"Anthropic returned {resp.status_code}: {resp.text[:150]}"}
+            else:
+                results["llm"] = {"status": "warning", "message": f"Unknown LLM provider '{llm_provider}'. Cannot verify."}
+        except Exception as e:
+            results["llm"] = {"status": "error", "message": f"LLM check error: {str(e)[:200]}"}
+    else:
+        results["llm"] = {"status": "warning", "message": "No LLM API key configured. LLM features will not work."}
+
+    return results
 
 
 @router.post("/settings/{setting_id}/sync")

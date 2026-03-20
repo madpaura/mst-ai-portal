@@ -4,14 +4,6 @@ import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { api } from '../api/client';
 
-interface Capability {
-  id: string;
-  icon: string;
-  title: string;
-  description: string;
-  sort_order: number;
-}
-
 interface Announcement {
   id: string;
   title: string;
@@ -42,13 +34,6 @@ interface NewsItem {
   published_at: string;
 }
 
-const FALLBACK_CAPABILITIES: Capability[] = [
-  { id: '1', icon: 'terminal', title: 'Coding Agents', description: 'Real-time AI IDE integration for hardware description languages with intelligent auto-completion and bug detection.', sort_order: 1 },
-  { id: '2', icon: 'fact_check', title: 'Unit Test Generator', description: 'Automated verification suites that generate comprehensive UVM components and test benches to ensure silicon reliability.', sort_order: 2 },
-  { id: '3', icon: 'developer_board', title: 'Spec-to-Code', description: 'Transform high-level architectural specifications directly into synthesizable, optimized RTL code with minimal manual overhead.', sort_order: 3 },
-  { id: '4', icon: 'monitoring', title: 'Performance Monitoring', description: 'Real-time telemetry and deep-dive analysis for silicon workloads during simulation and emulation phases.', sort_order: 4 },
-];
-
 const WORKFLOW_STEPS = [
   {
     step: 1,
@@ -70,7 +55,6 @@ const WORKFLOW_STEPS = [
 export const Solutions: React.FC = () => {
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [capabilities, setCapabilities] = useState<Capability[]>(FALLBACK_CAPABILITIES);
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const [solutionCards, setSolutionCards] = useState<SolutionCard[]>([]);
   const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
@@ -78,9 +62,6 @@ export const Solutions: React.FC = () => {
   const [canScrollRight, setCanScrollRight] = useState(false);
 
   useEffect(() => {
-    api.get<Capability[]>('/api/solutions/capabilities')
-      .then(setCapabilities)
-      .catch(() => {});
     api.get<Announcement[]>('/api/solutions/announcements')
       .then((data) => { if (data.length > 0) setAnnouncement(data[0]); })
       .catch(() => {});
@@ -114,7 +95,6 @@ export const Solutions: React.FC = () => {
   const handleEnterDashboard = () => navigate('/ignite');
   const handleSpeakWithTeam = () => alert('Contact the tools team at ai-tools@mst.internal');
   const handlePlayVideo = () => navigate('/ignite');
-  const handleCapabilityClick = (_title: string) => {};
   const handleCardClick = (card: SolutionCard) => {
     if (card.link_url) {
       navigate(card.link_url);
@@ -171,32 +151,6 @@ export const Solutions: React.FC = () => {
           <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-slate-500">
             <span className="text-[10px] uppercase tracking-widest font-semibold">Features</span>
             <span className="material-symbols-outlined animate-bounce">keyboard_double_arrow_down</span>
-          </div>
-        </section>
-
-        {/* Core Capabilities */}
-        <section className="max-w-7xl mx-auto px-6 py-24">
-          <div className="mb-16">
-            <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-4">Core Capabilities</h2>
-            <div className="h-1 w-20 bg-primary rounded-full" />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {capabilities.map((cap) => (
-              <div
-                key={cap.id}
-                onClick={() => handleCapabilityClick(cap.title)}
-                className="glass-card p-8 rounded-2xl flex flex-col gap-6 group cursor-pointer"
-              >
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all duration-300">
-                  <span className="material-symbols-outlined text-3xl">{cap.icon}</span>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-3">{cap.title}</h3>
-                  <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">{cap.description}</p>
-                </div>
-              </div>
-            ))}
           </div>
         </section>
 

@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS forge_sync_jobs (
     components_updated  INTEGER DEFAULT 0,
     components_created  INTEGER DEFAULT 0,
     error           TEXT,
+    log             TEXT DEFAULT '',
     started_at      TIMESTAMPTZ,
     completed_at    TIMESTAMPTZ,
     created_at      TIMESTAMPTZ DEFAULT now()

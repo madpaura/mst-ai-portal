@@ -53,6 +53,7 @@ class ForgeSyncJobResponse(BaseModel):
     components_updated: int = 0
     components_created: int = 0
     error: Optional[str] = None
+    log: Optional[str] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     created_at: datetime
