@@ -19,6 +19,10 @@ class ForgeComponentResponse(BaseModel):
     downloads: int = 0
     tags: list[str] = []
     is_active: bool = True
+    howto_guide: Optional[str] = None
+    git_repo_url: Optional[str] = None
+    git_ref: Optional[str] = None
+    last_synced_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
@@ -36,6 +40,7 @@ class ForgeComponentCreate(BaseModel):
     badge: Optional[str] = None
     author: Optional[str] = None
     tags: list[str] = []
+    howto_guide: Optional[str] = None
 
 
 class ForgeComponentUpdate(BaseModel):
@@ -49,6 +54,7 @@ class ForgeComponentUpdate(BaseModel):
     badge: Optional[str] = None
     author: Optional[str] = None
     tags: Optional[list[str]] = None
+    howto_guide: Optional[str] = None
 
 
 class ForgeCategoryResponse(BaseModel):

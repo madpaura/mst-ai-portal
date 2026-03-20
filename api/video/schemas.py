@@ -192,6 +192,11 @@ class BannerConfigUpdate(BaseModel):
     presenter_initial: str = 'V'
 
 
+class TrimRequest(BaseModel):
+    start_seconds: float
+    end_seconds: float
+
+
 class JobStatusResponse(BaseModel):
     id: int
     video_id: str

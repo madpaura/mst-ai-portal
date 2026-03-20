@@ -17,7 +17,12 @@ def _row_to_component(r) -> ForgeComponentResponse:
         install_command=r["install_command"], badge=r.get("badge"),
         author=r.get("author"), downloads=r["downloads"],
         tags=list(r["tags"]) if r["tags"] else [],
-        is_active=r["is_active"], created_at=r["created_at"],
+        is_active=r["is_active"],
+        howto_guide=r.get("howto_guide"),
+        git_repo_url=r.get("git_repo_url"),
+        git_ref=r.get("git_ref"),
+        last_synced_at=r.get("last_synced_at"),
+        created_at=r["created_at"],
         updated_at=r["updated_at"],
     )
 

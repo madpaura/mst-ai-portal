@@ -12,8 +12,10 @@ from database import init_db, close_db
 from auth.router import router as auth_router
 from auth.seed import seed_admin_user
 from solutions.router import router as solutions_router
+from solutions.admin_router import router as solutions_admin_router
 from forge.router import router as forge_router
 from forge.admin_router import router as forge_admin_router
+from forge.settings_router import router as forge_settings_router
 from video.router import router as video_router
 from video.admin_router import router as video_admin_router
 from video.course_admin_router import router as course_admin_router
@@ -21,10 +23,23 @@ from video.course_admin_router import router as course_admin_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
+    from forge.scheduler import run_scheduler
+
     await init_db()
     if settings.AUTH_MODE == "open":
         await seed_admin_user()
+
+    # Start the nightly forge sync scheduler
+    scheduler_task = asyncio.create_task(run_scheduler(settings.DATABASE_URL))
+
     yield
+
+    scheduler_task.cancel()
+    try:
+        await scheduler_task
+    except asyncio.CancelledError:
+        pass
     await close_db()
 
 
@@ -44,8 +59,10 @@ app.add_middleware(
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(solutions_router, prefix="/api", tags=["solutions"])
+app.include_router(solutions_admin_router, prefix="/admin/solutions", tags=["admin-solutions"])
 app.include_router(forge_router, prefix="/forge", tags=["forge"])
 app.include_router(forge_admin_router, prefix="/admin/forge", tags=["admin-forge"])
+app.include_router(forge_settings_router, prefix="/admin/forge", tags=["admin-forge-settings"])
 app.include_router(video_router, prefix="/video", tags=["video"])
 app.include_router(video_admin_router, prefix="/admin", tags=["admin-video"])
 app.include_router(course_admin_router, prefix="/admin", tags=["admin-courses"])

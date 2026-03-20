@@ -11,6 +11,7 @@ from video.schemas import (
     ChapterCreate, ChapterUpdate, ChapterReorder, HowtoResponse, HowtoUpdate,
     QualitySettingResponse, QualitySettingUpdate, SeedNoteCreate,
     SeedNoteResponse, JobStatusResponse, BannerConfigResponse, BannerConfigUpdate,
+    TrimRequest,
 )
 from auth.dependencies import require_admin
 from database import get_db
@@ -230,6 +231,126 @@ async def admin_retranscode(video_id: str, admin: dict = Depends(require_admin))
     await db.execute("UPDATE videos SET status = 'processing' WHERE id = $1", video_id)
     await db.execute("INSERT INTO transcode_jobs (video_id) VALUES ($1)", video_id)
     return {"message": "Re-transcode job queued"}
+
+
+# ── Trim / Cut ─────────────────────────────────────────────
+
+@router.post("/videos/{video_id}/trim")
+async def admin_trim_video(
+    video_id: str, req: TrimRequest, background_tasks: BackgroundTasks,
+    admin: dict = Depends(require_admin),
+):
+    """Cut/trim a video between start_seconds and end_seconds using ffmpeg."""
+    db = await get_db()
+    video = await db.fetchrow("SELECT id, status FROM videos WHERE id = $1", video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    raw_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original.mp4")
+    backup_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original_pretrim.mp4")
+
+    if not os.path.exists(raw_path):
+        raise HTTPException(status_code=400, detail="No raw video file found")
+
+    if req.start_seconds < 0:
+        raise HTTPException(status_code=400, detail="start_seconds must be >= 0")
+    if req.end_seconds <= req.start_seconds:
+        raise HTTPException(status_code=400, detail="end_seconds must be > start_seconds")
+
+    background_tasks.add_task(
+        _trim_video_task, video_id, req.start_seconds, req.end_seconds,
+        raw_path, backup_path, settings.DATABASE_URL,
+    )
+
+    await db.execute("UPDATE videos SET status = 'processing' WHERE id = $1", video_id)
+    return {"message": "Trim job started", "start": req.start_seconds, "end": req.end_seconds}
+
+
+async def _trim_video_task(
+    video_id: str, start: float, end: float,
+    raw_path: str, backup_path: str, db_url: str,
+):
+    """Background task to trim a video and queue re-transcoding."""
+    import asyncpg as apg
+
+    pool = await apg.create_pool(db_url, min_size=1, max_size=2)
+    try:
+        # Back up the original (only first time)
+        if not os.path.exists(backup_path):
+            shutil.copy2(raw_path, backup_path)
+
+        source_path = backup_path if os.path.exists(backup_path) else raw_path
+        trimmed_path = raw_path + ".trimmed.mp4"
+
+        # Use ffmpeg to trim
+        duration = end - start
+        trim_cmd = [
+            settings.FFMPEG_PATH, "-y",
+            "-ss", str(start),
+            "-i", source_path,
+            "-t", str(duration),
+            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+            "-c:a", "aac", "-b:a", "128k",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            trimmed_path,
+        ]
+
+        print(f"[trim] Trimming video {video_id}: {start}s - {end}s")
+        result = subprocess.run(trim_cmd, capture_output=True, text=True, timeout=600)
+
+        if result.returncode != 0:
+            error = f"Trim failed: {result.stderr[-500:]}"
+            print(f"[trim] ERROR: {error}")
+            await pool.execute(
+                "UPDATE videos SET status = 'error' WHERE id = $1", video_id,
+            )
+            return
+
+        if not os.path.exists(trimmed_path) or os.path.getsize(trimmed_path) == 0:
+            print("[trim] ERROR: Trimmed file is empty or missing")
+            await pool.execute(
+                "UPDATE videos SET status = 'error' WHERE id = $1", video_id,
+            )
+            return
+
+        # Replace original with trimmed version
+        shutil.move(trimmed_path, raw_path)
+
+        # Probe new duration
+        probe_cmd = [
+            settings.FFMPEG_PATH.replace("ffmpeg", "ffprobe"),
+            "-v", "quiet", "-print_format", "json", "-show_format", raw_path,
+        ]
+        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30)
+        new_duration = None
+        if probe_result.returncode == 0:
+            try:
+                probe_data = json.loads(probe_result.stdout)
+                new_duration = int(float(probe_data.get("format", {}).get("duration", 0)))
+            except Exception:
+                pass
+
+        if new_duration:
+            await pool.execute(
+                "UPDATE videos SET duration_s = $1 WHERE id = $2", new_duration, video_id,
+            )
+
+        # Queue re-transcode
+        await pool.execute("UPDATE videos SET status = 'processing' WHERE id = $1", video_id)
+        await pool.execute("INSERT INTO transcode_jobs (video_id) VALUES ($1)", video_id)
+        print(f"[trim] Video {video_id} trimmed successfully, re-transcode queued")
+
+    except Exception as e:
+        print(f"[trim] Unexpected error: {e}")
+        try:
+            await pool.execute(
+                "UPDATE videos SET status = 'error' WHERE id = $1", video_id,
+            )
+        except Exception:
+            pass
+    finally:
+        await pool.close()
 
 
 @router.get("/videos/{video_id}/job-status", response_model=list[JobStatusResponse])

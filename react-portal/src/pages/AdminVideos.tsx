@@ -69,7 +69,7 @@ interface BannerConfig {
   error: string | null;
 }
 
-type Tab = 'metadata' | 'chapters' | 'howto' | 'quality' | 'seed-notes' | 'banner';
+type Tab = 'metadata' | 'chapters' | 'howto' | 'quality' | 'seed-notes' | 'banner' | 'trim';
 
 export const AdminVideos: React.FC = () => {
   const [videos, setVideos] = useState<Video[]>([]);
@@ -113,6 +113,14 @@ export const AdminVideos: React.FC = () => {
   });
   const [bannerGenerating, setBannerGenerating] = useState(false);
   const bannerPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Trim
+  const trimPlayerRef = useRef<HlsPlayerHandle>(null);
+  const [trimStart, setTrimStart] = useState(0);
+  const [trimEnd, setTrimEnd] = useState(0);
+  const [trimPlayerTime, setTrimPlayerTime] = useState(0);
+  const [trimPlayerDuration, setTrimPlayerDuration] = useState(0);
+  const [trimming, setTrimming] = useState(false);
 
   // Upload
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -294,6 +302,27 @@ export const AdminVideos: React.FC = () => {
       showMsg('success', 'Re-transcode queued');
     } catch (err: any) {
       showMsg('error', err.message);
+    }
+  };
+
+  const handleTrim = async () => {
+    if (!selected) return;
+    if (trimEnd <= trimStart) {
+      showMsg('error', 'End time must be after start time');
+      return;
+    }
+    setTrimming(true);
+    try {
+      await api.post(`/admin/videos/${selected.id}/trim`, {
+        start_seconds: trimStart,
+        end_seconds: trimEnd,
+      });
+      await fetchVideos();
+      showMsg('success', `Trim started: ${trimStart}s — ${trimEnd}s. Video will re-transcode after trimming.`);
+    } catch (err: any) {
+      showMsg('error', err.message);
+    } finally {
+      setTrimming(false);
     }
   };
 
@@ -749,7 +778,7 @@ export const AdminVideos: React.FC = () => {
 
             {/* Tabs */}
             <div className="flex items-center gap-1 border-b border-slate-200 dark:border-white/10 mb-6">
-              {(['banner', 'metadata', 'chapters', 'howto', 'quality', 'seed-notes'] as Tab[]).map((tab) => (
+              {(['banner', 'trim', 'metadata', 'chapters', 'howto', 'quality', 'seed-notes'] as Tab[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -759,7 +788,7 @@ export const AdminVideos: React.FC = () => {
                       : 'text-slate-400 hover:text-white border-transparent'
                   }`}
                 >
-                  {tab === 'seed-notes' ? 'Seed Notes' : tab === 'howto' ? 'How-To' : tab === 'banner' ? '🎬 Banner' : tab}
+                  {tab === 'seed-notes' ? 'Seed Notes' : tab === 'howto' ? 'How-To' : tab === 'banner' ? '🎬 Banner' : tab === 'trim' ? '✂️ Trim' : tab}
                 </button>
               ))}
             </div>
@@ -1018,6 +1047,156 @@ export const AdminVideos: React.FC = () => {
                   </div>
                   <button onClick={handleAddSeedNote} className="px-4 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
                     Add
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'trim' && (
+              <div className="space-y-5">
+                <p className="text-sm text-slate-400">Cut or trim the raw video to keep only the section between the start and end times. The original is backed up before the first trim.</p>
+
+                {selected.hls_path ? (
+                  <div>
+                    <HlsPlayer
+                      ref={trimPlayerRef}
+                      hlsPath={selected.hls_path}
+                      chapters={[]}
+                      onTimeUpdate={(t, d) => { setTrimPlayerTime(t); setTrimPlayerDuration(d); }}
+                      className="rounded-xl border border-white/10"
+                    />
+
+                    {/* Timeline with trim markers */}
+                    <div className="mt-3 px-1">
+                      <div className="relative w-full h-10 bg-slate-800/50 rounded-lg border border-white/5 overflow-hidden">
+                        {/* Playhead */}
+                        {trimPlayerDuration > 0 && (
+                          <div
+                            className="absolute top-0 h-full w-0.5 bg-white/60 z-20"
+                            style={{ left: `${(trimPlayerTime / trimPlayerDuration) * 100}%` }}
+                          />
+                        )}
+                        {/* Selected region */}
+                        {trimPlayerDuration > 0 && trimEnd > trimStart && (
+                          <div
+                            className="absolute top-0 h-full bg-primary/20 border-x-2 border-primary/60 z-10"
+                            style={{
+                              left: `${(trimStart / trimPlayerDuration) * 100}%`,
+                              width: `${((trimEnd - trimStart) / trimPlayerDuration) * 100}%`,
+                            }}
+                          />
+                        )}
+                        {/* Start marker */}
+                        {trimPlayerDuration > 0 && (
+                          <div
+                            className="absolute top-0 h-full w-1 bg-green-400 z-15 cursor-pointer"
+                            style={{ left: `${(trimStart / trimPlayerDuration) * 100}%` }}
+                            title={`Start: ${formatDuration(trimStart)}`}
+                          />
+                        )}
+                        {/* End marker */}
+                        {trimPlayerDuration > 0 && trimEnd > 0 && (
+                          <div
+                            className="absolute top-0 h-full w-1 bg-red-400 z-15 cursor-pointer"
+                            style={{ left: `${(trimEnd / trimPlayerDuration) * 100}%` }}
+                            title={`End: ${formatDuration(trimEnd)}`}
+                          />
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="font-mono text-[10px] text-slate-500">0:00</span>
+                        <span className="font-mono text-[10px] text-slate-400">
+                          Current: {formatDuration(Math.floor(trimPlayerTime))}
+                        </span>
+                        <span className="font-mono text-[10px] text-slate-500">{formatDuration(Math.floor(trimPlayerDuration))}</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-6 rounded-xl bg-slate-800/30 border border-white/5 text-center">
+                    <span className="material-symbols-outlined text-4xl text-slate-600 mb-2">videocam_off</span>
+                    <p className="text-slate-500 text-sm">Upload and transcode a video first to use the trim tool.</p>
+                  </div>
+                )}
+
+                {/* Trim Controls */}
+                <div className="flex items-end gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
+                  <div className="w-40">
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Start (seconds)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min={0}
+                      value={trimStart}
+                      onChange={(e) => setTrimStart(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setTrimStart(Math.floor(trimPlayerTime * 10) / 10)}
+                    className="px-3 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 text-xs font-bold rounded-lg transition-colors border border-green-500/30"
+                    title="Set start to current player position"
+                  >
+                    <span className="material-symbols-outlined text-sm">first_page</span>
+                  </button>
+                  <div className="w-40">
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">End (seconds)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min={0}
+                      value={trimEnd}
+                      onChange={(e) => setTrimEnd(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                    />
+                  </div>
+                  <button
+                    onClick={() => setTrimEnd(Math.floor(trimPlayerTime * 10) / 10)}
+                    className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs font-bold rounded-lg transition-colors border border-red-500/30"
+                    title="Set end to current player position"
+                  >
+                    <span className="material-symbols-outlined text-sm">last_page</span>
+                  </button>
+                  <div className="flex-1" />
+                  <button
+                    onClick={() => { if (trimPlayerDuration > 0) { setTrimStart(0); setTrimEnd(Math.floor(trimPlayerDuration * 10) / 10); } }}
+                    className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded-lg transition-colors"
+                  >
+                    Full Duration
+                  </button>
+                </div>
+
+                {/* Summary & Execute */}
+                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-800/30 border border-white/5">
+                  <div className="text-sm text-slate-300">
+                    {trimEnd > trimStart ? (
+                      <>
+                        Keep <span className="font-bold text-white">{formatDuration(Math.floor(trimStart))}</span>
+                        {' → '}
+                        <span className="font-bold text-white">{formatDuration(Math.floor(trimEnd))}</span>
+                        {' '}
+                        <span className="text-slate-500">({formatDuration(Math.floor(trimEnd - trimStart))} duration)</span>
+                      </>
+                    ) : (
+                      <span className="text-slate-500">Set start and end times to define the trim region</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleTrim}
+                    disabled={trimming || trimEnd <= trimStart}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-blue-500 disabled:opacity-30 text-white text-sm font-bold rounded-lg transition-colors"
+                  >
+                    {trimming ? (
+                      <>
+                        <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                        Trimming...
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-sm">content_cut</span>
+                        Trim Video
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

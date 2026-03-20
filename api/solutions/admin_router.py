@@ -1,0 +1,174 @@
+from fastapi import APIRouter, HTTPException, Depends
+
+from solutions.admin_schemas import (
+    SolutionCardResponse, SolutionCardCreate, SolutionCardUpdate,
+    NewsFeedResponse, NewsFeedCreate, NewsFeedUpdate,
+)
+from auth.dependencies import require_admin
+from database import get_db
+
+router = APIRouter()
+
+
+# ── Solution Cards CRUD ───────────────────────────────────
+
+def _row_to_card(r) -> SolutionCardResponse:
+    return SolutionCardResponse(
+        id=str(r["id"]), title=r["title"], subtitle=r.get("subtitle"),
+        description=r["description"], long_description=r.get("long_description"),
+        icon=r.get("icon", "smart_toy"), icon_color=r.get("icon_color", "text-primary"),
+        badge=r.get("badge"), link_url=r.get("link_url"),
+        sort_order=r["sort_order"], is_active=r["is_active"],
+        created_at=r["created_at"], updated_at=r["updated_at"],
+    )
+
+
+@router.get("/solution-cards", response_model=list[SolutionCardResponse])
+async def list_solution_cards(admin: dict = Depends(require_admin)):
+    db = await get_db()
+    rows = await db.fetch("SELECT * FROM solution_cards ORDER BY sort_order, created_at")
+    return [_row_to_card(r) for r in rows]
+
+
+@router.post("/solution-cards", response_model=SolutionCardResponse)
+async def create_solution_card(req: SolutionCardCreate, admin: dict = Depends(require_admin)):
+    db = await get_db()
+    # Enforce max 8 active cards
+    count = await db.fetchval("SELECT COUNT(*) FROM solution_cards WHERE is_active = true")
+    if count >= 8:
+        raise HTTPException(status_code=400, detail="Maximum 8 active solution cards allowed")
+
+    row = await db.fetchrow(
+        """
+        INSERT INTO solution_cards
+            (title, subtitle, description, long_description, icon, icon_color, badge, link_url, sort_order)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        RETURNING *
+        """,
+        req.title, req.subtitle, req.description, req.long_description,
+        req.icon, req.icon_color, req.badge, req.link_url, req.sort_order,
+    )
+    return _row_to_card(row)
+
+
+@router.get("/solution-cards/{card_id}", response_model=SolutionCardResponse)
+async def get_solution_card(card_id: str, admin: dict = Depends(require_admin)):
+    db = await get_db()
+    row = await db.fetchrow("SELECT * FROM solution_cards WHERE id = $1", card_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Solution card not found")
+    return _row_to_card(row)
+
+
+@router.put("/solution-cards/{card_id}", response_model=SolutionCardResponse)
+async def update_solution_card(
+    card_id: str, req: SolutionCardUpdate, admin: dict = Depends(require_admin)
+):
+    db = await get_db()
+    existing = await db.fetchrow("SELECT * FROM solution_cards WHERE id = $1", card_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Solution card not found")
+
+    fields = {}
+    for field in [
+        "title", "subtitle", "description", "long_description", "icon",
+        "icon_color", "badge", "link_url", "sort_order", "is_active",
+    ]:
+        val = getattr(req, field, None)
+        if val is not None:
+            fields[field] = val
+
+    if fields:
+        set_parts = []
+        params = [card_id]
+        idx = 2
+        for k, v in fields.items():
+            set_parts.append(f"{k} = ${idx}")
+            params.append(v)
+            idx += 1
+        set_parts.append("updated_at = now()")
+        set_clause = ", ".join(set_parts)
+        await db.execute(f"UPDATE solution_cards SET {set_clause} WHERE id = $1", *params)
+
+    row = await db.fetchrow("SELECT * FROM solution_cards WHERE id = $1", card_id)
+    return _row_to_card(row)
+
+
+@router.delete("/solution-cards/{card_id}")
+async def delete_solution_card(card_id: str, admin: dict = Depends(require_admin)):
+    db = await get_db()
+    result = await db.execute("DELETE FROM solution_cards WHERE id = $1", card_id)
+    if result == "DELETE 0":
+        raise HTTPException(status_code=404, detail="Solution card not found")
+    return {"message": "Solution card deleted"}
+
+
+# ── News Feed CRUD ────────────────────────────────────────
+
+def _row_to_news(r) -> NewsFeedResponse:
+    return NewsFeedResponse(
+        id=str(r["id"]), title=r["title"], summary=r["summary"],
+        content=r.get("content"), source=r["source"],
+        source_url=r.get("source_url"), badge=r.get("badge"),
+        is_active=r["is_active"], published_at=r["published_at"],
+        created_at=r["created_at"],
+    )
+
+
+@router.get("/news", response_model=list[NewsFeedResponse])
+async def list_news(admin: dict = Depends(require_admin)):
+    db = await get_db()
+    rows = await db.fetch("SELECT * FROM news_feed ORDER BY published_at DESC")
+    return [_row_to_news(r) for r in rows]
+
+
+@router.post("/news", response_model=NewsFeedResponse)
+async def create_news(req: NewsFeedCreate, admin: dict = Depends(require_admin)):
+    db = await get_db()
+    row = await db.fetchrow(
+        """
+        INSERT INTO news_feed (title, summary, content, source, source_url, badge)
+        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *
+        """,
+        req.title, req.summary, req.content, req.source, req.source_url, req.badge,
+    )
+    return _row_to_news(row)
+
+
+@router.put("/news/{news_id}", response_model=NewsFeedResponse)
+async def update_news(
+    news_id: str, req: NewsFeedUpdate, admin: dict = Depends(require_admin)
+):
+    db = await get_db()
+    existing = await db.fetchrow("SELECT * FROM news_feed WHERE id = $1", news_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="News item not found")
+
+    fields = {}
+    for field in ["title", "summary", "content", "source", "source_url", "badge", "is_active"]:
+        val = getattr(req, field, None)
+        if val is not None:
+            fields[field] = val
+
+    if fields:
+        set_parts = []
+        params = [news_id]
+        idx = 2
+        for k, v in fields.items():
+            set_parts.append(f"{k} = ${idx}")
+            params.append(v)
+            idx += 1
+        set_clause = ", ".join(set_parts)
+        await db.execute(f"UPDATE news_feed SET {set_clause} WHERE id = $1", *params)
+
+    row = await db.fetchrow("SELECT * FROM news_feed WHERE id = $1", news_id)
+    return _row_to_news(row)
+
+
+@router.delete("/news/{news_id}")
+async def delete_news(news_id: str, admin: dict = Depends(require_admin)):
+    db = await get_db()
+    result = await db.execute("DELETE FROM news_feed WHERE id = $1", news_id)
+    if result == "DELETE 0":
+        raise HTTPException(status_code=404, detail="News item not found")
+    return {"message": "News item deleted"}

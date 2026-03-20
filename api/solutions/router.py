@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from solutions.schemas import CapabilityResponse, AnnouncementResponse, ContactRequest
+from solutions.admin_schemas import SolutionCardResponse, NewsFeedResponse
 from database import get_db
 
 router = APIRouter()
@@ -31,6 +32,62 @@ async def list_announcements():
         AnnouncementResponse(
             id=str(r["id"]), title=r["title"], content=r.get("content"),
             badge=r.get("badge"), created_at=r["created_at"],
+        )
+        for r in rows
+    ]
+
+
+@router.get("/solutions/cards", response_model=list[SolutionCardResponse])
+async def list_solution_cards():
+    db = await get_db()
+    rows = await db.fetch(
+        "SELECT * FROM solution_cards WHERE is_active = true ORDER BY sort_order LIMIT 8"
+    )
+    return [
+        SolutionCardResponse(
+            id=str(r["id"]), title=r["title"], subtitle=r.get("subtitle"),
+            description=r["description"], long_description=r.get("long_description"),
+            icon=r.get("icon", "smart_toy"), icon_color=r.get("icon_color", "text-primary"),
+            badge=r.get("badge"), link_url=r.get("link_url"),
+            sort_order=r["sort_order"], is_active=r["is_active"],
+            created_at=r["created_at"], updated_at=r["updated_at"],
+        )
+        for r in rows
+    ]
+
+
+@router.get("/solutions/cards/{card_id}", response_model=SolutionCardResponse)
+async def get_solution_card(card_id: str):
+    db = await get_db()
+    row = await db.fetchrow(
+        "SELECT * FROM solution_cards WHERE id = $1 AND is_active = true", card_id
+    )
+    if not row:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Solution card not found")
+    return SolutionCardResponse(
+        id=str(row["id"]), title=row["title"], subtitle=row.get("subtitle"),
+        description=row["description"], long_description=row.get("long_description"),
+        icon=row.get("icon", "smart_toy"), icon_color=row.get("icon_color", "text-primary"),
+        badge=row.get("badge"), link_url=row.get("link_url"),
+        sort_order=row["sort_order"], is_active=row["is_active"],
+        created_at=row["created_at"], updated_at=row["updated_at"],
+    )
+
+
+@router.get("/solutions/news", response_model=list[NewsFeedResponse])
+async def list_news_feed():
+    db = await get_db()
+    rows = await db.fetch(
+        "SELECT * FROM news_feed WHERE is_active = true ORDER BY published_at DESC LIMIT 20"
+    )
+    return [
+        NewsFeedResponse(
+            id=str(r["id"]), title=r["title"], summary=r["summary"],
+            content=r.get("content"), source=r["source"],
+            source_url=r.get("source_url"), badge=r.get("badge"),
+            is_active=r["is_active"], published_at=r["published_at"],
+            created_at=r["created_at"],
         )
         for r in rows
     ]

@@ -21,6 +21,8 @@ export const AdminLayout: React.FC = () => {
   const navItems = [
     { path: '/admin/videos', label: 'Videos', icon: 'videocam' },
     { path: '/admin/marketplace', label: 'Marketplace', icon: 'storefront' },
+    { path: '/admin/solutions', label: 'Solutions', icon: 'dashboard' },
+    { path: '/admin/settings', label: 'Settings', icon: 'settings' },
   ];
 
   return (

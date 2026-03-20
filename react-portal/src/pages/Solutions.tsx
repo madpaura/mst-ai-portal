@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
@@ -18,6 +18,28 @@ interface Announcement {
   content: string | null;
   badge: string | null;
   created_at: string;
+}
+
+interface SolutionCard {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  description: string;
+  long_description: string | null;
+  icon: string;
+  icon_color: string;
+  badge: string | null;
+  link_url: string | null;
+  sort_order: number;
+}
+
+interface NewsItem {
+  id: string;
+  title: string;
+  summary: string;
+  source: string;
+  badge: string | null;
+  published_at: string;
 }
 
 const FALLBACK_CAPABILITIES: Capability[] = [
@@ -47,8 +69,13 @@ const WORKFLOW_STEPS = [
 
 export const Solutions: React.FC = () => {
   const navigate = useNavigate();
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [capabilities, setCapabilities] = useState<Capability[]>(FALLBACK_CAPABILITIES);
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
+  const [solutionCards, setSolutionCards] = useState<SolutionCard[]>([]);
+  const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
 
   useEffect(() => {
     api.get<Capability[]>('/api/solutions/capabilities')
@@ -57,7 +84,29 @@ export const Solutions: React.FC = () => {
     api.get<Announcement[]>('/api/solutions/announcements')
       .then((data) => { if (data.length > 0) setAnnouncement(data[0]); })
       .catch(() => {});
+    api.get<SolutionCard[]>('/api/solutions/cards')
+      .then(setSolutionCards)
+      .catch(() => {});
+    api.get<NewsItem[]>('/api/solutions/news')
+      .then(setNewsItems)
+      .catch(() => {});
   }, []);
+
+  const updateScrollButtons = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 0);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  };
+
+  useEffect(() => {
+    updateScrollButtons();
+  }, [solutionCards]);
+
+  const scrollBy = (dir: number) => {
+    scrollRef.current?.scrollBy({ left: dir * 340, behavior: 'smooth' });
+    setTimeout(updateScrollButtons, 400);
+  };
 
   const handleGetStarted = () => navigate('/ignite');
   const handleViewDocs = () => navigate('/howto');
@@ -66,6 +115,13 @@ export const Solutions: React.FC = () => {
   const handleSpeakWithTeam = () => alert('Contact the tools team at ai-tools@mst.internal');
   const handlePlayVideo = () => navigate('/ignite');
   const handleCapabilityClick = (_title: string) => {};
+  const handleCardClick = (card: SolutionCard) => {
+    if (card.link_url) {
+      navigate(card.link_url);
+    } else {
+      navigate(`/solutions/${card.id}`);
+    }
+  };
 
   return (
     <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
@@ -143,6 +199,115 @@ export const Solutions: React.FC = () => {
             ))}
           </div>
         </section>
+
+        {/* Solution Cards — scrollable up to 8 */}
+        {solutionCards.length > 0 && (
+          <section className="max-w-7xl mx-auto px-6 py-24 border-t border-slate-200 dark:border-primary/10">
+            <div className="flex items-end justify-between mb-10">
+              <div>
+                <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-4">Our Solutions</h2>
+                <div className="h-1 w-20 bg-primary rounded-full" />
+              </div>
+              {solutionCards.length > 4 && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => scrollBy(-1)}
+                    disabled={!canScrollLeft}
+                    className="w-10 h-10 rounded-full border border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-primary hover:border-primary disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  >
+                    <span className="material-symbols-outlined">chevron_left</span>
+                  </button>
+                  <button
+                    onClick={() => scrollBy(1)}
+                    disabled={!canScrollRight}
+                    className="w-10 h-10 rounded-full border border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-primary hover:border-primary disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  >
+                    <span className="material-symbols-outlined">chevron_right</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div
+              ref={scrollRef}
+              onScroll={updateScrollButtons}
+              className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide snap-x snap-mandatory"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+              {solutionCards.map((card) => (
+                <div
+                  key={card.id}
+                  onClick={() => handleCardClick(card)}
+                  className="min-w-[300px] max-w-[300px] snap-start glass-card p-8 rounded-2xl flex flex-col gap-5 group cursor-pointer hover:border-primary/30 transition-all shrink-0"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className={`w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center ${card.icon_color} group-hover:bg-primary group-hover:text-white transition-all duration-300`}>
+                      <span className="material-symbols-outlined text-3xl">{card.icon}</span>
+                    </div>
+                    {card.badge && (
+                      <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-primary/10 text-primary border border-primary/20">
+                        {card.badge}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-1">{card.title}</h3>
+                    {card.subtitle && (
+                      <p className="text-xs text-primary font-semibold uppercase tracking-wider mb-2">{card.subtitle}</p>
+                    )}
+                    <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">{card.description}</p>
+                  </div>
+                  <div className="mt-auto flex items-center gap-1 text-primary text-sm font-medium group-hover:gap-2 transition-all">
+                    Learn more
+                    <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* News Feed */}
+        {newsItems.length > 0 && (
+          <section className="max-w-7xl mx-auto px-6 py-24 border-t border-slate-200 dark:border-primary/10">
+            <div className="mb-10">
+              <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-4">Latest News</h2>
+              <div className="h-1 w-20 bg-primary rounded-full" />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {newsItems.slice(0, 6).map((item) => (
+                <div
+                  key={item.id}
+                  className="glass-card p-6 rounded-2xl flex flex-col gap-3 hover:border-primary/30 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400">
+                      {new Date(item.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {item.badge && (
+                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-primary/10 text-primary">
+                          {item.badge}
+                        </span>
+                      )}
+                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded capitalize ${
+                        item.source === 'release' ? 'bg-green-500/10 text-green-400' :
+                        item.source === 'rss' ? 'bg-amber-500/10 text-amber-400' :
+                        item.source === 'llm' ? 'bg-purple-500/10 text-purple-400' :
+                        'bg-slate-500/10 text-slate-400'
+                      }`}>
+                        {item.source}
+                      </span>
+                    </div>
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">{item.title}</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">{item.summary}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Demo Section */}
         <section className="max-w-7xl mx-auto px-6 py-24 border-t border-slate-200 dark:border-primary/10">

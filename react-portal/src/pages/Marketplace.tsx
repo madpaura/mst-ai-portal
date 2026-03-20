@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { api } from '../api/client';
 
 interface ForgeComponent {
@@ -16,6 +18,9 @@ interface ForgeComponent {
   author: string | null;
   downloads: number;
   tags: string[];
+  howto_guide: string | null;
+  git_repo_url: string | null;
+  git_ref: string | null;
 }
 
 const SIDEBAR_CATEGORIES = [
@@ -51,6 +56,7 @@ export const Marketplace: React.FC = () => {
   const [communityBuilt, setCommunityBuilt] = useState(false);
   const [openSource, setOpenSource] = useState(false);
   const [components, setComponents] = useState<ForgeComponent[]>([]);
+  const [expandedSlug, setExpandedSlug] = useState<string | null>(null);
 
   useEffect(() => {
     api.get<ForgeComponent[]>('/forge/components').then(setComponents).catch(() => {});
@@ -279,9 +285,45 @@ export const Marketplace: React.FC = () => {
                     </div>
 
                     <div className="flex items-center justify-between mt-auto">
-                      <span className="text-xs text-slate-500">{card.author || 'MST Team'}</span>
-                      <span className="text-xs text-slate-500">{card.version} · {card.downloads} installs</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500">{card.author || 'MST Team'}</span>
+                        {card.git_repo_url && (
+                          <span className="text-[10px] text-slate-600" title={card.git_repo_url}>{card.git_ref || 'git'}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-slate-500">{card.version} · {card.downloads} installs</span>
+                        {card.howto_guide && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setExpandedSlug(expandedSlug === card.slug ? null : card.slug); }}
+                            className="flex items-center gap-1 text-[10px] text-primary hover:text-white transition-colors font-bold"
+                          >
+                            <span className="material-symbols-outlined text-sm">menu_book</span>
+                            How-To
+                          </button>
+                        )}
+                      </div>
                     </div>
+
+                    {/* Expandable How-To Guide */}
+                    {expandedSlug === card.slug && card.howto_guide && (
+                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">How-To Guide</h4>
+                          <button
+                            onClick={() => setExpandedSlug(null)}
+                            className="text-slate-500 hover:text-white transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-sm">close</span>
+                          </button>
+                        </div>
+                        <div className="prose prose-sm prose-slate dark:prose-invert max-w-none prose-headings:text-sm prose-p:text-xs prose-li:text-xs prose-code:text-xs prose-pre:text-xs prose-pre:bg-slate-100 dark:prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-200 dark:prose-pre:border-slate-800 overflow-auto max-h-80">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {card.howto_guide}
+                          </ReactMarkdown>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
