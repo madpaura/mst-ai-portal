@@ -56,7 +56,6 @@ export const Marketplace: React.FC = () => {
   const [communityBuilt, setCommunityBuilt] = useState(false);
   const [openSource, setOpenSource] = useState(false);
   const [components, setComponents] = useState<ForgeComponent[]>([]);
-  const [expandedSlug, setExpandedSlug] = useState<string | null>(null);
   const [instructionsSlug, setInstructionsSlug] = useState<string | null>(null);
   const [instructions, setInstructions] = useState<Record<string, string>>({});
   const [downloading, setDownloading] = useState<Record<string, boolean>>({});
@@ -92,7 +91,11 @@ export const Marketplace: React.FC = () => {
   const handleDownload = async (slug: string) => {
     setDownloading((d) => ({ ...d, [slug]: true }));
     try {
-      const resp = await fetch(`/forge/components/${slug}/download`);
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const token = localStorage.getItem('mst_token');
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const resp = await fetch(`${apiBase}/forge/components/${slug}/download`, { headers });
       if (!resp.ok) throw new Error('Download failed');
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
@@ -290,7 +293,7 @@ export const Marketplace: React.FC = () => {
             </div>
 
             {/* Grid of Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {filteredCards.map((card) => {
                 const typeStyle = TYPE_BADGES[card.component_type] || TYPE_BADGES.agent;
                 const badgeStyle = card.badge ? BADGE_STYLES[card.badge] : null;
@@ -298,26 +301,27 @@ export const Marketplace: React.FC = () => {
                 return (
                   <div
                     key={card.id}
-                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col hover:border-primary/50 transition-all group"
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col hover:border-primary/50 transition-all group min-h-[220px]"
                   >
-                    <div className="flex justify-between items-start mb-4">
-                      <div className={`size-12 ${typeStyle.bg} rounded-lg flex items-center justify-center ${card.icon_color || typeStyle.color}`}>
-                        <span className="material-symbols-outlined">{card.icon || 'smart_toy'}</span>
+                    {/* Icon + title + badge on same line */}
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <div className={`size-8 shrink-0 ${typeStyle.bg} rounded-lg flex items-center justify-center ${card.icon_color || typeStyle.color}`}>
+                        <span className="material-symbols-outlined text-[18px]">{card.icon || 'smart_toy'}</span>
                       </div>
-                      <span className={`px-2 py-1 rounded ${displayBadge.bg} ${displayBadge.color} text-[10px] font-bold uppercase tracking-wider`}>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white leading-tight flex-1 truncate">{card.name}</h3>
+                      <span className={`px-2 py-0.5 rounded ${displayBadge.bg} ${displayBadge.color} text-[9px] font-bold uppercase tracking-wider shrink-0`}>
                         {displayBadge.label}
                       </span>
                     </div>
 
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">{card.name}</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 flex-grow">{card.description}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 flex-grow line-clamp-2">{card.description}</p>
 
-                    <div className="bg-slate-100 dark:bg-slate-950 rounded-lg p-3 mb-4 font-mono text-xs flex items-center justify-between border border-slate-200 dark:border-slate-800">
+                    <div className="bg-slate-100 dark:bg-slate-950 rounded-lg px-2.5 py-2 mb-3 font-mono text-[11px] flex items-center justify-between border border-slate-200 dark:border-slate-800">
                       <code className="text-primary/80 truncate">
-                        {card.install_command}
+                        {card.component_type === 'skill' ? `cp ${card.slug}/ .roo/skills/` : card.install_command}
                       </code>
                       <button
-                        onClick={() => { handleCopyCommand(card.install_command); handleInstall(card.slug); }}
+                        onClick={() => { handleCopyCommand(card.component_type === 'skill' ? `cp ${card.slug}/ .roo/skills/` : card.install_command); handleInstall(card.slug); }}
                         className="text-slate-500 hover:text-white transition-colors ml-2 shrink-0"
                       >
                         <span className="material-symbols-outlined text-[18px]">content_copy</span>
@@ -325,43 +329,39 @@ export const Marketplace: React.FC = () => {
                     </div>
 
                     <div className="flex items-center justify-between mt-auto">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500">{card.author || 'MST Team'}</span>
-                        {card.git_repo_url && (
-                          <span className="text-[10px] text-slate-600" title={card.git_repo_url}>{card.git_ref || 'git'}</span>
-                        )}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-slate-500 truncate max-w-[90px]">{card.author || 'MST Team'}</span>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-slate-500">{card.version} · {card.downloads} installs</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-slate-500">{card.version} · {card.downloads}</span>
                         {card.git_repo_url && (
                           <button
                             onClick={(e) => { e.stopPropagation(); handleDownload(card.slug); }}
                             disabled={downloading[card.slug]}
-                            className="flex items-center gap-1 text-[10px] text-green-500 hover:text-green-400 transition-colors font-bold disabled:opacity-40"
+                            className="p-1 rounded text-green-500 hover:text-green-400 hover:bg-green-500/10 transition-colors disabled:opacity-40"
                             title="Download as zip"
                           >
-                            <span className={`material-symbols-outlined text-sm ${downloading[card.slug] ? 'animate-spin' : ''}`}>
+                            <span className={`material-symbols-outlined text-[16px] ${downloading[card.slug] ? 'animate-spin' : ''}`}>
                               {downloading[card.slug] ? 'progress_activity' : 'download'}
                             </span>
-                            Download
                           </button>
                         )}
                         {(card.component_type === 'skill' || card.component_type === 'mcp_server') && (
                           <button
                             onClick={(e) => { e.stopPropagation(); handleShowInstructions(card.slug); }}
-                            className="flex items-center gap-1 text-[10px] text-amber-500 hover:text-amber-400 transition-colors font-bold"
+                            className="p-1 rounded text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                            title="Setup instructions"
                           >
-                            <span className="material-symbols-outlined text-sm">integration_instructions</span>
-                            Setup
+                            <span className="material-symbols-outlined text-[16px]">integration_instructions</span>
                           </button>
                         )}
                         {card.howto_guide && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); setExpandedSlug(expandedSlug === card.slug ? null : card.slug); }}
-                            className="flex items-center gap-1 text-[10px] text-primary hover:text-white transition-colors font-bold"
+                            onClick={(e) => { e.stopPropagation(); window.open(`/marketplace/${card.slug}/howto`, '_blank'); }}
+                            className="p-1 rounded text-primary hover:text-white hover:bg-primary/10 transition-colors"
+                            title="How-To guide"
                           >
-                            <span className="material-symbols-outlined text-sm">menu_book</span>
-                            How-To
+                            <span className="material-symbols-outlined text-[16px]">menu_book</span>
                           </button>
                         )}
                       </div>
@@ -382,26 +382,6 @@ export const Marketplace: React.FC = () => {
                         <div className="prose prose-sm prose-slate dark:prose-invert max-w-none prose-headings:text-sm prose-p:text-xs prose-li:text-xs prose-code:text-xs prose-pre:text-xs prose-pre:bg-slate-100 dark:prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-200 dark:prose-pre:border-slate-800 overflow-auto max-h-80">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {instructions[card.slug] || 'Loading instructions...'}
-                          </ReactMarkdown>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Expandable How-To Guide */}
-                    {expandedSlug === card.slug && card.howto_guide && (
-                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">How-To Guide</h4>
-                          <button
-                            onClick={() => setExpandedSlug(null)}
-                            className="text-slate-500 hover:text-white transition-colors"
-                          >
-                            <span className="material-symbols-outlined text-sm">close</span>
-                          </button>
-                        </div>
-                        <div className="prose prose-sm prose-slate dark:prose-invert max-w-none prose-headings:text-sm prose-p:text-xs prose-li:text-xs prose-code:text-xs prose-pre:text-xs prose-pre:bg-slate-100 dark:prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-200 dark:prose-pre:border-slate-800 overflow-auto max-h-80">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {card.howto_guide}
                           </ReactMarkdown>
                         </div>
                       </div>

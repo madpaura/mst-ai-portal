@@ -212,7 +212,14 @@ export const AdminSettings: React.FC = () => {
       const res = await api.post<{ git: any; llm: any }>(`/admin/forge/settings/${settingId}/verify`);
       setVerifyResults((v) => ({ ...v, [settingId]: res }));
     } catch (err: any) {
-      showMsg('error', err.message);
+      const detail = err.message || 'Unknown error';
+      setVerifyResults((v) => ({
+        ...v,
+        [settingId]: {
+          git: { status: 'error', message: `Verification request failed: ${detail}` },
+          llm: { status: 'error', message: `Verification request failed: ${detail}` },
+        },
+      }));
     } finally {
       setVerifying((v) => ({ ...v, [settingId]: false }));
     }

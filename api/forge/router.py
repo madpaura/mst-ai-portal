@@ -245,18 +245,14 @@ async def get_install_instructions(slug: str):
         if comp_type == "skill":
             instructions = f"""## {row['name']}
 
-### Download & Install
+### Install
 
-1. Download the skill using the download button above
-2. Extract the zip file to your skills directory:
+1. Click **Download** to get the zip file
+2. Extract into your project's skills folder:
+   ```bash
+   unzip {slug}.zip -d .roo/skills/
    ```
-   unzip {slug}.zip -d ~/.config/skills/
-   ```
-3. The skill will be available in your AI assistant automatically
-
-### Usage
-
-Reference this skill in your AI assistant by mentioning topics related to: {row['name'].lower()}
+3. The skill is now available — your AI assistant will pick it up automatically.
 """
         elif comp_type == "mcp_server":
             instructions = f"""## {row['name']}

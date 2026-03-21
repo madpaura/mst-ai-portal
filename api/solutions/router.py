@@ -93,6 +93,24 @@ async def list_news_feed():
     ]
 
 
+@router.get("/solutions/news/{news_id}", response_model=NewsFeedResponse)
+async def get_news_item(news_id: str):
+    db = await get_db()
+    row = await db.fetchrow(
+        "SELECT * FROM news_feed WHERE id = $1 AND is_active = true", news_id
+    )
+    if not row:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="News item not found")
+    return NewsFeedResponse(
+        id=str(row["id"]), title=row["title"], summary=row["summary"],
+        content=row.get("content"), source=row["source"],
+        source_url=row.get("source_url"), badge=row.get("badge"),
+        is_active=row["is_active"], published_at=row["published_at"],
+        created_at=row["created_at"],
+    )
+
+
 @router.post("/contact")
 async def submit_contact(req: ContactRequest):
     db = await get_db()
