@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.git
+frontend.log
+frontend.pid

@@ -128,6 +128,7 @@ CREATE TABLE video_banners (
     duration        TEXT NOT NULL DEFAULT '3:15',
     presenter       TEXT NOT NULL DEFAULT 'Vishwa',
     presenter_initial TEXT NOT NULL DEFAULT 'V',
+    banner_duration_s INTEGER NOT NULL DEFAULT 3 CHECK (banner_duration_s >= 3 AND banner_duration_s <= 10),
     status          TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'generating', 'ready', 'error')),
     banner_video_path TEXT,
     error           TEXT,
@@ -321,6 +322,22 @@ CREATE TABLE news_feed (
     is_active       BOOLEAN DEFAULT true,
     published_at    TIMESTAMPTZ DEFAULT now(),
     created_at      TIMESTAMPTZ DEFAULT now()
+);
+
+---------------------------------------------------
+-- RSS FEED SOURCES (Issue #17)
+---------------------------------------------------
+CREATE TABLE news_rss_feeds (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name            TEXT NOT NULL,
+    feed_url        TEXT NOT NULL UNIQUE,
+    badge           TEXT DEFAULT 'RSS',
+    is_active       BOOLEAN DEFAULT true,
+    last_fetched_at TIMESTAMPTZ,
+    items_imported  INTEGER DEFAULT 0,
+    error           TEXT,
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    updated_at      TIMESTAMPTZ DEFAULT now()
 );
 
 ---------------------------------------------------

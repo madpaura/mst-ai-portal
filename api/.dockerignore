@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+backend.log
+worker.log
+backend.pid
+worker.pid
+storage/
+.git

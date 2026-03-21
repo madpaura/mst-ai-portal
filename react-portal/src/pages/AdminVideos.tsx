@@ -64,6 +64,7 @@ interface BannerConfig {
   duration: string;
   presenter: string;
   presenter_initial: string;
+  banner_duration_s: number;
   status: string;
   banner_video_path: string | null;
   error: string | null;
@@ -109,7 +110,7 @@ export const AdminVideos: React.FC = () => {
   const [bannerForm, setBannerForm] = useState({
     variant: 'A', company_logo: 'SAMSUNG', series_tag: 'KNOWLEDGE SERIES',
     topic: '', subtopic: '', episode: 'EP 01', duration: '3:15',
-    presenter: '', presenter_initial: '',
+    presenter: '', presenter_initial: '', banner_duration_s: 3,
   });
   const [bannerGenerating, setBannerGenerating] = useState(false);
   const bannerPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -198,13 +199,14 @@ export const AdminVideos: React.FC = () => {
           subtopic: banner.subtopic, episode: banner.episode,
           duration: banner.duration, presenter: banner.presenter,
           presenter_initial: banner.presenter_initial,
+          banner_duration_s: banner.banner_duration_s || 3,
         });
         setBannerGenerating(banner.status === 'generating');
       } else {
         setBannerForm({
           variant: 'A', company_logo: 'SAMSUNG', series_tag: 'KNOWLEDGE SERIES',
           topic: video.title, subtopic: '', episode: 'EP 01', duration: '3:15',
-          presenter: '', presenter_initial: '',
+          presenter: '', presenter_initial: '', banner_duration_s: 3,
         });
         setBannerGenerating(false);
       }
@@ -1298,6 +1300,15 @@ export const AdminVideos: React.FC = () => {
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Duration</label>
                           <input value={bannerForm.duration} onChange={(e) => setBannerForm((f) => ({ ...f, duration: e.target.value }))}
                             className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Banner Clip Duration: {bannerForm.banner_duration_s}s</label>
+                        <input type="range" min={3} max={10} step={1} value={bannerForm.banner_duration_s}
+                          onChange={(e) => setBannerForm((f) => ({ ...f, banner_duration_s: parseInt(e.target.value) }))}
+                          className="w-full accent-primary" />
+                        <div className="flex justify-between text-[9px] text-slate-600 mt-0.5">
+                          <span>3s</span><span>5s</span><span>7s</span><span>10s</span>
                         </div>
                       </div>
                       <div className="flex gap-2">

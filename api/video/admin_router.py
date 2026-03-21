@@ -620,7 +620,9 @@ def _banner_row_to_response(r) -> BannerConfigResponse:
         series_tag=r["series_tag"], topic=r["topic"],
         subtopic=r["subtopic"], episode=r["episode"],
         duration=r["duration"], presenter=r["presenter"],
-        presenter_initial=r["presenter_initial"], status=r["status"],
+        presenter_initial=r["presenter_initial"],
+        banner_duration_s=r.get("banner_duration_s", 3),
+        status=r["status"],
         banner_video_path=r.get("banner_video_path"),
         error=r.get("error"),
     )
@@ -649,20 +651,20 @@ async def admin_upsert_banner(
         await db.execute(
             """UPDATE video_banners SET variant=$1, company_logo=$2, series_tag=$3,
                topic=$4, subtopic=$5, episode=$6, duration=$7, presenter=$8,
-               presenter_initial=$9, status='draft', updated_at=now()
-               WHERE video_id=$10""",
+               presenter_initial=$9, banner_duration_s=$10, status='draft', updated_at=now()
+               WHERE video_id=$11""",
             req.variant, req.company_logo, req.series_tag, req.topic,
             req.subtopic, req.episode, req.duration, req.presenter,
-            req.presenter_initial, video_id,
+            req.presenter_initial, req.banner_duration_s, video_id,
         )
     else:
         await db.execute(
             """INSERT INTO video_banners
-               (video_id, variant, company_logo, series_tag, topic, subtopic, episode, duration, presenter, presenter_initial)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)""",
+               (video_id, variant, company_logo, series_tag, topic, subtopic, episode, duration, presenter, presenter_initial, banner_duration_s)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)""",
             video_id, req.variant, req.company_logo, req.series_tag, req.topic,
             req.subtopic, req.episode, req.duration, req.presenter,
-            req.presenter_initial,
+            req.presenter_initial, req.banner_duration_s,
         )
 
     row = await db.fetchrow("SELECT * FROM video_banners WHERE video_id = $1", video_id)
@@ -687,6 +689,12 @@ async def _generate_banner_video(video_id: str, db_url: str):
         banner_dir = os.path.join(video_dir, "banner")
         os.makedirs(banner_dir, exist_ok=True)
 
+        banner_duration_s = banner.get("banner_duration_s", 3)
+        if banner_duration_s < 3:
+            banner_duration_s = 3
+        elif banner_duration_s > 10:
+            banner_duration_s = 10
+
         # Write props JSON for Remotion
         props = {
             "variant": banner["variant"],
@@ -698,6 +706,7 @@ async def _generate_banner_video(video_id: str, db_url: str):
             "duration": banner["duration"],
             "presenter": banner["presenter"],
             "presenterInitial": banner["presenter_initial"],
+            "durationInSeconds": banner_duration_s,
         }
         props_path = os.path.join(banner_dir, "props.json")
         with open(props_path, "w") as f:

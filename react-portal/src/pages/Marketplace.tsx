@@ -57,6 +57,9 @@ export const Marketplace: React.FC = () => {
   const [openSource, setOpenSource] = useState(false);
   const [components, setComponents] = useState<ForgeComponent[]>([]);
   const [expandedSlug, setExpandedSlug] = useState<string | null>(null);
+  const [instructionsSlug, setInstructionsSlug] = useState<string | null>(null);
+  const [instructions, setInstructions] = useState<Record<string, string>>({});
+  const [downloading, setDownloading] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     api.get<ForgeComponent[]>('/forge/components').then(setComponents).catch(() => {});
@@ -84,6 +87,43 @@ export const Marketplace: React.FC = () => {
 
   const handleInstall = (slug: string) => {
     api.post(`/forge/components/${slug}/install`).catch(() => {});
+  };
+
+  const handleDownload = async (slug: string) => {
+    setDownloading((d) => ({ ...d, [slug]: true }));
+    try {
+      const resp = await fetch(`/forge/components/${slug}/download`);
+      if (!resp.ok) throw new Error('Download failed');
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${slug}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('Download failed. Please try again.');
+    } finally {
+      setDownloading((d) => ({ ...d, [slug]: false }));
+    }
+  };
+
+  const handleShowInstructions = async (slug: string) => {
+    if (instructionsSlug === slug) {
+      setInstructionsSlug(null);
+      return;
+    }
+    setInstructionsSlug(slug);
+    if (!instructions[slug]) {
+      try {
+        const res = await api.get<{ instructions: string }>(`/forge/components/${slug}/instructions`);
+        setInstructions((prev) => ({ ...prev, [slug]: res.instructions }));
+      } catch {
+        setInstructions((prev) => ({ ...prev, [slug]: 'Failed to load instructions.' }));
+      }
+    }
   };
 
   const handleSort = () => {};
@@ -293,6 +333,28 @@ export const Marketplace: React.FC = () => {
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="text-xs text-slate-500">{card.version} · {card.downloads} installs</span>
+                        {card.git_repo_url && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDownload(card.slug); }}
+                            disabled={downloading[card.slug]}
+                            className="flex items-center gap-1 text-[10px] text-green-500 hover:text-green-400 transition-colors font-bold disabled:opacity-40"
+                            title="Download as zip"
+                          >
+                            <span className={`material-symbols-outlined text-sm ${downloading[card.slug] ? 'animate-spin' : ''}`}>
+                              {downloading[card.slug] ? 'progress_activity' : 'download'}
+                            </span>
+                            Download
+                          </button>
+                        )}
+                        {(card.component_type === 'skill' || card.component_type === 'mcp_server') && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleShowInstructions(card.slug); }}
+                            className="flex items-center gap-1 text-[10px] text-amber-500 hover:text-amber-400 transition-colors font-bold"
+                          >
+                            <span className="material-symbols-outlined text-sm">integration_instructions</span>
+                            Setup
+                          </button>
+                        )}
                         {card.howto_guide && (
                           <button
                             onClick={(e) => { e.stopPropagation(); setExpandedSlug(expandedSlug === card.slug ? null : card.slug); }}
@@ -304,6 +366,26 @@ export const Marketplace: React.FC = () => {
                         )}
                       </div>
                     </div>
+
+                    {/* Install Instructions Panel */}
+                    {instructionsSlug === card.slug && (
+                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Install & Setup Instructions</h4>
+                          <button
+                            onClick={() => setInstructionsSlug(null)}
+                            className="text-slate-500 hover:text-white transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-sm">close</span>
+                          </button>
+                        </div>
+                        <div className="prose prose-sm prose-slate dark:prose-invert max-w-none prose-headings:text-sm prose-p:text-xs prose-li:text-xs prose-code:text-xs prose-pre:text-xs prose-pre:bg-slate-100 dark:prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-200 dark:prose-pre:border-slate-800 overflow-auto max-h-80">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {instructions[card.slug] || 'Loading instructions...'}
+                          </ReactMarkdown>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Expandable How-To Guide */}
                     {expandedSlug === card.slug && card.howto_guide && (

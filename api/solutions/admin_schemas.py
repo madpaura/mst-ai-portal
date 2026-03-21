@@ -74,3 +74,29 @@ class NewsFeedUpdate(BaseModel):
     source_url: Optional[str] = None
     badge: Optional[str] = None
     is_active: Optional[bool] = None
+
+
+class RssFeedResponse(BaseModel):
+    id: str
+    name: str
+    feed_url: str
+    badge: Optional[str] = "RSS"
+    is_active: bool = True
+    last_fetched_at: Optional[datetime] = None
+    items_imported: int = 0
+    error: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RssFeedCreate(BaseModel):
+    name: str
+    feed_url: str
+    badge: Optional[str] = "RSS"
+
+
+class RssFeedUpdate(BaseModel):
+    name: Optional[str] = None
+    feed_url: Optional[str] = None
+    badge: Optional[str] = None
+    is_active: Optional[bool] = None

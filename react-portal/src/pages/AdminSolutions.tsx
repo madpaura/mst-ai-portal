@@ -51,6 +51,25 @@ interface NewsForm {
   badge: string;
 }
 
+interface RssFeed {
+  id: string;
+  name: string;
+  feed_url: string;
+  badge: string | null;
+  is_active: boolean;
+  last_fetched_at: string | null;
+  items_imported: number;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface RssForm {
+  name: string;
+  feed_url: string;
+  badge: string;
+}
+
 const EMPTY_CARD: CardForm = {
   title: '', subtitle: '', description: '', long_description: '',
   icon: 'smart_toy', icon_color: 'text-primary', badge: '', link_url: '', sort_order: 0,
@@ -58,6 +77,10 @@ const EMPTY_CARD: CardForm = {
 
 const EMPTY_NEWS: NewsForm = {
   title: '', summary: '', content: '', source: 'manual', source_url: '', badge: '',
+};
+
+const EMPTY_RSS: RssForm = {
+  name: '', feed_url: '', badge: 'RSS',
 };
 
 const ICON_OPTIONS = [
@@ -77,7 +100,7 @@ const COLOR_OPTIONS = [
 ];
 
 export const AdminSolutions: React.FC = () => {
-  const [tab, setTab] = useState<'cards' | 'news'>('cards');
+  const [tab, setTab] = useState<'cards' | 'news' | 'rss'>('cards');
   const [cards, setCards] = useState<SolutionCard[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,6 +114,13 @@ export const AdminSolutions: React.FC = () => {
   const [editingNews, setEditingNews] = useState<NewsItem | null>(null);
   const [creatingNews, setCreatingNews] = useState(false);
   const [newsForm, setNewsForm] = useState<NewsForm>(EMPTY_NEWS);
+
+  // RSS feed state
+  const [rssFeeds, setRssFeeds] = useState<RssFeed[]>([]);
+  const [editingRss, setEditingRss] = useState<RssFeed | null>(null);
+  const [creatingRss, setCreatingRss] = useState(false);
+  const [rssForm, setRssForm] = useState<RssForm>(EMPTY_RSS);
+  const [syncingRss, setSyncingRss] = useState<Record<string, boolean>>({});
 
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -117,9 +147,18 @@ export const AdminSolutions: React.FC = () => {
     }
   }, []);
 
+  const fetchRssFeeds = useCallback(async () => {
+    try {
+      const data = await api.get<RssFeed[]>('/admin/solutions/rss-feeds');
+      setRssFeeds(data);
+    } catch (err: any) {
+      showMsg('error', err.message);
+    }
+  }, []);
+
   useEffect(() => {
-    Promise.all([fetchCards(), fetchNews()]).finally(() => setLoading(false));
-  }, [fetchCards, fetchNews]);
+    Promise.all([fetchCards(), fetchNews(), fetchRssFeeds()]).finally(() => setLoading(false));
+  }, [fetchCards, fetchNews, fetchRssFeeds]);
 
   // ── Card handlers ──────────────────────────────────────
   const openCreateCard = () => {
@@ -243,12 +282,93 @@ export const AdminSolutions: React.FC = () => {
     }
   };
 
+  // ── RSS Feed handlers ───────────────────────────────────
+  const openCreateRss = () => {
+    setEditingRss(null);
+    setRssForm(EMPTY_RSS);
+    setCreatingRss(true);
+  };
+
+  const openEditRss = (feed: RssFeed) => {
+    setCreatingRss(false);
+    setEditingRss(feed);
+    setRssForm({
+      name: feed.name,
+      feed_url: feed.feed_url,
+      badge: feed.badge || 'RSS',
+    });
+  };
+
+  const closeRssForm = () => {
+    setCreatingRss(false);
+    setEditingRss(null);
+    setRssForm(EMPTY_RSS);
+  };
+
+  const handleSaveRss = async () => {
+    const payload = { ...rssForm, badge: rssForm.badge || null };
+    try {
+      if (creatingRss) {
+        await api.post('/admin/solutions/rss-feeds', payload);
+        showMsg('success', 'RSS feed added');
+      } else if (editingRss) {
+        await api.put(`/admin/solutions/rss-feeds/${editingRss.id}`, payload);
+        showMsg('success', 'RSS feed updated');
+      }
+      closeRssForm();
+      await fetchRssFeeds();
+    } catch (err: any) {
+      showMsg('error', err.message);
+    }
+  };
+
+  const handleDeleteRss = async (feed: RssFeed) => {
+    if (!confirm(`Delete RSS feed "${feed.name}"?`)) return;
+    try {
+      await api.delete(`/admin/solutions/rss-feeds/${feed.id}`);
+      await fetchRssFeeds();
+      showMsg('success', 'RSS feed deleted');
+    } catch (err: any) {
+      showMsg('error', err.message);
+    }
+  };
+
+  const handleSyncRss = async (feedId: string) => {
+    setSyncingRss((s) => ({ ...s, [feedId]: true }));
+    try {
+      await api.post(`/admin/solutions/rss-feeds/${feedId}/sync`);
+      showMsg('success', 'RSS sync started');
+      setTimeout(async () => {
+        await fetchRssFeeds();
+        await fetchNews();
+        setSyncingRss((s) => ({ ...s, [feedId]: false }));
+      }, 3000);
+    } catch (err: any) {
+      showMsg('error', err.message);
+      setSyncingRss((s) => ({ ...s, [feedId]: false }));
+    }
+  };
+
+  const handleSyncAllRss = async () => {
+    try {
+      await api.post('/admin/solutions/rss-feeds/sync-all');
+      showMsg('success', 'Sync started for all active feeds');
+      setTimeout(async () => {
+        await fetchRssFeeds();
+        await fetchNews();
+      }, 5000);
+    } catch (err: any) {
+      showMsg('error', err.message);
+    }
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center h-full text-slate-400 p-20">Loading...</div>;
   }
 
   const showCardForm = creatingCard || editingCard;
   const showNewsForm = creatingNews || editingNews;
+  const showRssForm = creatingRss || editingRss;
 
   return (
     <div className="p-6 lg:p-8 max-w-6xl mx-auto">
@@ -278,6 +398,14 @@ export const AdminSolutions: React.FC = () => {
           }`}
         >
           News Feed ({news.length})
+        </button>
+        <button
+          onClick={() => setTab('rss')}
+          className={`text-sm font-bold pb-2 border-b-2 transition-all ${
+            tab === 'rss' ? 'text-white border-primary' : 'text-slate-400 border-transparent hover:text-white'
+          }`}
+        >
+          RSS Feeds ({rssFeeds.length})
         </button>
       </div>
 
@@ -413,6 +541,94 @@ export const AdminSolutions: React.FC = () => {
                 ))}
                 {news.length === 0 && (
                   <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500 text-sm">No news items yet</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* ── RSS FEEDS TAB ──────────────────────────────── */}
+      {tab === 'rss' && (
+        <>
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-xl font-bold text-white">RSS Feed Sources</h1>
+              <p className="text-sm text-slate-400 mt-1">Configure RSS feeds to auto-import news articles</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={handleSyncAllRss} className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold rounded-lg transition-colors">
+                <span className="material-symbols-outlined text-sm">sync</span>
+                Sync All
+              </button>
+              <button onClick={openCreateRss} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
+                <span className="material-symbols-outlined text-sm">add</span>
+                Add Feed
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/5 overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-white/10 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="text-left px-4 py-3">Feed</th>
+                  <th className="text-left px-4 py-3">Badge</th>
+                  <th className="text-left px-4 py-3">Imported</th>
+                  <th className="text-left px-4 py-3">Last Fetched</th>
+                  <th className="text-left px-4 py-3">Status</th>
+                  <th className="text-right px-4 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rssFeeds.map((feed) => (
+                  <tr key={feed.id} className="border-b border-white/5 hover:bg-slate-800/30 transition-colors">
+                    <td className="px-4 py-3">
+                      <div>
+                        <p className="text-sm font-medium text-white">{feed.name}</p>
+                        <p className="text-[10px] text-slate-500 max-w-xs truncate">{feed.feed_url}</p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-primary/10 text-primary">{feed.badge || 'RSS'}</span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-400">{feed.items_imported}</td>
+                    <td className="px-4 py-3 text-xs text-slate-400">
+                      {feed.last_fetched_at ? new Date(feed.last_fetched_at).toLocaleString() : 'Never'}
+                    </td>
+                    <td className="px-4 py-3">
+                      {feed.error ? (
+                        <span className="px-2 py-0.5 text-[10px] rounded bg-red-500/10 text-red-400" title={feed.error}>Error</span>
+                      ) : feed.is_active ? (
+                        <span className="px-2 py-0.5 text-[10px] rounded bg-green-500/10 text-green-400">Active</span>
+                      ) : (
+                        <span className="px-2 py-0.5 text-[10px] rounded bg-slate-700 text-slate-400">Inactive</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleSyncRss(feed.id)}
+                          disabled={syncingRss[feed.id]}
+                          className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-white transition-colors disabled:opacity-40"
+                          title="Sync now"
+                        >
+                          <span className={`material-symbols-outlined text-sm ${syncingRss[feed.id] ? 'animate-spin' : ''}`}>
+                            {syncingRss[feed.id] ? 'progress_activity' : 'sync'}
+                          </span>
+                        </button>
+                        <button onClick={() => openEditRss(feed)} className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-white transition-colors">
+                          <span className="material-symbols-outlined text-sm">edit</span>
+                        </button>
+                        <button onClick={() => handleDeleteRss(feed)} className="p-1.5 rounded hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors">
+                          <span className="material-symbols-outlined text-sm">delete</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {rssFeeds.length === 0 && (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500 text-sm">No RSS feeds configured yet</td></tr>
                 )}
               </tbody>
             </table>
@@ -584,6 +800,54 @@ export const AdminSolutions: React.FC = () => {
                   {creatingNews ? 'Create News' : 'Save Changes'}
                 </button>
                 <button onClick={closeNewsForm} className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── RSS Slide-out Form ──────────────────────── */}
+      {showRssForm && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/50" onClick={closeRssForm} />
+          <div className="relative w-full max-w-lg bg-background-dark border-l border-white/10 overflow-y-auto p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-white">
+                {creatingRss ? 'New RSS Feed' : `Edit: ${editingRss?.name}`}
+              </h2>
+              <button onClick={closeRssForm} className="text-slate-400 hover:text-white transition-colors">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Feed Name</label>
+                <input value={rssForm.name} onChange={(e) => setRssForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Anthropic Blog"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Feed URL</label>
+                <input value={rssForm.feed_url} onChange={(e) => setRssForm((f) => ({ ...f, feed_url: e.target.value }))}
+                  placeholder="https://example.com/feed.xml"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Badge Label</label>
+                <input value={rssForm.badge} onChange={(e) => setRssForm((f) => ({ ...f, badge: e.target.value }))}
+                  placeholder="RSS"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-white/10">
+                <button onClick={handleSaveRss} className="flex-1 px-6 py-2.5 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
+                  {creatingRss ? 'Add Feed' : 'Save Changes'}
+                </button>
+                <button onClick={closeRssForm} className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg transition-colors">
                   Cancel
                 </button>
               </div>

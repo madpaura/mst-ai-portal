@@ -6,14 +6,16 @@ const BannerVideoComp: React.FC<Record<string, unknown>> = (props) => {
   return <BannerVideo {...(props as unknown as BannerProps)} />;
 };
 
+const FPS = 30;
+
 export const RemotionRoot: React.FC = () => {
   return (
     <>
       <Composition
         id="BannerVideo"
         component={BannerVideoComp}
-        durationInFrames={90}
-        fps={30}
+        durationInFrames={FPS * 3}
+        fps={FPS}
         width={1920}
         height={1080}
         defaultProps={{
@@ -26,6 +28,12 @@ export const RemotionRoot: React.FC = () => {
           duration: "3:15",
           presenter: "Vishwa",
           presenterInitial: "V",
+          durationInSeconds: 3,
+        }}
+        calculateMetadata={async ({ props }) => {
+          const dur = (props as unknown as BannerProps).durationInSeconds ?? 3;
+          const clamped = Math.min(10, Math.max(3, dur));
+          return { durationInFrames: FPS * clamped };
         }}
       />
     </>

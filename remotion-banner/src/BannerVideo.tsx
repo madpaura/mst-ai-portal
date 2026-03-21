@@ -18,6 +18,7 @@ export interface BannerProps {
   duration: string;
   presenter: string;
   presenterInitial: string;
+  durationInSeconds?: number;
 }
 
 // ── Shared Logo SVG ──────────────────────────────────────

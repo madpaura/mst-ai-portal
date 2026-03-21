@@ -175,6 +175,7 @@ class BannerConfigResponse(BaseModel):
     duration: str
     presenter: str
     presenter_initial: str
+    banner_duration_s: int = 3
     status: str
     banner_video_path: Optional[str] = None
     error: Optional[str] = None
@@ -190,6 +191,7 @@ class BannerConfigUpdate(BaseModel):
     duration: str = '3:15'
     presenter: str = 'Vishwa'
     presenter_initial: str = 'V'
+    banner_duration_s: int = 3
 
 
 class TrimRequest(BaseModel):
