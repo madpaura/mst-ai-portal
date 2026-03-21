@@ -115,13 +115,14 @@ export const AdminVideos: React.FC = () => {
   const [bannerGenerating, setBannerGenerating] = useState(false);
   const bannerPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Trim
+  // Trim / Cut
   const trimPlayerRef = useRef<HlsPlayerHandle>(null);
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [trimPlayerTime, setTrimPlayerTime] = useState(0);
   const [trimPlayerDuration, setTrimPlayerDuration] = useState(0);
   const [trimming, setTrimming] = useState(false);
+  const [trimMode, setTrimMode] = useState<'trim' | 'cut'>('trim');
 
   // Upload
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -321,6 +322,27 @@ export const AdminVideos: React.FC = () => {
       });
       await fetchVideos();
       showMsg('success', `Trim started: ${trimStart}s — ${trimEnd}s. Video will re-transcode after trimming.`);
+    } catch (err: any) {
+      showMsg('error', err.message);
+    } finally {
+      setTrimming(false);
+    }
+  };
+
+  const handleCut = async () => {
+    if (!selected) return;
+    if (trimEnd <= trimStart) {
+      showMsg('error', 'End time must be after start time');
+      return;
+    }
+    setTrimming(true);
+    try {
+      await api.post(`/admin/videos/${selected.id}/cut`, {
+        start_seconds: trimStart,
+        end_seconds: trimEnd,
+      });
+      await fetchVideos();
+      showMsg('success', `Cut started: removing ${trimStart}s — ${trimEnd}s. Video will re-transcode after cutting.`);
     } catch (err: any) {
       showMsg('error', err.message);
     } finally {
@@ -1056,7 +1078,36 @@ export const AdminVideos: React.FC = () => {
 
             {activeTab === 'trim' && (
               <div className="space-y-5">
-                <p className="text-sm text-slate-400">Cut or trim the raw video to keep only the section between the start and end times. The original is backed up before the first trim.</p>
+                {/* Mode Toggle */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setTrimMode('trim')}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                      trimMode === 'trim'
+                        ? 'bg-primary text-white'
+                        : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700 border border-white/10'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-sm">crop</span>
+                    Trim
+                  </button>
+                  <button
+                    onClick={() => setTrimMode('cut')}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                      trimMode === 'cut'
+                        ? 'bg-red-500 text-white'
+                        : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700 border border-white/10'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-sm">content_cut</span>
+                    Cut
+                  </button>
+                </div>
+                <p className="text-sm text-slate-400">
+                  {trimMode === 'trim'
+                    ? 'Trim keeps only the section between start and end times. The original is backed up before the first trim.'
+                    : 'Cut removes the section between start and end times, keeping everything before and after. The original is backed up before the first cut.'}
+                </p>
 
                 {selected.hls_path ? (
                   <div>
@@ -1079,7 +1130,7 @@ export const AdminVideos: React.FC = () => {
                           />
                         )}
                         {/* Selected region */}
-                        {trimPlayerDuration > 0 && trimEnd > trimStart && (
+                        {trimPlayerDuration > 0 && trimEnd > trimStart && trimMode === 'trim' && (
                           <div
                             className="absolute top-0 h-full bg-primary/20 border-x-2 border-primary/60 z-10"
                             style={{
@@ -1087,6 +1138,36 @@ export const AdminVideos: React.FC = () => {
                               width: `${((trimEnd - trimStart) / trimPlayerDuration) * 100}%`,
                             }}
                           />
+                        )}
+                        {/* Cut region (striped to indicate removal) */}
+                        {trimPlayerDuration > 0 && trimEnd > trimStart && trimMode === 'cut' && (
+                          <>
+                            <div
+                              className="absolute top-0 h-full bg-red-500/20 border-x-2 border-red-500/60 z-10"
+                              style={{
+                                left: `${(trimStart / trimPlayerDuration) * 100}%`,
+                                width: `${((trimEnd - trimStart) / trimPlayerDuration) * 100}%`,
+                                backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(239,68,68,0.15) 4px, rgba(239,68,68,0.15) 8px)',
+                              }}
+                            />
+                            {/* Kept regions */}
+                            {trimStart > 0 && (
+                              <div
+                                className="absolute top-0 h-full bg-green-500/10 z-[5]"
+                                style={{
+                                  left: '0%',
+                                  width: `${(trimStart / trimPlayerDuration) * 100}%`,
+                                }}
+                              />
+                            )}
+                            <div
+                              className="absolute top-0 h-full bg-green-500/10 z-[5]"
+                              style={{
+                                left: `${(trimEnd / trimPlayerDuration) * 100}%`,
+                                width: `${((trimPlayerDuration - trimEnd) / trimPlayerDuration) * 100}%`,
+                              }}
+                            />
+                          </>
                         )}
                         {/* Start marker */}
                         {trimPlayerDuration > 0 && (
@@ -1172,31 +1253,45 @@ export const AdminVideos: React.FC = () => {
                 <div className="flex items-center justify-between p-4 rounded-xl bg-slate-800/30 border border-white/5">
                   <div className="text-sm text-slate-300">
                     {trimEnd > trimStart ? (
-                      <>
-                        Keep <span className="font-bold text-white">{formatDuration(Math.floor(trimStart))}</span>
-                        {' → '}
-                        <span className="font-bold text-white">{formatDuration(Math.floor(trimEnd))}</span>
-                        {' '}
-                        <span className="text-slate-500">({formatDuration(Math.floor(trimEnd - trimStart))} duration)</span>
-                      </>
+                      trimMode === 'trim' ? (
+                        <>
+                          Keep <span className="font-bold text-white">{formatDuration(Math.floor(trimStart))}</span>
+                          {' → '}
+                          <span className="font-bold text-white">{formatDuration(Math.floor(trimEnd))}</span>
+                          {' '}
+                          <span className="text-slate-500">({formatDuration(Math.floor(trimEnd - trimStart))} duration)</span>
+                        </>
+                      ) : (
+                        <>
+                          Remove <span className="font-bold text-red-400">{formatDuration(Math.floor(trimStart))}</span>
+                          {' → '}
+                          <span className="font-bold text-red-400">{formatDuration(Math.floor(trimEnd))}</span>
+                          {' '}
+                          <span className="text-slate-500">({formatDuration(Math.floor(trimEnd - trimStart))} removed)</span>
+                        </>
+                      )
                     ) : (
-                      <span className="text-slate-500">Set start and end times to define the trim region</span>
+                      <span className="text-slate-500">Set start and end times to define the {trimMode} region</span>
                     )}
                   </div>
                   <button
-                    onClick={handleTrim}
+                    onClick={trimMode === 'trim' ? handleTrim : handleCut}
                     disabled={trimming || trimEnd <= trimStart}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-blue-500 disabled:opacity-30 text-white text-sm font-bold rounded-lg transition-colors"
+                    className={`flex items-center gap-2 px-5 py-2.5 disabled:opacity-30 text-white text-sm font-bold rounded-lg transition-colors ${
+                      trimMode === 'trim'
+                        ? 'bg-primary hover:bg-blue-500'
+                        : 'bg-red-600 hover:bg-red-500'
+                    }`}
                   >
                     {trimming ? (
                       <>
                         <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
-                        Trimming...
+                        {trimMode === 'trim' ? 'Trimming...' : 'Cutting...'}
                       </>
                     ) : (
                       <>
-                        <span className="material-symbols-outlined text-sm">content_cut</span>
-                        Trim Video
+                        <span className="material-symbols-outlined text-sm">{trimMode === 'trim' ? 'crop' : 'content_cut'}</span>
+                        {trimMode === 'trim' ? 'Trim Video' : 'Cut Video'}
                       </>
                     )}
                   </button>

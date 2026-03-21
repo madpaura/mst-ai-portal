@@ -199,6 +199,11 @@ class TrimRequest(BaseModel):
     end_seconds: float
 
 
+class CutRequest(BaseModel):
+    start_seconds: float
+    end_seconds: float
+
+
 class JobStatusResponse(BaseModel):
     id: int
     video_id: str

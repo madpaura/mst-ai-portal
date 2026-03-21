@@ -11,7 +11,7 @@ from video.schemas import (
     ChapterCreate, ChapterUpdate, ChapterReorder, HowtoResponse, HowtoUpdate,
     QualitySettingResponse, QualitySettingUpdate, SeedNoteCreate,
     SeedNoteResponse, JobStatusResponse, BannerConfigResponse, BannerConfigUpdate,
-    TrimRequest,
+    TrimRequest, CutRequest,
 )
 from auth.dependencies import require_admin
 from database import get_db
@@ -343,6 +343,171 @@ async def _trim_video_task(
 
     except Exception as e:
         print(f"[trim] Unexpected error: {e}")
+        try:
+            await pool.execute(
+                "UPDATE videos SET status = 'error' WHERE id = $1", video_id,
+            )
+        except Exception:
+            pass
+    finally:
+        await pool.close()
+
+
+@router.post("/videos/{video_id}/cut")
+async def admin_cut_video(
+    video_id: str, req: CutRequest, background_tasks: BackgroundTasks,
+    admin: dict = Depends(require_admin),
+):
+    """Remove the segment between start_seconds and end_seconds, keeping everything else."""
+    db = await get_db()
+    video = await db.fetchrow("SELECT id, status FROM videos WHERE id = $1", video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    raw_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original.mp4")
+    backup_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original_precut.mp4")
+
+    if not os.path.exists(raw_path):
+        raise HTTPException(status_code=400, detail="No raw video file found")
+
+    if req.start_seconds < 0:
+        raise HTTPException(status_code=400, detail="start_seconds must be >= 0")
+    if req.end_seconds <= req.start_seconds:
+        raise HTTPException(status_code=400, detail="end_seconds must be > start_seconds")
+
+    background_tasks.add_task(
+        _cut_video_task, video_id, req.start_seconds, req.end_seconds,
+        raw_path, backup_path, settings.DATABASE_URL,
+    )
+
+    await db.execute("UPDATE videos SET status = 'processing' WHERE id = $1", video_id)
+    return {"message": "Cut job started", "start": req.start_seconds, "end": req.end_seconds}
+
+
+async def _cut_video_task(
+    video_id: str, start: float, end: float,
+    raw_path: str, backup_path: str, db_url: str,
+):
+    """Background task to cut (remove) a segment from a video and queue re-transcoding."""
+    import asyncpg as apg
+
+    pool = await apg.create_pool(db_url, min_size=1, max_size=2)
+    try:
+        # Back up the original (only first time)
+        if not os.path.exists(backup_path):
+            shutil.copy2(raw_path, backup_path)
+
+        source_path = backup_path if os.path.exists(backup_path) else raw_path
+        part_before = raw_path + ".cut_before.mp4"
+        part_after = raw_path + ".cut_after.mp4"
+        concat_list = raw_path + ".cut_concat.txt"
+        cut_output = raw_path + ".cut_result.mp4"
+
+        encode_opts = [
+            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+            "-c:a", "aac", "-b:a", "128k",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+        ]
+
+        parts = []
+
+        # Extract part before the cut (0 → start)
+        if start > 0:
+            cmd_before = [
+                settings.FFMPEG_PATH, "-y",
+                "-i", source_path,
+                "-t", str(start),
+                *encode_opts,
+                part_before,
+            ]
+            print(f"[cut] Extracting before segment: 0s - {start}s")
+            r = subprocess.run(cmd_before, capture_output=True, text=True, timeout=600)
+            if r.returncode != 0:
+                raise RuntimeError(f"Cut before-segment failed: {r.stderr[-500:]}")
+            parts.append(part_before)
+
+        # Extract part after the cut (end → EOF)
+        cmd_after = [
+            settings.FFMPEG_PATH, "-y",
+            "-ss", str(end),
+            "-i", source_path,
+            *encode_opts,
+            part_after,
+        ]
+        print(f"[cut] Extracting after segment: {end}s - EOF")
+        r = subprocess.run(cmd_after, capture_output=True, text=True, timeout=600)
+        if r.returncode != 0:
+            raise RuntimeError(f"Cut after-segment failed: {r.stderr[-500:]}")
+        if os.path.exists(part_after) and os.path.getsize(part_after) > 0:
+            parts.append(part_after)
+
+        if not parts:
+            raise RuntimeError("Cut produced no output segments")
+
+        if len(parts) == 1:
+            # Only one segment, just use it directly
+            shutil.move(parts[0], cut_output)
+        else:
+            # Concatenate the two parts
+            with open(concat_list, "w") as f:
+                for p in parts:
+                    f.write(f"file '{p}'\n")
+
+            concat_cmd = [
+                settings.FFMPEG_PATH, "-y",
+                "-f", "concat", "-safe", "0",
+                "-i", concat_list,
+                "-c", "copy",
+                "-movflags", "+faststart",
+                cut_output,
+            ]
+            print(f"[cut] Concatenating {len(parts)} segments")
+            r = subprocess.run(concat_cmd, capture_output=True, text=True, timeout=600)
+            if r.returncode != 0:
+                raise RuntimeError(f"Cut concat failed: {r.stderr[-500:]}")
+
+        if not os.path.exists(cut_output) or os.path.getsize(cut_output) == 0:
+            raise RuntimeError("Cut output file is empty or missing")
+
+        # Replace original with cut version
+        shutil.move(cut_output, raw_path)
+
+        # Cleanup temp files
+        for tmp in [part_before, part_after, concat_list]:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+
+        # Probe new duration
+        probe_cmd = [
+            settings.FFMPEG_PATH.replace("ffmpeg", "ffprobe"),
+            "-v", "quiet", "-print_format", "json", "-show_format", raw_path,
+        ]
+        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30)
+        new_duration = None
+        if probe_result.returncode == 0:
+            try:
+                probe_data = json.loads(probe_result.stdout)
+                new_duration = int(float(probe_data.get("format", {}).get("duration", 0)))
+            except Exception:
+                pass
+
+        if new_duration:
+            await pool.execute(
+                "UPDATE videos SET duration_s = $1 WHERE id = $2", new_duration, video_id,
+            )
+
+        # Queue re-transcode
+        await pool.execute("UPDATE videos SET status = 'processing' WHERE id = $1", video_id)
+        await pool.execute("INSERT INTO transcode_jobs (video_id) VALUES ($1)", video_id)
+        print(f"[cut] Video {video_id} cut successfully, re-transcode queued")
+
+    except Exception as e:
+        print(f"[cut] Unexpected error: {e}")
+        # Cleanup temp files on error
+        for tmp in [part_before, part_after, concat_list, cut_output]:
+            if os.path.exists(tmp):
+                os.remove(tmp)
         try:
             await pool.execute(
                 "UPDATE videos SET status = 'error' WHERE id = $1", video_id,
