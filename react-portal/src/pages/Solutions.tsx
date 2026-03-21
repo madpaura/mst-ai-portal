@@ -25,15 +25,6 @@ interface SolutionCard {
   sort_order: number;
 }
 
-interface NewsItem {
-  id: string;
-  title: string;
-  summary: string;
-  source: string;
-  badge: string | null;
-  published_at: string;
-}
-
 const WORKFLOW_STEPS = [
   {
     step: 1,
@@ -57,7 +48,6 @@ export const Solutions: React.FC = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const [solutionCards, setSolutionCards] = useState<SolutionCard[]>([]);
-  const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
@@ -67,9 +57,6 @@ export const Solutions: React.FC = () => {
       .catch(() => {});
     api.get<SolutionCard[]>('/api/solutions/cards')
       .then(setSolutionCards)
-      .catch(() => {});
-    api.get<NewsItem[]>('/api/solutions/news')
-      .then(setNewsItems)
       .catch(() => {});
   }, []);
 
@@ -215,48 +202,6 @@ export const Solutions: React.FC = () => {
                     Learn more
                     <span className="material-symbols-outlined text-sm">arrow_forward</span>
                   </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* News Feed */}
-        {newsItems.length > 0 && (
-          <section className="max-w-7xl mx-auto px-6 py-24 border-t border-slate-200 dark:border-primary/10">
-            <div className="mb-10">
-              <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-4">Latest News</h2>
-              <div className="h-1 w-20 bg-primary rounded-full" />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {newsItems.slice(0, 6).map((item) => (
-                <div
-                  key={item.id}
-                  className="glass-card p-6 rounded-2xl flex flex-col gap-3 hover:border-primary/30 transition-all"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400">
-                      {new Date(item.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {item.badge && (
-                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-primary/10 text-primary">
-                          {item.badge}
-                        </span>
-                      )}
-                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded capitalize ${
-                        item.source === 'release' ? 'bg-green-500/10 text-green-400' :
-                        item.source === 'rss' ? 'bg-amber-500/10 text-amber-400' :
-                        item.source === 'llm' ? 'bg-purple-500/10 text-purple-400' :
-                        'bg-slate-500/10 text-slate-400'
-                      }`}>
-                        {item.source}
-                      </span>
-                    </div>
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">{item.title}</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">{item.summary}</p>
                 </div>
               ))}
             </div>
