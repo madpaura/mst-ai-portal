@@ -206,15 +206,10 @@ async def admin_upload_video_file(
         while chunk := await file.read(1024 * 1024):  # 1MB chunks
             f.write(chunk)
 
-    # Update video status
-    await db.execute("UPDATE videos SET status = 'processing' WHERE id = $1", video_id)
+    # Update video status to uploaded (no auto-transcode)
+    await db.execute("UPDATE videos SET status = 'uploaded' WHERE id = $1", video_id)
 
-    # Create transcode job
-    await db.execute(
-        "INSERT INTO transcode_jobs (video_id) VALUES ($1)", video_id
-    )
-
-    return {"message": "Video uploaded, transcoding queued"}
+    return {"message": "Video uploaded"}
 
 
 @router.post("/videos/{video_id}/retranscode")

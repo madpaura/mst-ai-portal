@@ -1,7 +1,9 @@
 import os
+import traceback
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
@@ -71,7 +73,14 @@ app.include_router(course_admin_router, prefix="/admin", tags=["admin-courses"])
 # Middleware to prevent caching of HLS manifests and segments
 class NoCacheHLSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        response: Response = await call_next(request)
+        try:
+            response: Response = await call_next(request)
+        except Exception as exc:
+            traceback.print_exc()
+            return JSONResponse(
+                status_code=500,
+                content={"detail": str(exc)},
+            )
         path = request.url.path
         if path.startswith("/streams/") and (path.endswith(".m3u8") or path.endswith(".ts")):
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -80,6 +89,15 @@ class NoCacheHLSMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(NoCacheHLSMiddleware)
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)},
+    )
 
 # Serve transcoded video streams (HLS segments, manifests, thumbnails)
 os.makedirs(settings.VIDEO_STORAGE_PATH, exist_ok=True)
