@@ -1,0 +1,44 @@
+# GPU-enabled Dockerfile for the transcoder worker
+# Uses NVIDIA CUDA base image for NVENC hardware encoding support.
+# Falls back gracefully to CPU (libx264) if no GPU is mapped into the container.
+#
+# Requires on the host:
+#   - NVIDIA driver
+#   - nvidia-container-toolkit
+#   - GPU device mapped via docker-compose deploy section
+
+FROM nvidia/cuda:12.8.0-runtime-ubuntu24.04
+
+# Prevent interactive prompts during package install
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Python 3.12, ffmpeg (with NVENC support via libnvidia-encode),
+# and other system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.12 \
+    python3.12-venv \
+    python3-pip \
+    git \
+    ffmpeg \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3.12 /usr/bin/python \
+    && ln -sf /usr/bin/python3.12 /usr/bin/python3
+
+# libnvidia-encode is provided by the host driver via nvidia-container-toolkit.
+# The CUDA runtime base image + mounted GPU device is sufficient for NVENC.
+
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --break-system-packages -r requirements.txt httpx
+
+# Copy application code
+COPY . .
+
+# Create storage directories
+RUN mkdir -p storage/videos storage/thumbnails storage/media
+
+# Default: run the transcoder worker
+CMD ["python", "worker/transcoder.py"]

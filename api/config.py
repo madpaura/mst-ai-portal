@@ -26,6 +26,7 @@ class Settings(BaseSettings):
 
     # Transcode
     FFMPEG_PATH: str = "ffmpeg"
+    FFMPEG_HWACCEL: str = "auto"  # "auto" = detect GPU, "none" = force CPU
     TRANSCODE_POLL_INTERVAL: int = 5  # seconds
 
     # Server — use allow_origin_regex in middleware instead for dev

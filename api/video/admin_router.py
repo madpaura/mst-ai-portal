@@ -16,6 +16,7 @@ from video.schemas import (
 from auth.dependencies import require_admin
 from database import get_db
 from config import settings
+from worker.gpu_detect import get_encode_args, get_hwaccel_args, get_gpu_info
 
 router = APIRouter()
 
@@ -277,14 +278,15 @@ async def _trim_video_task(
         source_path = backup_path if os.path.exists(backup_path) else raw_path
         trimmed_path = raw_path + ".trimmed.mp4"
 
-        # Use ffmpeg to trim
+        # Use ffmpeg to trim (GPU-accelerated if available)
         duration = end - start
         trim_cmd = [
             settings.FFMPEG_PATH, "-y",
+            *get_hwaccel_args(),
             "-ss", str(start),
             "-i", source_path,
             "-t", str(duration),
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+            *get_encode_args(crf=18),
             "-c:a", "aac", "-b:a", "128k",
             "-pix_fmt", "yuv420p",
             "-movflags", "+faststart",
@@ -399,7 +401,7 @@ async def _cut_video_task(
         cut_output = raw_path + ".cut_result.mp4"
 
         encode_opts = [
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+            *get_encode_args(crf=18),
             "-c:a", "aac", "-b:a", "128k",
             "-pix_fmt", "yuv420p",
             "-movflags", "+faststart",
@@ -968,7 +970,7 @@ async def _generate_banner_video(video_id: str, db_url: str):
             if has_audio:
                 reencode_cmd += ["-f", "lavfi", "-i", f"anullsrc=channel_layout=stereo:sample_rate={audio_sample_rate}"]
             reencode_cmd += [
-                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                *get_encode_args(crf=18),
                 "-vf", f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2",
                 "-pix_fmt", "yuv420p",
                 "-r", str(orig_fps),
@@ -1002,8 +1004,9 @@ async def _generate_banner_video(video_id: str, db_url: str):
             orig_reenc = os.path.join(banner_dir, "orig_reenc.mp4")
             orig_reencode_cmd = [
                 settings.FFMPEG_PATH, "-y",
+                *get_hwaccel_args(),
                 "-i", source_path,
-                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                *get_encode_args(crf=18),
                 "-vf", f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2",
                 "-pix_fmt", "yuv420p",
                 "-r", str(orig_fps),
@@ -1051,7 +1054,7 @@ async def _generate_banner_video(video_id: str, db_url: str):
                     settings.FFMPEG_PATH, "-y",
                     "-f", "concat", "-safe", "0",
                     "-i", concat_list,
-                    "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+                    *get_encode_args(crf=20),
                     "-pix_fmt", "yuv420p",
                 ]
                 if has_audio:

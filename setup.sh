@@ -16,6 +16,43 @@ fail() { echo -e "  ${RED}✘${NC} $1"; }
 header() { echo -e "\n${BLUE}── $1 ──${NC}"; }
 
 ERRORS=0
+GPU_AVAILABLE=false
+
+# ── GPU detection helper ─────────────────────────────────
+
+detect_gpu() {
+    # Check for NVIDIA GPU + nvidia-container-toolkit
+    if command -v nvidia-smi &>/dev/null; then
+        if nvidia-smi &>/dev/null; then
+            if dpkg -l nvidia-container-toolkit &>/dev/null 2>&1 || \
+               rpm -q nvidia-container-toolkit &>/dev/null 2>&1; then
+                GPU_AVAILABLE=true
+                return 0
+            fi
+        fi
+    fi
+    GPU_AVAILABLE=false
+    return 1
+}
+
+# Helper: pick compose command (v2 plugin vs legacy standalone)
+compose_cmd() {
+    if docker compose version &>/dev/null; then
+        echo "docker compose"
+    else
+        echo "docker-compose"
+    fi
+}
+
+# Helper: compose files based on GPU availability
+compose_files() {
+    detect_gpu
+    if [ "$GPU_AVAILABLE" = true ]; then
+        echo "-f docker-compose.yml -f docker-compose.gpu.yml"
+    else
+        echo "-f docker-compose.yml"
+    fi
+}
 
 # ── Prerequisite checks ───────────────────────────────────
 
@@ -54,16 +91,22 @@ check_prereqs() {
     # NVIDIA GPU (optional)
     header "GPU Support (optional)"
     if command -v nvidia-smi &>/dev/null; then
-        gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)
-        ok "NVIDIA GPU detected: $gpu"
+        if nvidia-smi &>/dev/null; then
+            gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)
+            ok "NVIDIA GPU detected: $gpu"
 
-        if dpkg -l nvidia-container-toolkit &>/dev/null 2>&1 || \
-           rpm -q nvidia-container-toolkit &>/dev/null 2>&1; then
-            ok "nvidia-container-toolkit installed"
-            echo -e "     ${GREEN}→${NC} Uncomment the 'deploy' section in docker-compose.yml to enable GPU transcoding"
+            if dpkg -l nvidia-container-toolkit &>/dev/null 2>&1 || \
+               rpm -q nvidia-container-toolkit &>/dev/null 2>&1; then
+                ok "nvidia-container-toolkit installed"
+                ok "GPU transcoding will be enabled automatically"
+                GPU_AVAILABLE=true
+            else
+                warn "nvidia-container-toolkit not installed — GPU transcoding disabled"
+                echo -e "     Run ${YELLOW}./setup.sh setup-gpu${NC} to install it, or see:"
+                echo "     https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html"
+            fi
         else
-            warn "nvidia-container-toolkit not installed"
-            echo "     Install: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html"
+            warn "NVIDIA GPU found but driver not responding — transcoding will use CPU"
         fi
     else
         warn "No NVIDIA GPU detected — transcoding will use CPU (slower but works fine)"
@@ -127,14 +170,18 @@ deploy() {
         cp .env.example .env
     fi
 
-    echo "Building and starting containers..."
-    if docker compose version &>/dev/null; then
-        docker compose build
-        docker compose up -d
+    local COMPOSE=$(compose_cmd)
+    local FILES=$(compose_files)
+
+    if [ "$GPU_AVAILABLE" = true ]; then
+        ok "GPU detected — worker will use NVIDIA NVENC acceleration"
     else
-        docker-compose build
-        docker-compose up -d
+        warn "No GPU — worker will use CPU encoding (libx264)"
     fi
+
+    echo "Building and starting containers..."
+    $COMPOSE $FILES build
+    $COMPOSE $FILES up -d
 
     echo ""
     header "Waiting for services to be healthy"
@@ -154,6 +201,11 @@ deploy() {
     echo -e "  API Docs:    ${GREEN}http://localhost:${BACKEND_PORT:-8000}/docs${NC}"
     echo -e "  Admin Panel: ${GREEN}http://localhost:${FRONTEND_PORT:-80}/admin/videos${NC}"
     echo -e "  Default Login: admin / admin"
+    if [ "$GPU_AVAILABLE" = true ]; then
+        echo -e "  GPU Encode:  ${GREEN}NVIDIA NVENC (h264_nvenc)${NC}"
+    else
+        echo -e "  GPU Encode:  ${YELLOW}CPU fallback (libx264)${NC}"
+    fi
     echo ""
     echo "  Useful commands:"
     echo "    ./setup.sh logs backend    # Backend logs"
@@ -165,11 +217,9 @@ deploy() {
 
 down() {
     header "Stopping all containers"
-    if docker compose version &>/dev/null; then
-        docker compose down
-    else
-        docker-compose down
-    fi
+    local COMPOSE=$(compose_cmd)
+    local FILES=$(compose_files)
+    $COMPOSE $FILES down
     ok "All containers stopped"
 }
 
@@ -181,28 +231,69 @@ show_logs() {
         echo "Usage: ./setup.sh logs [backend|worker|frontend|db]"
         exit 1
     fi
-    if docker compose version &>/dev/null; then
-        docker compose logs -f "$svc"
-    else
-        docker-compose logs -f "$svc"
+    local COMPOSE=$(compose_cmd)
+    local FILES=$(compose_files)
+    $COMPOSE $FILES logs -f "$svc"
+}
+
+# ── Setup NVIDIA Container Toolkit ───────────────────────
+
+setup_gpu() {
+    header "Installing NVIDIA Container Toolkit"
+
+    if ! command -v nvidia-smi &>/dev/null; then
+        fail "No NVIDIA GPU driver found. Install the NVIDIA driver first."
+        echo "  See: https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/"
+        exit 1
     fi
+
+    gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)
+    ok "NVIDIA GPU detected: $gpu"
+
+    if dpkg -l nvidia-container-toolkit &>/dev/null 2>&1; then
+        ok "nvidia-container-toolkit is already installed"
+        echo "  Restarting Docker daemon to ensure GPU runtime is active..."
+        sudo systemctl restart docker
+        ok "Docker restarted"
+        return
+    fi
+
+    echo "  Adding NVIDIA container toolkit repository..."
+    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
+        sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+    curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+        sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+        sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list > /dev/null
+
+    echo "  Installing nvidia-container-toolkit..."
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq nvidia-container-toolkit
+
+    echo "  Configuring Docker runtime..."
+    sudo nvidia-ctk runtime configure --runtime=docker
+    sudo systemctl restart docker
+
+    ok "nvidia-container-toolkit installed and configured"
+    echo -e "  ${GREEN}→${NC} Run ${GREEN}./setup.sh deploy${NC} to start with GPU acceleration"
 }
 
 # ── Main ──────────────────────────────────────────────────
 
 case "${1:-check}" in
-    check)   check_prereqs ;;
-    deploy)  check_prereqs && deploy ;;
-    down)    down ;;
-    logs)    show_logs "$2" ;;
+    check)     check_prereqs ;;
+    deploy)    check_prereqs && deploy ;;
+    down)      down ;;
+    logs)      show_logs "$2" ;;
+    setup-gpu) setup_gpu ;;
     *)
         echo "MST AI Portal — Docker Setup"
         echo ""
         echo "Usage: ./setup.sh [command]"
         echo ""
-        echo "  check    Check prerequisites (default)"
-        echo "  deploy   Build and start all containers"
-        echo "  down     Stop all containers"
-        echo "  logs     Show logs: ./setup.sh logs [backend|worker|frontend|db]"
+        echo "  check      Check prerequisites (default)"
+        echo "  deploy     Build and start all containers"
+        echo "  down       Stop all containers"
+        echo "  logs       Show logs: ./setup.sh logs [backend|worker|frontend|db]"
+        echo "  setup-gpu  Install NVIDIA container toolkit for GPU transcoding"
         ;;
 esac

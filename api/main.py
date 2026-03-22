@@ -106,4 +106,13 @@ app.mount("/streams", StaticFiles(directory=settings.VIDEO_STORAGE_PATH), name="
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    from worker.gpu_detect import get_gpu_info
+    gpu = get_gpu_info()
+    return {
+        "status": "ok",
+        "gpu": {
+            "available": gpu["gpu_available"],
+            "name": gpu["gpu_name"],
+            "encoder": gpu["encoder"],
+        },
+    }

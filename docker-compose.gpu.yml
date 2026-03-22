@@ -1,0 +1,20 @@
+# GPU override — use this on hosts WITH an NVIDIA GPU + nvidia-container-toolkit.
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+# Or just run ./setup.sh deploy (auto-detects GPU).
+#
+# This overrides the worker service to:
+#   1. Use Dockerfile.gpu (NVIDIA CUDA base image)
+#   2. Pass the GPU device into the container via runtime flag
+
+services:
+  worker:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.gpu
+    runtime: nvidia
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-portal}:${POSTGRES_PASSWORD:-portal123}@db:5432/${POSTGRES_DB:-mst_portal}
+      VIDEO_STORAGE_PATH: /data/videos
+      FFMPEG_PATH: ffmpeg
+      FFMPEG_HWACCEL: ${FFMPEG_HWACCEL:-auto}
+      NVIDIA_VISIBLE_DEVICES: all

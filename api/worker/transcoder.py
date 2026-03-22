@@ -14,6 +14,7 @@ import asyncpg
 # Allow running as standalone module
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import settings
+from worker.gpu_detect import get_encode_args, get_hwaccel_args, get_gpu_info
 
 
 QUALITY_PROFILES = {
@@ -57,27 +58,31 @@ async def get_quality_settings(pool: asyncpg.Pool, video_id):
 
 
 def run_ffmpeg(input_path: str, output_dir: str, quality: str, crf: int) -> bool:
-    """Run FFmpeg to transcode a single quality tier."""
+    """Run FFmpeg to transcode a single quality tier. Uses GPU (NVENC) if available."""
     profile = QUALITY_PROFILES[quality]
     hls_dir = os.path.join(output_dir, quality)
     os.makedirs(hls_dir, exist_ok=True)
 
+    gpu = get_gpu_info()
     cmd = [
-        settings.FFMPEG_PATH, "-y", "-i", input_path,
+        settings.FFMPEG_PATH, "-y",
+        *get_hwaccel_args(),
+        "-i", input_path,
         "-vf", f"scale=-2:{profile['scale']}",
-        "-c:v", "libx264", "-crf", str(crf), "-preset", "fast",
+        *get_encode_args(crf=crf),
         "-c:a", "aac", "-b:a", profile["audio_bitrate"],
         "-hls_time", "6", "-hls_playlist_type", "vod",
         "-hls_segment_filename", os.path.join(hls_dir, "seg_%03d.ts"),
         os.path.join(hls_dir, "index.m3u8"),
     ]
 
-    print(f"  [ffmpeg] Transcoding {quality} (CRF={crf})...")
+    backend = "GPU" if gpu["gpu_available"] else "CPU"
+    print(f"  [ffmpeg] Transcoding {quality} (CRF={crf}) [{backend}]...")
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         print(f"  [ffmpeg] ERROR {quality}: {result.stderr[-500:]}")
         return False
-    print(f"  [ffmpeg] {quality} done")
+    print(f"  [ffmpeg] {quality} done [{backend}]")
     return True
 
 
@@ -202,6 +207,13 @@ async def run_worker():
     print("[worker] Starting transcode worker...")
     print(f"[worker] Video storage: {settings.VIDEO_STORAGE_PATH}")
     print(f"[worker] Poll interval: {settings.TRANSCODE_POLL_INTERVAL}s")
+
+    # Probe GPU at startup
+    gpu = get_gpu_info()
+    if gpu["gpu_available"]:
+        print(f"[worker] GPU encoding: {gpu['gpu_name']} (h264_nvenc)")
+    else:
+        print("[worker] GPU not available — using CPU encoding (libx264)")
 
     os.makedirs(settings.VIDEO_STORAGE_PATH, exist_ok=True)
 

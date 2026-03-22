@@ -47,7 +47,10 @@ services:
       timeout: 5s
       retries: 3
 
-  # ── Transcoder Worker (GPU-enabled) ───────────────────────
+  # ── Transcoder Worker ────────────────────────────────────
+  # By default uses CPU encoding (libx264).
+  # For GPU (NVENC) acceleration, use: docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+  # Or run ./setup.sh deploy which auto-detects GPU availability.
   worker:
     build:
       context: ./api
@@ -60,18 +63,11 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-portal}:${POSTGRES_PASSWORD:-portal123}@db:5432/${POSTGRES_DB:-mst_portal}
       VIDEO_STORAGE_PATH: /data/videos
       FFMPEG_PATH: ffmpeg
+      FFMPEG_HWACCEL: ${FFMPEG_HWACCEL:-auto}
+      PYTHONUNBUFFERED: "1"
     volumes:
       - video-data:/data/videos
     command: ["python", "worker/transcoder.py"]
-    # Uncomment the deploy section below to enable NVIDIA GPU for ffmpeg acceleration
-    # Requires: nvidia-container-toolkit installed on the host
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
 
   # ── React Frontend (nginx) ───────────────────────────────
   frontend:
@@ -82,7 +78,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "${FRONTEND_PORT:-80}:80"
+      - "${FRONTEND_PORT:-9800}:80"
 
 volumes:
   pg-data:
