@@ -38,7 +38,7 @@ services:
       MEDIA_STORAGE_PATH: /data/media
       FFMPEG_PATH: ffmpeg
       REMOTION_BANNER_PATH: /remotion-banner
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
     volumes:
       - "${VIDEO_DATA_VOLUME}:/data/videos"
       - "${MEDIA_DATA_VOLUME}:/data/media"
