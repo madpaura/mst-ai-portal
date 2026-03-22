@@ -10,7 +10,6 @@ venv/
 
 # Environment
 .env
-.env.*
 
 # Storage (uploaded/generated files)
 api/storage/
