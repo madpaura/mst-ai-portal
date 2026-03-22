@@ -24,10 +24,17 @@ class Settings(BaseSettings):
     # Upload limits
     MAX_UPLOAD_SIZE_MB: int = 5120  # 5 GB
 
+    # Remotion banner
+    REMOTION_BANNER_PATH: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "remotion-banner")
+
     # Transcode
     FFMPEG_PATH: str = "ffmpeg"
     FFMPEG_HWACCEL: str = "auto"  # "auto" = detect GPU, "none" = force CPU
     TRANSCODE_POLL_INTERVAL: int = 5  # seconds
+
+    # LLM / Ollama
+    # Use localhost by default for local runs; Docker compose overrides this to host.docker.internal.
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
 
     # Server — use allow_origin_regex in middleware instead for dev
     CORS_ORIGINS: list[str] = ["*"]

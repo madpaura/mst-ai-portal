@@ -875,7 +875,7 @@ async def _generate_banner_video(video_id: str, db_url: str):
             json.dump(props, f)
 
         banner_output = os.path.join(banner_dir, "banner.mp4")
-        remotion_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "remotion-banner")
+        remotion_dir = settings.REMOTION_BANNER_PATH
 
         # Render with Remotion
         render_cmd = [

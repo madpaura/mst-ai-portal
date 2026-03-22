@@ -54,10 +54,37 @@ compose_files() {
     fi
 }
 
+ensure_env_var() {
+    local key="$1"
+    local value="$2"
+
+    if [ ! -f .env ]; then
+        return
+    fi
+
+    if grep -q "^${key}=" .env 2>/dev/null; then
+        return
+    fi
+
+    echo "${key}=${value}" >> .env
+}
+
+ensure_runtime_env() {
+    ensure_env_var "BACKEND_PORT" "8000"
+    ensure_env_var "FRONTEND_PORT" "9800"
+    ensure_env_var "VITE_API_URL" "http://localhost:${BACKEND_PORT:-8000}"
+    ensure_env_var "OLLAMA_BASE_URL" "http://localhost:11434"
+    ensure_env_var "VIDEO_DATA_VOLUME" "./volumes/storage/videos"
+    ensure_env_var "MEDIA_DATA_VOLUME" "./volumes/storage/media"
+    ensure_env_var "PG_DATA_VOLUME" "./volumes/pg-data"
+}
+
 # ── Prerequisite checks ───────────────────────────────────
 
 check_prereqs() {
     header "Checking Prerequisites"
+
+    ensure_runtime_env
 
     # Docker
     if command -v docker &>/dev/null; then
@@ -77,6 +104,8 @@ check_prereqs() {
         ok "Docker Compose (legacy) $ver"
     else
         fail "Docker Compose not found"
+        echo "  Installing Docker Compose v2..."
+        mkdir -p ~/.docker/cli-plugins && curl -SL "https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64" -o ~/.docker/cli-plugins/docker-compose && chmod +x ~/.docker/cli-plugins/docker-compose
         ERRORS=$((ERRORS+1))
     fi
 
@@ -169,6 +198,8 @@ deploy() {
         echo "No .env file found. Creating from .env.example..."
         cp .env.example .env
     fi
+
+    ensure_runtime_env
 
     local COMPOSE=$(compose_cmd)
     local FILES=$(compose_files)

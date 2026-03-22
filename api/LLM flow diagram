@@ -1,0 +1,235 @@
+import { useState } from "react";
+
+const phases = [
+  {
+    id: "training",
+    label: "Phase 1: Training",
+    color: "#6366f1",
+    bg: "#eef2ff",
+    border: "#a5b4fc",
+    steps: [
+      {
+        icon: "📚",
+        title: "Raw Data",
+        desc: "Trillions of words from the internet, books, and code",
+      },
+      {
+        icon: "🔢",
+        title: "Tokenization",
+        desc: "Text split into token IDs using vocabulary (BPE)",
+      },
+      {
+        icon: "🎲",
+        title: "Random Weights Init",
+        desc: "Billions of dials (numbers) set randomly — model knows nothing yet",
+      },
+      {
+        icon: "🔁",
+        title: "Training Loop",
+        desc: "Model guesses next token → measures error → adjusts weights → repeat trillions of times",
+      },
+      {
+        icon: "✅",
+        title: "Trained Weights",
+        desc: "Billions of weights now encode language, facts, reasoning",
+      },
+    ],
+  },
+  {
+    id: "packaging",
+    label: "Phase 2: Packaging",
+    color: "#f59e0b",
+    bg: "#fffbeb",
+    border: "#fcd34d",
+    steps: [
+      {
+        icon: "💾",
+        title: "Checkpoint Files",
+        desc: "model.safetensors + config.json + tokenizer.json (~16 GB, float16)",
+      },
+      {
+        icon: "🗜️",
+        title: "Quantization",
+        desc: "Compress weights: float16 → Q4/Q8 bits. Size drops from 16 GB → 4–8 GB",
+      },
+      {
+        icon: "📦",
+        title: "GGUF File",
+        desc: "One self-contained binary: weights + tokenizer + config bundled together",
+      },
+    ],
+  },
+  {
+    id: "inference",
+    label: "Phase 3: Inference",
+    color: "#10b981",
+    bg: "#ecfdf5",
+    border: "#6ee7b7",
+    steps: [
+      {
+        icon: "💬",
+        title: "User Prompt",
+        desc: '"Explain gravity to me"',
+      },
+      {
+        icon: "🔡",
+        title: "Tokenize Input",
+        desc: 'Prompt → token IDs: [9906, 11, 527 ...]',
+      },
+      {
+        icon: "🧠",
+        title: "Forward Pass",
+        desc: "Tokens flow through transformer layers — attention + feed-forward — using the loaded weights",
+      },
+      {
+        icon: "📊",
+        title: "Logits / Scoring",
+        desc: "Model scores every word in vocabulary for likelihood of being next",
+      },
+      {
+        icon: "🎯",
+        title: "Sampling",
+        desc: "Pick next token based on temperature/top-p settings",
+      },
+      {
+        icon: "🔄",
+        title: "Loop",
+        desc: "Append token, repeat forward pass until response is complete",
+      },
+      {
+        icon: "✍️",
+        title: "Decoded Output",
+        desc: '"Gravity is a force that pulls objects toward each other..."',
+      },
+    ],
+  },
+];
+
+const Arrow = ({ color = "#94a3b8", vertical = false }) =>
+  vertical ? (
+    <div className="flex flex-col items-center my-1">
+      <div style={{ width: 2, height: 20, background: color }} />
+      <div style={{ width: 0, height: 0, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderTop: `8px solid ${color}` }} />
+    </div>
+  ) : (
+    <div className="flex items-center mx-1">
+      <div style={{ height: 2, width: 24, background: color }} />
+      <div style={{ width: 0, height: 0, borderTop: "6px solid transparent", borderBottom: "6px solid transparent", borderLeft: `8px solid ${color}` }} />
+    </div>
+  );
+
+const PhaseArrow = ({ color }) => (
+  <div className="flex items-center justify-center my-4">
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div style={{ width: 3, height: 28, background: color, borderRadius: 2 }} />
+      <div style={{ width: 0, height: 0, borderLeft: "10px solid transparent", borderRight: "10px solid transparent", borderTop: `12px solid ${color}` }} />
+    </div>
+  </div>
+);
+
+function StepBox({ step, color, bg, border, active, onClick }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        background: active ? bg : "#fff",
+        border: `2px solid ${active ? color : border}`,
+        borderRadius: 12,
+        padding: "10px 14px",
+        cursor: "pointer",
+        transition: "all 0.2s",
+        boxShadow: active ? `0 4px 14px ${color}33` : "0 1px 4px #0001",
+        minWidth: 150,
+        maxWidth: 200,
+      }}
+    >
+      <div style={{ fontSize: 22, marginBottom: 4 }}>{step.icon}</div>
+      <div style={{ fontWeight: 700, fontSize: 13, color: active ? color : "#334155" }}>{step.title}</div>
+      <div style={{ fontSize: 11, color: "#64748b", marginTop: 3, lineHeight: 1.4 }}>{step.desc}</div>
+    </div>
+  );
+}
+
+export default function App() {
+  const [active, setActive] = useState({ phase: 0, step: 0 });
+
+  const activePhase = phases[active.phase];
+  const activeStep = activePhase.steps[active.step];
+
+  return (
+    <div style={{ fontFamily: "Inter, sans-serif", background: "#f8fafc", minHeight: "100vh", padding: "24px 16px" }}>
+      <div style={{ maxWidth: 860, margin: "0 auto" }}>
+        <h1 style={{ textAlign: "center", fontSize: 22, fontWeight: 800, color: "#1e293b", marginBottom: 4 }}>
+          🤖 LLM: From Training to Talking
+        </h1>
+        <p style={{ textAlign: "center", color: "#64748b", fontSize: 13, marginBottom: 28 }}>
+          Click any step to learn more
+        </p>
+
+        {phases.map((phase, pi) => (
+          <div key={phase.id}>
+            {/* Phase Header */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10, marginBottom: 14,
+              background: phase.bg, border: `2px solid ${phase.border}`,
+              borderRadius: 10, padding: "8px 16px"
+            }}>
+              <div style={{ width: 14, height: 14, borderRadius: "50%", background: phase.color }} />
+              <span style={{ fontWeight: 700, color: phase.color, fontSize: 15 }}>{phase.label}</span>
+            </div>
+
+            {/* Steps Row */}
+            <div style={{ display: "flex", alignItems: "flex-start", flexWrap: "wrap", gap: 6, marginBottom: 8, paddingLeft: 8 }}>
+              {phase.steps.map((step, si) => (
+                <div key={si} style={{ display: "flex", alignItems: "flex-start" }}>
+                  <StepBox
+                    step={step}
+                    color={phase.color}
+                    bg={phase.bg}
+                    border={phase.border}
+                    active={active.phase === pi && active.step === si}
+                    onClick={() => setActive({ phase: pi, step: si })}
+                  />
+                  {si < phase.steps.length - 1 && (
+                    <div style={{ marginTop: 28 }}>
+                      <Arrow color={phase.color} />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {pi < phases.length - 1 && <PhaseArrow color={phases[pi + 1].color} />}
+          </div>
+        ))}
+
+        {/* Detail Panel */}
+        <div style={{
+          marginTop: 28, background: "#fff", borderRadius: 14,
+          border: `2px solid ${activePhase.color}`,
+          padding: "18px 22px",
+          boxShadow: `0 4px 20px ${activePhase.color}22`
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <span style={{ fontSize: 28 }}>{activeStep.icon}</span>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 16, color: activePhase.color }}>{activeStep.title}</div>
+              <div style={{ fontSize: 12, color: "#94a3b8" }}>{activePhase.label}</div>
+            </div>
+          </div>
+          <p style={{ color: "#334155", fontSize: 14, lineHeight: 1.7, margin: 0 }}>{activeStep.desc}</p>
+        </div>
+
+        {/* Legend */}
+        <div style={{ display: "flex", justifyContent: "center", gap: 24, marginTop: 22, flexWrap: "wrap" }}>
+          {phases.map(p => (
+            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ width: 12, height: 12, borderRadius: "50%", background: p.color }} />
+              <span style={{ fontSize: 12, color: "#475569", fontWeight: 600 }}>{p.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

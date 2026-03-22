@@ -192,9 +192,10 @@ async def verify_setting(setting_id: str, admin: dict = Depends(require_admin)):
 
     if llm_provider == "ollama":
         import httpx
+        ollama_base_url = app_settings.OLLAMA_BASE_URL.rstrip("/")
         try:
             async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.get("http://localhost:11434/api/tags")
+                resp = await client.get(f"{ollama_base_url}/api/tags")
                 if resp.status_code == 200:
                     models = [m["name"] for m in resp.json().get("models", [])]
                     if any(llm_model in m for m in models):
@@ -204,7 +205,7 @@ async def verify_setting(setting_id: str, admin: dict = Depends(require_admin)):
                 else:
                     results["llm"] = {"status": "error", "message": f"Ollama returned status {resp.status_code}"}
         except Exception as e:
-            results["llm"] = {"status": "error", "message": f"Cannot reach Ollama at localhost:11434: {str(e)[:150]}"}
+            results["llm"] = {"status": "error", "message": f"Cannot reach Ollama at {ollama_base_url}: {str(e)[:150]}"}
     elif llm_key:
         import httpx
         try:
