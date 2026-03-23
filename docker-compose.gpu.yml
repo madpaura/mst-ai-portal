@@ -18,3 +18,4 @@ services:
       FFMPEG_PATH: ffmpeg
       FFMPEG_HWACCEL: ${FFMPEG_HWACCEL:-auto}
       NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,video
