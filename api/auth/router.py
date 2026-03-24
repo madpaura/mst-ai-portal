@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-
+import os
 from auth.schemas import LoginRequest, TokenResponse, UserResponse, UserUpdateRequest
 from auth.service import verify_password, create_access_token
 from auth.dependencies import get_current_user
