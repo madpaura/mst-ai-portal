@@ -4,7 +4,7 @@ from typing import Optional
 from video.schemas import (
     CourseResponse, VideoResponse, ChapterResponse, ProgressResponse,
     ProgressUpdate, OverallProgressResponse, NoteResponse, NoteCreate,
-    NoteUpdate, HowtoResponse,
+    NoteUpdate, HowtoResponse, VideoLikeResponse,
 )
 from auth.dependencies import get_current_user, get_optional_user
 from database import get_db
@@ -293,3 +293,66 @@ async def get_howto(slug: str):
         id=str(row["id"]), video_id=str(row["video_id"]),
         title=row["title"], content=row["content"], version=row.get("version", "1.0"),
     )
+
+
+# ── Video Likes ───────────────────────────────────────────
+
+@router.get("/videos/{slug}/likes", response_model=VideoLikeResponse)
+async def get_video_likes(slug: str, user: Optional[dict] = Depends(get_optional_user)):
+    db = await get_db()
+    video = await db.fetchrow(
+        "SELECT id FROM videos WHERE slug = $1 AND is_published = true AND is_active = true", slug
+    )
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    count = await db.fetchval(
+        "SELECT COUNT(*) FROM video_likes WHERE video_id = $1", video["id"]
+    )
+    user_liked = False
+    if user:
+        row = await db.fetchrow(
+            "SELECT 1 FROM video_likes WHERE user_id = $1 AND video_id = $2",
+            user["id"], video["id"],
+        )
+        user_liked = row is not None
+
+    return VideoLikeResponse(video_id=str(video["id"]), like_count=count, user_liked=user_liked)
+
+
+@router.post("/videos/{slug}/likes", response_model=VideoLikeResponse)
+async def like_video(slug: str, user: dict = Depends(get_current_user)):
+    db = await get_db()
+    video = await db.fetchrow(
+        "SELECT id FROM videos WHERE slug = $1 AND is_published = true AND is_active = true", slug
+    )
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    await db.execute(
+        "INSERT INTO video_likes (user_id, video_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        user["id"], video["id"],
+    )
+    count = await db.fetchval(
+        "SELECT COUNT(*) FROM video_likes WHERE video_id = $1", video["id"]
+    )
+    return VideoLikeResponse(video_id=str(video["id"]), like_count=count, user_liked=True)
+
+
+@router.delete("/videos/{slug}/likes", response_model=VideoLikeResponse)
+async def unlike_video(slug: str, user: dict = Depends(get_current_user)):
+    db = await get_db()
+    video = await db.fetchrow(
+        "SELECT id FROM videos WHERE slug = $1 AND is_published = true AND is_active = true", slug
+    )
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    await db.execute(
+        "DELETE FROM video_likes WHERE user_id = $1 AND video_id = $2",
+        user["id"], video["id"],
+    )
+    count = await db.fetchval(
+        "SELECT COUNT(*) FROM video_likes WHERE video_id = $1", video["id"]
+    )
+    return VideoLikeResponse(video_id=str(video["id"]), like_count=count, user_liked=False)

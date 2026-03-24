@@ -12,6 +12,12 @@ import { HlsPlayer, type HlsPlayerHandle } from '../components/HlsPlayer';
 import { api } from '../api/client';
 import { isLoggedIn } from '../api/client';
 
+interface VideoLikeData {
+  video_id: string;
+  like_count: number;
+  user_liked: boolean;
+}
+
 interface Chapter {
   id: string;
   video_id: string;
@@ -53,6 +59,8 @@ export const Ignite: React.FC = () => {
   const [notes, setNotes] = useState<Note[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [howto, setHowto] = useState<HowtoGuide | null>(null);
+  const [likeData, setLikeData] = useState<VideoLikeData | null>(null);
+  const [likePending, setLikePending] = useState(false);
 
   const loadVideoData = useCallback(async (video: Video) => {
     // Load chapters
@@ -61,11 +69,16 @@ export const Ignite: React.FC = () => {
     // Load howto
     api.get<HowtoGuide | null>(`/video/videos/${video.slug}/howto`)
       .then(setHowto).catch(() => setHowto(null));
+    // Load likes
+    api.get<VideoLikeData>(`/video/videos/${video.slug}/likes`)
+      .then(setLikeData).catch(() => setLikeData(null));
     // Load notes (requires auth)
     if (isLoggedIn()) {
       api.get<Note[]>(`/video/videos/${video.slug}/notes`)
         .then(setNotes).catch(() => setNotes([]));
     }
+    // Track page view
+    api.post('/analytics/pageview', { path: `/ignite/${video.slug}` }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -81,8 +94,33 @@ export const Ignite: React.FC = () => {
     setVideoDuration(dur);
   };
 
+  const handleToggleLike = async () => {
+    if (!activeVideo?.slug || likePending) return;
+    setLikePending(true);
+    try {
+      if (likeData?.user_liked) {
+        const res = await api.delete<VideoLikeData>(`/video/videos/${activeVideo.slug}/likes`);
+        setLikeData(res);
+      } else {
+        const res = await api.post<VideoLikeData>(`/video/videos/${activeVideo.slug}/likes`);
+        setLikeData(res);
+      }
+    } catch { /* ignore auth errors for non-logged-in users */ }
+    setLikePending(false);
+  };
+
   const handleChapterSeek = (startTime: number) => {
     playerRef.current?.seekTo(startTime);
+    // Track chapter navigation
+    const chapter = chapters.find(c => c.start_time === startTime);
+    if (chapter && activeVideo) {
+      api.post('/analytics/event', {
+        event_type: 'chapter_navigate',
+        section: 'ignite',
+        entity_id: activeVideo.id,
+        entity_name: chapter.title,
+      }).catch(() => {});
+    }
   };
 
   const handleSaveNote = async () => {
@@ -200,10 +238,30 @@ export const Ignite: React.FC = () => {
                 <span className="inline-block px-2 py-1 rounded bg-primary/10 border border-primary/20 text-primary text-[10px] font-bold uppercase tracking-wider mb-2">
                   {activeVideo.category}
                 </span>
-                <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">{activeVideo.title}</h1>
-                <p className="text-slate-500 dark:text-slate-400 text-sm">
-                  Learn how to properly configure your environment for the {activeVideo.category} AI assistant.
-                </p>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">{activeVideo.title}</h1>
+                    <p className="text-slate-500 dark:text-slate-400 text-sm">
+                      Learn how to properly configure your environment for the {activeVideo.category} AI assistant.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleToggleLike}
+                    disabled={likePending}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all duration-200 shrink-0 group ${
+                      likeData?.user_liked
+                        ? 'bg-rose-500/10 border-rose-500/30 text-rose-500 hover:bg-rose-500/20'
+                        : 'bg-slate-100 dark:bg-slate-800/50 border-slate-300 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:bg-rose-500/10 hover:border-rose-500/30 hover:text-rose-500'
+                    } ${likePending ? 'opacity-60 cursor-wait' : ''}`}
+                  >
+                    <span className={`material-symbols-outlined text-xl transition-transform duration-200 ${likeData?.user_liked ? 'scale-110' : 'group-hover:scale-110'}`}
+                      style={{ fontVariationSettings: likeData?.user_liked ? "'FILL' 1" : "'FILL' 0" }}
+                    >
+                      favorite
+                    </span>
+                    <span className="text-sm font-bold">{likeData?.like_count ?? 0}</span>
+                  </button>
+                </div>
               </div>
 
               {/* Tab Navigation */}

@@ -194,6 +194,12 @@ class BannerConfigUpdate(BaseModel):
     banner_duration_s: int = 3
 
 
+class VideoLikeResponse(BaseModel):
+    video_id: str
+    like_count: int
+    user_liked: bool
+
+
 class TrimRequest(BaseModel):
     start_seconds: float
     end_seconds: float

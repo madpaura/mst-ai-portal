@@ -8,6 +8,7 @@ import '../styles/howto-markdown.css';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { api } from '../api/client';
+import { usePageView } from '../hooks/usePageView';
 import { useParams, Link } from 'react-router-dom';
 
 interface NewsItem {
@@ -30,6 +31,7 @@ const SOURCE_STYLES: Record<string, string> = {
 
 export const NewsArticle: React.FC = () => {
   const { newsId } = useParams<{ newsId: string }>();
+  usePageView(`/news/${newsId}`);
   const [item, setItem] = useState<NewsItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -37,7 +39,16 @@ export const NewsArticle: React.FC = () => {
   useEffect(() => {
     if (!newsId) return;
     api.get<NewsItem>(`/api/solutions/news/${newsId}`)
-      .then(setItem)
+      .then((data) => {
+        setItem(data);
+        // Track news article view for analytics
+        api.post('/analytics/event', {
+          event_type: 'news_view',
+          section: 'news',
+          entity_id: newsId,
+          entity_name: data.title,
+        }).catch(() => {});
+      })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, [newsId]);

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api/client';
+import { usePageView } from '../hooks/usePageView';
 
 interface ForgeComponent {
   id: string;
@@ -49,6 +50,7 @@ const TYPE_BADGES: Record<string, { label: string; color: string; bg: string }> 
 };
 
 export const Marketplace: React.FC = () => {
+  usePageView('/marketplace');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
   const [activeTab, setActiveTab] = useState('');

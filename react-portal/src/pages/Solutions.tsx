@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { api } from '../api/client';
+import { usePageView } from '../hooks/usePageView';
 
 interface Announcement {
   id: string;
@@ -44,6 +45,7 @@ const WORKFLOW_STEPS = [
 ];
 
 export const Solutions: React.FC = () => {
+  usePageView('/');
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);

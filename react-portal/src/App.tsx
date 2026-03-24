@@ -11,6 +11,7 @@ import { AdminVideos } from './pages/AdminVideos';
 import { AdminMarketplace } from './pages/AdminMarketplace';
 import { AdminSolutions } from './pages/AdminSolutions';
 import { AdminSettings } from './pages/AdminSettings';
+import { AdminAnalytics } from './pages/AdminAnalytics';
 import { SolutionDetail } from './pages/SolutionDetail';
 import { News } from './pages/News';
 import { NewsArticle } from './pages/NewsArticle';
@@ -39,6 +40,7 @@ function App() {
             <Route path="videos" element={<AdminVideos />} />
             <Route path="marketplace" element={<AdminMarketplace />} />
             <Route path="solutions" element={<AdminSolutions />} />
+            <Route path="analytics" element={<AdminAnalytics />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
 

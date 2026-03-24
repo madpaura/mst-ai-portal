@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { api } from '../api/client';
+import { usePageView } from '../hooks/usePageView';
 
 interface NewsItem {
   id: string;
@@ -24,6 +25,7 @@ const CATEGORY_COLOR: Record<string, string> = {
 const INITIAL_LIST_COUNT = 10;
 
 export const News: React.FC = () => {
+  usePageView('/news');
   const [items, setItems] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
