@@ -150,9 +150,11 @@ async def download_component(slug: str, user: Optional[dict] = Depends(get_optio
     tmpdir = tempfile.mkdtemp(prefix="forge_dl_")
     try:
         # Clone the repo (shallow)
+        git_env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_SSL_NO_VERIFY": "true"}
         proc = await asyncio.create_subprocess_exec(
             "git", "clone", "--depth", "1", "--branch", git_ref, auth_url, tmpdir,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env=git_env,
         )
         _, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
         if proc.returncode != 0:

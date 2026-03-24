@@ -35,16 +35,7 @@ const formatDuration = (s: number | null): string => {
   return `${m}:${sec.toString().padStart(2, '0')}`;
 };
 
-const FALLBACK_VIDEOS: Video[] = [
-  { id: '1', slug: 'setup-and-usage', title: 'Setup & Usage', category: 'Code-mate', duration: '10:00', duration_s: 600, description: null, hls_path: null, thumbnail: null },
-  { id: '2', slug: 'prompt-engineering', title: 'Prompt Engineering', category: 'Code-mate', duration: '10:00', duration_s: 600, description: null, hls_path: null, thumbnail: null },
-  { id: '3', slug: 'function-calling', title: 'Function Calling', category: 'Code-mate', duration: '10:00', duration_s: 600, description: null, hls_path: null, thumbnail: null },
-  { id: '4', slug: 'rag-fundamentals', title: 'RAG Fundamentals', category: 'RAG', duration: '10:00', duration_s: 600, description: null, hls_path: null, thumbnail: null },
-  { id: '5', slug: 'intro-to-ai-agents', title: 'Intro to AI Agents', category: 'Agents', duration: '10:00', duration_s: 600, description: null, hls_path: null, thumbnail: null },
-  { id: '6', slug: 'how-llms-work', title: 'How LLMs Work', category: 'Deep Dive', duration: '10:00', duration_s: 600, description: null, hls_path: null, thumbnail: null },
-];
-
-let ALL_VIDEOS: Video[] = FALLBACK_VIDEOS;
+let ALL_VIDEOS: Video[] = [];
 
 const CATEGORIES = ['All', 'Code-mate', 'RAG', 'Agents', 'Deep Dive'];
 
@@ -57,6 +48,7 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [videos, setVideos] = useState<Video[]>(ALL_VIDEOS);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     api.get<Array<{ id: string; slug: string }>>('/video/courses')
@@ -80,15 +72,14 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
             );
           } catch { /* ignore */ }
         }
-        if (allVids.length > 0) {
-          ALL_VIDEOS = allVids;
-          setVideos(allVids);
-          if (!allVids.find((v) => v.id === activeVideoId) && allVids.length > 0) {
-            onSelectVideo(allVids[0]);
-          }
+        ALL_VIDEOS = allVids;
+        setVideos(allVids);
+        if (allVids.length > 0 && !allVids.find((v) => v.id === activeVideoId)) {
+          onSelectVideo(allVids[0]);
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoaded(true));
   }, []);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -182,8 +173,21 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
             </div>
           );
         })}
-        {filteredVideos.length === 0 && (
-          <p className="text-sm text-slate-500 text-center py-8">No videos match your search.</p>
+        {filteredVideos.length === 0 && loaded && (
+          <div className="text-center py-12">
+            <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600 block mb-3">video_library</span>
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">
+              {searchQuery ? 'No videos match your search.' : 'No content available yet.'}
+            </p>
+            {!searchQuery && (
+              <p className="text-xs text-slate-400 dark:text-slate-500">Videos will appear here once published by an admin.</p>
+            )}
+          </div>
+        )}
+        {!loaded && (
+          <div className="flex items-center justify-center py-12">
+            <span className="material-symbols-outlined text-2xl text-slate-400 animate-spin">progress_activity</span>
+          </div>
         )}
       </div>
     </aside>

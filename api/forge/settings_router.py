@@ -166,9 +166,11 @@ async def verify_setting(setting_id: str, admin: dict = Depends(require_admin)):
         auth_url = git_url
 
     try:
+        git_env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_SSL_NO_VERIFY": "true"}
         proc = await asyncio.create_subprocess_exec(
             "git", "ls-remote", "--heads", auth_url,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env=git_env,
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15)
         if proc.returncode == 0:

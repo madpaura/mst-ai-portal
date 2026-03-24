@@ -45,7 +45,7 @@ const fmtTime = (s: number): string => {
 
 export const Ignite: React.FC = () => {
   const playerRef = useRef<HlsPlayerHandle>(null);
-  const [activeVideo, setActiveVideo] = useState<Video>(ALL_VIDEOS[0]);
+  const [activeVideo, setActiveVideo] = useState<Video | null>(ALL_VIDEOS[0] || null);
   const [currentTime, setCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const [activeTab, setActiveTab] = useState<'notes' | 'howto'>('howto');
@@ -125,13 +125,23 @@ export const Ignite: React.FC = () => {
       <IgniteHeader notesTaken={0} />
 
       <div className="flex flex-1 overflow-hidden">
-        <IgniteSidebar activeVideoId={activeVideo.id} onSelectVideo={handleSelectVideo} />
+        <IgniteSidebar activeVideoId={activeVideo?.id || ''} onSelectVideo={handleSelectVideo} />
 
         <main className="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark relative p-6 lg:p-10">
           <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
 
           <div className="max-w-7xl mx-auto flex flex-col gap-8 relative z-10">
-            {/* Video Player + Chapters Side by Side */}
+            {/* No content message when no video is selected */}
+            {!activeVideo && (
+              <div className="flex flex-col items-center justify-center py-24">
+                <span className="material-symbols-outlined text-6xl text-slate-300 dark:text-slate-600 mb-4">video_library</span>
+                <h2 className="text-xl font-bold text-slate-400 dark:text-slate-500 mb-2">No Content Available</h2>
+                <p className="text-sm text-slate-400 dark:text-slate-500">Training videos will appear here once published by an admin.</p>
+              </div>
+            )}
+
+            {/* Video Player + Chapters Side by Side — only show when video content exists */}
+            {activeVideo?.hls_path && (
             <div className="flex flex-col lg:flex-row gap-6">
               <div className="flex-1 min-w-0">
                 <HlsPlayer
@@ -181,8 +191,10 @@ export const Ignite: React.FC = () => {
                 </div>
               </div>
             </div>
+            )}
 
             {/* Video Info & Tabs */}
+            {activeVideo && (
             <div className="flex flex-col gap-6">
               <div>
                 <span className="inline-block px-2 py-1 rounded bg-primary/10 border border-primary/20 text-primary text-[10px] font-bold uppercase tracking-wider mb-2">
@@ -331,6 +343,7 @@ export const Ignite: React.FC = () => {
                 </div>
               )}
             </div>
+            )}
           </div>
         </main>
       </div>

@@ -59,6 +59,7 @@ export const Marketplace: React.FC = () => {
   const [instructionsSlug, setInstructionsSlug] = useState<string | null>(null);
   const [instructions, setInstructions] = useState<Record<string, string>>({});
   const [downloading, setDownloading] = useState<Record<string, boolean>>({});
+  const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
 
   useEffect(() => {
     api.get<ForgeComponent[]>('/forge/components').then(setComponents).catch(() => {});
@@ -272,7 +273,7 @@ export const Marketplace: React.FC = () => {
           </aside>
 
           {/* Main Marketplace Content */}
-          <div className="flex-1 p-6 lg:p-10">
+          <div className="flex-1 min-w-0 overflow-hidden p-6 lg:p-10">
             <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
                 <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Semiconductor Agent Marketplace</h1>
@@ -282,6 +283,22 @@ export const Marketplace: React.FC = () => {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                <div className="flex items-center bg-slate-200 dark:bg-slate-800 rounded-lg p-0.5">
+                  <button
+                    onClick={() => setViewMode('card')}
+                    className={`flex items-center justify-center p-1.5 rounded-md transition-colors ${viewMode === 'card' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                    title="Card view"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">grid_view</span>
+                  </button>
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`flex items-center justify-center p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                    title="List view"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">view_list</span>
+                  </button>
+                </div>
                 <button
                   onClick={handleSort}
                   className="flex items-center gap-2 bg-slate-200 dark:bg-slate-800 px-4 py-2 rounded-lg text-sm font-medium"
@@ -293,6 +310,7 @@ export const Marketplace: React.FC = () => {
             </div>
 
             {/* Grid of Cards */}
+            {viewMode === 'card' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {filteredCards.map((card) => {
                 const typeStyle = TYPE_BADGES[card.component_type] || TYPE_BADGES.agent;
@@ -390,6 +408,59 @@ export const Marketplace: React.FC = () => {
                 );
               })}
             </div>
+            ) : (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-200 dark:divide-slate-800">
+              {filteredCards.map((card) => {
+                const typeStyle = TYPE_BADGES[card.component_type] || TYPE_BADGES.agent;
+                const badgeStyle = card.badge ? BADGE_STYLES[card.badge] : null;
+                const displayBadge = badgeStyle || { label: typeStyle.label, color: typeStyle.color, bg: typeStyle.bg };
+                return (
+                  <div
+                    key={card.id}
+                    className="px-4 py-3 flex items-center gap-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group overflow-hidden"
+                  >
+                    <div className={`size-8 shrink-0 ${typeStyle.bg} rounded-lg flex items-center justify-center ${card.icon_color || typeStyle.color}`}>
+                      <span className="material-symbols-outlined text-[18px]">{card.icon || 'smart_toy'}</span>
+                    </div>
+                    <div className="flex-1 min-w-0 overflow-hidden">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">{card.name}</h3>
+                        <span className={`px-2 py-0.5 rounded ${displayBadge.bg} ${displayBadge.color} text-[9px] font-bold uppercase tracking-wider shrink-0`}>
+                          {displayBadge.label}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{card.description}</p>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-[10px] text-slate-500 hidden sm:inline whitespace-nowrap">{card.author || 'MST Team'}</span>
+                      <span className="text-[10px] text-slate-500 whitespace-nowrap">{card.version} · {card.downloads}</span>
+                      {card.git_repo_url && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDownload(card.slug); }}
+                          disabled={downloading[card.slug]}
+                          className="p-1 rounded text-green-500 hover:text-green-400 hover:bg-green-500/10 transition-colors disabled:opacity-40"
+                          title="Download as zip"
+                        >
+                          <span className={`material-symbols-outlined text-[16px] ${downloading[card.slug] ? 'animate-spin' : ''}`}>
+                            {downloading[card.slug] ? 'progress_activity' : 'download'}
+                          </span>
+                        </button>
+                      )}
+                      {card.howto_guide && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); window.open(`/marketplace/${card.slug}/howto`, '_blank'); }}
+                          className="p-1 rounded text-primary hover:text-white hover:bg-primary/10 transition-colors"
+                          title="How-To guide"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">menu_book</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            )}
 
             {filteredCards.length === 0 && (
               <div className="text-center py-20 text-slate-500">

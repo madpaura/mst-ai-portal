@@ -74,7 +74,7 @@ async def run_sync_job(job_id: int, db_url: str):
             ]
             result = subprocess.run(
                 clone_cmd, capture_output=True, text=True, timeout=120,
-                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+                env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_SSL_NO_VERIFY": "true"},
             )
             if result.returncode != 0:
                 await _append_log(pool, job_id, f"ERROR: Git clone failed: {result.stderr[:300]}")
