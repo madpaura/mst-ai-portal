@@ -61,7 +61,7 @@ export const NewsArticle: React.FC = () => {
     });
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-sans">
       <Navbar variant="solutions" />
 
       <main className="relative pt-16">
@@ -72,7 +72,7 @@ export const NewsArticle: React.FC = () => {
             className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-primary transition-colors mb-10"
           >
             <span className="material-symbols-outlined text-base">arrow_back</span>
-            Back to Newsroom
+            Back to Articles
           </Link>
 
           {loading ? (

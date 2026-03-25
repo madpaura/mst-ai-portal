@@ -169,6 +169,7 @@ class BannerConfigResponse(BaseModel):
     variant: str
     company_logo: str
     series_tag: str
+    brand_title: str = 'AI Ignite'
     topic: str
     subtopic: str
     episode: str
@@ -185,6 +186,7 @@ class BannerConfigUpdate(BaseModel):
     variant: str = 'A'
     company_logo: str = 'SAMSUNG'
     series_tag: str = 'KNOWLEDGE SERIES'
+    brand_title: str = 'AI Ignite'
     topic: str = 'Intro to AI Agents'
     subtopic: str = 'Environment Setup & First Run'
     episode: str = 'EP 01'

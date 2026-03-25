@@ -72,11 +72,13 @@ interface BannerConfig {
 
 type Tab = 'metadata' | 'chapters' | 'howto' | 'quality' | 'seed-notes' | 'banner' | 'trim';
 
+const DEFAULT_CATEGORIES = ['Code-mate', 'RAG', 'Agents', 'Deep Dive'];
+
 export const AdminVideos: React.FC = () => {
   const [videos, setVideos] = useState<Video[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [selected, setSelected] = useState<Video | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>('banner');
+  const [activeTab, setActiveTab] = useState<Tab>('metadata');
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -111,6 +113,7 @@ export const AdminVideos: React.FC = () => {
   const [bannerConfig, setBannerConfig] = useState<BannerConfig | null>(null);
   const [bannerForm, setBannerForm] = useState({
     variant: 'A', company_logo: 'SAMSUNG', series_tag: 'KNOWLEDGE SERIES',
+    brand_title: 'AI Ignite',
     topic: '', subtopic: '', episode: 'EP 01', duration: '3:15',
     presenter: '', presenter_initial: '', banner_duration_s: 3,
   });
@@ -129,6 +132,20 @@ export const AdminVideos: React.FC = () => {
 
   // Message
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Course creation popup
+  const [showCourseCreate, setShowCourseCreate] = useState(false);
+  const [courseForm, setCourseForm] = useState({ title: '', slug: '', description: '' });
+
+  // Category management
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+
+  // Expand/collapse for course groups
+  const [collapsedCourses, setCollapsedCourses] = useState<Set<string>>(new Set());
+
+  const allCategories = [...DEFAULT_CATEGORIES, ...customCategories];
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
@@ -156,11 +173,16 @@ export const AdminVideos: React.FC = () => {
   useEffect(() => {
     fetchVideos();
     fetchCourses();
+    // Load custom categories from localStorage
+    const saved = localStorage.getItem('mst_custom_categories');
+    if (saved) {
+      try { setCustomCategories(JSON.parse(saved)); } catch { /* ignore */ }
+    }
   }, [fetchVideos, fetchCourses]);
 
   const selectVideo = async (video: Video) => {
     setSelected(video);
-    setActiveTab('banner');
+    setActiveTab('metadata');
     setEditForm({
       title: video.title,
       description: video.description || '',
@@ -195,7 +217,8 @@ export const AdminVideos: React.FC = () => {
       if (banner) {
         setBannerForm({
           variant: banner.variant, company_logo: banner.company_logo,
-          series_tag: banner.series_tag, topic: banner.topic,
+          series_tag: banner.series_tag, brand_title: banner.brand_title || 'AI Ignite',
+          topic: banner.topic,
           subtopic: banner.subtopic, episode: banner.episode,
           duration: banner.duration, presenter: banner.presenter,
           presenter_initial: banner.presenter_initial,
@@ -203,9 +226,14 @@ export const AdminVideos: React.FC = () => {
         });
         setBannerGenerating(banner.status === 'generating');
       } else {
+        // Auto-populate duration from video metadata
+        const autoDuration = video.duration_s
+          ? `${Math.floor(video.duration_s / 60)}:${String(video.duration_s % 60).padStart(2, '0')}`
+          : '0:00';
         setBannerForm({
           variant: 'A', company_logo: 'SAMSUNG', series_tag: 'KNOWLEDGE SERIES',
-          topic: video.title, subtopic: '', episode: 'EP 01', duration: '3:15',
+          brand_title: 'AI Ignite',
+          topic: video.title, subtopic: '', episode: 'EP 01', duration: autoDuration,
           presenter: '', presenter_initial: '', banner_duration_s: 3,
         });
         setBannerGenerating(false);
@@ -231,6 +259,44 @@ export const AdminVideos: React.FC = () => {
     } catch (err: any) {
       showMsg('error', err.message);
     }
+  };
+
+  const handleCreateCourse = async () => {
+    if (!courseForm.title.trim()) return;
+    try {
+      const slug = courseForm.slug || courseForm.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      await api.post('/admin/courses', {
+        title: courseForm.title,
+        slug,
+        description: courseForm.description || null,
+      });
+      setShowCourseCreate(false);
+      setCourseForm({ title: '', slug: '', description: '' });
+      await fetchCourses();
+      showMsg('success', 'Course created');
+    } catch (err: any) {
+      showMsg('error', err.message);
+    }
+  };
+
+  const handleAddCategory = () => {
+    const name = newCategoryName.trim();
+    if (!name || allCategories.includes(name)) return;
+    const updated = [...customCategories, name];
+    setCustomCategories(updated);
+    localStorage.setItem('mst_custom_categories', JSON.stringify(updated));
+    setNewCategoryName('');
+    setShowAddCategory(false);
+    showMsg('success', `Category "${name}" added`);
+  };
+
+  const toggleCourseCollapse = (courseId: string) => {
+    setCollapsedCourses(prev => {
+      const next = new Set(prev);
+      if (next.has(courseId)) next.delete(courseId);
+      else next.add(courseId);
+      return next;
+    });
   };
 
   const handleUpdateMetadata = async () => {
@@ -562,14 +628,19 @@ export const AdminVideos: React.FC = () => {
 
       const P = ${JSON.stringify(bannerForm)};
       const V = P.variant;
+      const bWords = (P.brand_title || 'AI Ignite').trim().split(' ');
+      const b1 = bWords[0] || '';
+      const b2 = bWords.slice(1).join(' ');
+      const formattedBrand = b2 ? b1 + ' <span>' + b2 + '</span>' : b1;
+
       let html = '';
       const logo = '<svg width="160" height="160" viewBox="0 0 72 72"><circle cx="36" cy="36" r="34" fill="'+(V==='B'?'rgba(255,255,255,0.08)':'#0d2d6b')+'"/><circle cx="36" cy="36" r="34" fill="none" stroke="'+(V==='B'?'rgba(255,255,255,0.2)':'#1e4282')+'" stroke-width="2"/><circle class="ring-pulse" cx="36" cy="36" r="34" fill="none" stroke="#e05018" stroke-width="1.5" opacity=".5"/><line class="bar1" x1="24.5" y1="23" x2="24.5" y2="49" stroke="#c03010" stroke-width="5" stroke-linecap="round"/><line class="bar2" x1="24.5" y1="23" x2="24.5" y2="49" stroke="#e85520" stroke-width="2.5" stroke-linecap="round"/><circle class="dot-pop" cx="24.5" cy="36" r="4.5" fill="#e06030"/><circle class="dot-pop" cx="24.5" cy="36" r="3" fill="#f07840" style="animation-delay:.84s"/><polygon class="tri-fade" points="28,23 50,36 28,49" fill="white"/></svg>';
       if(V==='A'){
-        html='<div class="banner va"><div class="corner tl"></div><div class="corner br"></div><div class="hline t"></div><div class="hline b"></div><div class="samsung-top"><span class="samsung-text-lbl">'+P.company_logo+'</span></div><div class="center"><div class="icon-entrance">'+logo+'</div><div class="vdiv"></div><div><div class="brand">AI <span>Ignite</span></div><div class="stag">'+P.series_tag+'</div></div></div><div class="btm"><div class="bleft"><div class="topic">'+P.topic+'</div><div class="sub">'+P.subtopic+'</div></div><div class="bmid"><div class="pill ep">'+P.episode+'</div><div class="pill">'+P.duration+'</div></div><div class="bright"><div class="avatar">'+P.presenter_initial+'</div><div class="pname">'+P.presenter+'</div></div></div></div>';
+        html='<div class="banner va"><div class="corner tl"></div><div class="corner br"></div><div class="hline t"></div><div class="hline b"></div><div class="samsung-top"><span class="samsung-text-lbl">'+P.company_logo+'</span></div><div class="center"><div class="icon-entrance">'+logo+'</div><div class="vdiv"></div><div><div class="brand">'+formattedBrand+'</div><div class="stag">'+P.series_tag+'</div></div></div><div class="btm"><div class="bleft"><div class="topic">'+P.topic+'</div><div class="sub">'+P.subtopic+'</div></div><div class="bmid"><div class="pill ep">'+P.episode+'</div><div class="pill">'+P.duration+'</div></div><div class="bright"><div class="avatar">'+P.presenter_initial+'</div><div class="pname">'+P.presenter+'</div></div></div></div>';
       } else if(V==='B'){
-        html='<div class="banner vb"><div class="lpanel"><span class="samsung-lbl">'+P.company_logo+'</span><div class="icon-entrance">'+logo+'</div><div class="brand-vb">AI <span>Ignite</span></div><div class="stag-vb">'+P.series_tag+'</div></div><div class="rpanel"><div style="display:flex;gap:16px;align-items:center"><div class="epbadge">'+P.episode+'</div><div class="durbadge">'+P.duration+'</div></div><div class="topic-vb">'+P.topic+'</div><div class="divh"></div><div class="sub-vb">'+P.subtopic+'</div><div style="display:flex;align-items:center;gap:20px;margin-top:8px"><div class="av-vb">'+P.presenter_initial+'</div><div><div class="pn-vb">'+P.presenter+'</div><div class="pd-vb">Presenter</div></div></div></div></div>';
+        html='<div class="banner vb"><div class="lpanel"><span class="samsung-lbl">'+P.company_logo+'</span><div class="icon-entrance">'+logo+'</div><div class="brand-vb">'+formattedBrand+'</div><div class="stag-vb">'+P.series_tag+'</div></div><div class="rpanel"><div style="display:flex;gap:16px;align-items:center"><div class="epbadge">'+P.episode+'</div><div class="durbadge">'+P.duration+'</div></div><div class="topic-vb">'+P.topic+'</div><div class="divh"></div><div class="sub-vb">'+P.subtopic+'</div><div style="display:flex;align-items:center;gap:20px;margin-top:8px"><div class="av-vb">'+P.presenter_initial+'</div><div><div class="pn-vb">'+P.presenter+'</div><div class="pd-vb">Presenter</div></div></div></div></div>';
       } else {
-        html='<div class="banner vc"><div class="stripe-top"></div><div class="stripe-bot"></div><div class="samsung-vc"><span class="samsung-text-lbl">'+P.company_logo+'</span></div><div class="cblock"><div class="logo-row"><div class="icon-entrance">'+logo+'</div><div class="brand-vc">AI <span>Ignite</span></div></div><div class="topic-vc">'+P.topic+'</div><div class="sub-vc">'+P.subtopic+'</div><div class="meta-row"><span class="mi bold">'+P.episode+'</span><div class="mdot"></div><span class="mi">'+P.duration+'</span><div class="mdot"></div><span class="mi">'+P.presenter+'</span><div class="mdot"></div><span class="mi">'+P.series_tag+'</span></div></div></div>';
+        html='<div class="banner vc"><div class="stripe-top"></div><div class="stripe-bot"></div><div class="samsung-vc"><span class="samsung-text-lbl">'+P.company_logo+'</span></div><div class="cblock"><div class="logo-row"><div class="icon-entrance">'+logo+'</div><div class="brand-vc">'+formattedBrand+'</div></div><div class="topic-vc">'+P.topic+'</div><div class="sub-vc">'+P.subtopic+'</div><div class="meta-row"><span class="mi bold">'+P.episode+'</span><div class="mdot"></div><span class="mi">'+P.duration+'</span><div class="mdot"></div><span class="mi">'+P.presenter+'</span><div class="mdot"></div><span class="mi">'+P.series_tag+'</span></div></div></div>';
       }
       document.getElementById('root').innerHTML=html;
     <\/script></body></html>
@@ -598,6 +669,31 @@ export const AdminVideos: React.FC = () => {
     return `${m}:${sec.toString().padStart(2, '0')}`;
   };
 
+  // Group videos by course for sidebar
+  const groupedVideos = (() => {
+    const groups: { course: Course | null; videos: Video[] }[] = [];
+    const courseMap = new Map<string, Video[]>();
+    const uncategorized: Video[] = [];
+    for (const v of filteredVideos) {
+      if (v.course_id) {
+        if (!courseMap.has(v.course_id)) courseMap.set(v.course_id, []);
+        courseMap.get(v.course_id)!.push(v);
+      } else {
+        uncategorized.push(v);
+      }
+    }
+    for (const c of courses) {
+      const vids = courseMap.get(c.id);
+      if (vids && vids.length > 0) {
+        groups.push({ course: c, videos: vids });
+      }
+    }
+    if (uncategorized.length > 0) {
+      groups.push({ course: null, videos: uncategorized });
+    }
+    return groups;
+  })();
+
   // ── Render ────────────────────────────────────────────
 
   if (loading) {
@@ -605,7 +701,7 @@ export const AdminVideos: React.FC = () => {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)]">
+    <div className="flex h-[calc(100vh-4rem)] font-sans">
       {/* Toast Message */}
       {message && (
         <div className={`fixed top-20 right-6 z-50 px-4 py-3 rounded-lg text-sm font-medium shadow-xl border ${
@@ -617,18 +713,129 @@ export const AdminVideos: React.FC = () => {
         </div>
       )}
 
-      {/* Left Panel — Video List */}
+      {/* Course Creation Popup Modal */}
+      {showCourseCreate && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-lg p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary">library_add</span>
+                Add New Course
+              </h3>
+              <button onClick={() => setShowCourseCreate(false)} className="text-slate-400 hover:text-white transition-colors">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Course Title *</label>
+              <input
+                value={courseForm.title}
+                onChange={(e) => setCourseForm(f => ({ ...f, title: e.target.value }))}
+                placeholder="e.g. Introduction to AI Agents"
+                className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Slug</label>
+              <input
+                value={courseForm.slug}
+                onChange={(e) => setCourseForm(f => ({ ...f, slug: e.target.value }))}
+                placeholder="auto-generated from title if empty"
+                className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Description</label>
+              <textarea
+                value={courseForm.description}
+                onChange={(e) => setCourseForm(f => ({ ...f, description: e.target.value }))}
+                rows={3}
+                placeholder="Brief description of this course..."
+                className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button onClick={handleCreateCourse} className="px-6 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
+                Create Course
+              </button>
+              <button onClick={() => setShowCourseCreate(false)} className="px-6 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Category Popup Modal */}
+      {showAddCategory && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary">category</span>
+                Add New Category
+              </h3>
+              <button onClick={() => setShowAddCategory(false)} className="text-slate-400 hover:text-white transition-colors">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Category Name *</label>
+              <input
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="e.g. Fine-tuning"
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAddCategory(); }}
+                className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+              />
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <span className="text-[10px] text-slate-500 w-full mb-1">Existing categories:</span>
+              {allCategories.map(c => (
+                <span key={c} className="px-2 py-0.5 text-[10px] rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700">{c}</span>
+              ))}
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button onClick={handleAddCategory} className="px-6 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
+                Add Category
+              </button>
+              <button onClick={() => setShowAddCategory(false)} className="px-6 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Left Panel — Video List grouped by course */}
       <aside className="w-80 border-r border-slate-200 dark:border-white/10 bg-sidebar-light dark:bg-sidebar-dark flex flex-col shrink-0">
         <div className="p-4 border-b border-slate-200 dark:border-white/10 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-slate-900 dark:text-white">Videos</h2>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="flex items-center gap-1 text-xs text-primary hover:text-white transition-colors"
-            >
-              <span className="material-symbols-outlined text-sm">add</span>
-              New
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setShowCourseCreate(true)}
+                className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 transition-colors"
+                title="Add new course"
+              >
+                <span className="material-symbols-outlined text-sm">library_add</span>
+              </button>
+              <button
+                onClick={() => setShowAddCategory(true)}
+                className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                title="Add new category"
+              >
+                <span className="material-symbols-outlined text-sm">category</span>
+              </button>
+              <button
+                onClick={() => setShowCreate(true)}
+                className="flex items-center gap-1 text-xs text-primary hover:text-white transition-colors"
+                title="Add new video"
+              >
+                <span className="material-symbols-outlined text-sm">add</span>
+                New
+              </button>
+            </div>
           </div>
           <input
             type="text"
@@ -640,23 +847,47 @@ export const AdminVideos: React.FC = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {filteredVideos.map((v) => (
-            <button
-              key={v.id}
-              onClick={() => selectVideo(v)}
-              className={`w-full text-left p-4 border-b border-slate-100 dark:border-white/5 transition-colors ${
-                selected?.id === v.id ? 'bg-primary/5 border-l-2 border-l-primary' : 'hover:bg-slate-100 dark:hover:bg-slate-800/50'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{v.title}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{v.category} · {formatDuration(v.duration_s)}</p>
-                </div>
-                {statusBadge(v)}
+          {groupedVideos.map((group) => {
+            const courseId = group.course?.id || '__uncategorized__';
+            const isCollapsed = collapsedCourses.has(courseId);
+            return (
+              <div key={courseId}>
+                {/* Course header with expand/collapse */}
+                <button
+                  onClick={() => toggleCourseCollapse(courseId)}
+                  className="w-full flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <span className={`material-symbols-outlined text-sm text-slate-400 transition-transform duration-200 ${isCollapsed ? '' : 'rotate-90'}`}>
+                    chevron_right
+                  </span>
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider flex-1 text-left truncate">
+                    {group.course?.title || 'Uncategorized'}
+                  </span>
+                  <span className="text-[10px] text-slate-400 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded-full">
+                    {group.videos.length}
+                  </span>
+                </button>
+                {/* Videos in this course */}
+                {!isCollapsed && group.videos.map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => selectVideo(v)}
+                    className={`w-full text-left p-4 border-b border-slate-100 dark:border-white/5 transition-colors ${
+                      selected?.id === v.id ? 'bg-primary/5 border-l-2 border-l-primary' : 'hover:bg-slate-100 dark:hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{v.title}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{v.category} · {formatDuration(v.duration_s)}</p>
+                      </div>
+                      {statusBadge(v)}
+                    </div>
+                  </button>
+                ))}
               </div>
-            </button>
-          ))}
+            );
+          })}
           {filteredVideos.length === 0 && (
             <p className="text-center text-slate-500 text-sm p-6">No videos found</p>
           )}
@@ -702,26 +933,33 @@ export const AdminVideos: React.FC = () => {
                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Category</label>
                   <select
                     value={createForm.category}
-                    onChange={(e) => setCreateForm((f) => ({ ...f, category: e.target.value }))}
+                    onChange={(e) => {
+                      if (e.target.value === '__new__') { setShowAddCategory(true); return; }
+                      setCreateForm((f) => ({ ...f, category: e.target.value }));
+                    }}
                     className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                   >
-                    <option value="Code-mate">Code-mate</option>
-                    <option value="RAG">RAG</option>
-                    <option value="Agents">Agents</option>
-                    <option value="Deep Dive">Deep Dive</option>
+                    {allCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                    <option value="__new__">+ Add New Category...</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Course</label>
                   <select
                     value={createForm.course_id}
-                    onChange={(e) => setCreateForm((f) => ({ ...f, course_id: e.target.value }))}
+                    onChange={(e) => {
+                      if (e.target.value === '__new__') { setShowCourseCreate(true); return; }
+                      setCreateForm((f) => ({ ...f, course_id: e.target.value }));
+                    }}
                     className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                   >
                     <option value="">None</option>
                     {courses.map((c) => (
                       <option key={c.id} value={c.id}>{c.title}</option>
                     ))}
+                    <option value="__new__">+ Add New Course...</option>
                   </select>
                 </div>
               </div>
@@ -736,42 +974,11 @@ export const AdminVideos: React.FC = () => {
             </div>
           </div>
         ) : selected ? (
-          <div className="max-w-4xl">
-            {/* Header */}
-            <div className="flex items-start justify-between mb-6">
-              <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <h2 className="text-xl font-bold text-slate-900 dark:text-white">{selected.title}</h2>
-                  {statusBadge(selected)}
-                </div>
-                <p className="text-sm text-slate-400">{selected.slug} · {selected.category}</p>
-              </div>
-              <div className="flex gap-2">
-                {selected.status === 'ready' && !selected.is_published && (
-                  <button onClick={handlePublish} className="flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-xs font-bold rounded-lg transition-colors">
-                    <span className="material-symbols-outlined text-sm">publish</span>
-                    Publish
-                  </button>
-                )}
-                {selected.is_published && (
-                  <button onClick={handleUnpublish} className="flex items-center gap-1.5 px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-white text-xs font-bold rounded-lg transition-colors">
-                    <span className="material-symbols-outlined text-sm">unpublished</span>
-                    Unpublish
-                  </button>
-                )}
-                <button onClick={handleRetranscode} className="flex items-center gap-1.5 px-3 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-lg transition-colors border border-slate-300 dark:border-white/10">
-                  <span className="material-symbols-outlined text-sm">refresh</span>
-                  Re-transcode
-                </button>
-                <button onClick={handleDelete} className="flex items-center gap-1.5 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs rounded-lg transition-colors border border-red-500/20">
-                  <span className="material-symbols-outlined text-sm">delete</span>
-                  Delete
-                </button>
-              </div>
-            </div>
-
+          <div className="flex gap-6 h-full">
+            {/* Left Column — Video Player (sticky) */}
+            <div className="w-[45%] shrink-0 flex flex-col">
             {/* Video File Section */}
-            <div className="mb-6 p-4 rounded-xl bg-card-light dark:bg-card-dark border border-slate-200 dark:border-white/5">
+            <div className="p-4 rounded-xl bg-card-light dark:bg-card-dark border border-slate-200 dark:border-white/5 sticky top-0">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Video File</h3>
               {selected.hls_path ? (
                 <div>
@@ -818,10 +1025,45 @@ export const AdminVideos: React.FC = () => {
                 </div>
               )}
             </div>
+            </div>
+
+            {/* Right Panel — Tabs + Content */}
+            <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="flex items-start justify-between mb-4 shrink-0">
+              <div>
+                <div className="flex items-center gap-3 mb-1">
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">{selected.title}</h2>
+                  {statusBadge(selected)}
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{selected.slug}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {selected.is_published ? (
+                  <button onClick={handleUnpublish} className="flex items-center gap-1.5 px-3 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs rounded-lg transition-colors border border-amber-500/20">
+                    <span className="material-symbols-outlined text-sm">visibility_off</span>
+                    Unpublish
+                  </button>
+                ) : (
+                  <button onClick={handlePublish} className="flex items-center gap-1.5 px-3 py-2 bg-green-500/10 hover:bg-green-500/20 text-green-400 text-xs rounded-lg transition-colors border border-green-500/20">
+                    <span className="material-symbols-outlined text-sm">publish</span>
+                    Publish
+                  </button>
+                )}
+                <button onClick={handleRetranscode} className="flex items-center gap-1.5 px-3 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-lg transition-colors border border-slate-300 dark:border-white/10">
+                  <span className="material-symbols-outlined text-sm">refresh</span>
+                  Re-transcode
+                </button>
+                <button onClick={handleDelete} className="flex items-center gap-1.5 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs rounded-lg transition-colors border border-red-500/20">
+                  <span className="material-symbols-outlined text-sm">delete</span>
+                  Delete
+                </button>
+              </div>
+            </div>
 
             {/* Tabs */}
-            <div className="flex items-center gap-1 border-b border-slate-200 dark:border-white/10 mb-6">
-              {(['banner', 'trim', 'metadata', 'chapters', 'howto', 'quality', 'seed-notes'] as Tab[]).map((tab) => (
+            <div className="flex items-center gap-1 border-b border-slate-200 dark:border-white/10 mb-4 shrink-0">
+              {(['metadata', 'banner', 'trim', 'chapters', 'howto', 'quality', 'seed-notes'] as Tab[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -836,6 +1078,9 @@ export const AdminVideos: React.FC = () => {
               ))}
             </div>
 
+            {/* Tab Content — scrollable */}
+            <div className="flex-1 overflow-y-auto pr-2">
+
             {/* Tab Content */}
             {activeTab === 'metadata' && (
               <div className="space-y-4">
@@ -847,12 +1092,15 @@ export const AdminVideos: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Category</label>
-                    <select value={editForm.category} onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value }))}
+                    <select value={editForm.category} onChange={(e) => {
+                      if (e.target.value === '__new__') { setShowAddCategory(true); return; }
+                      setEditForm((f) => ({ ...f, category: e.target.value }));
+                    }}
                       className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none">
-                      <option value="Code-mate">Code-mate</option>
-                      <option value="RAG">RAG</option>
-                      <option value="Agents">Agents</option>
-                      <option value="Deep Dive">Deep Dive</option>
+                      {allCategories.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                      <option value="__new__">+ Add New Category...</option>
                     </select>
                   </div>
                 </div>
@@ -864,10 +1112,14 @@ export const AdminVideos: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Course</label>
-                    <select value={editForm.course_id} onChange={(e) => setEditForm((f) => ({ ...f, course_id: e.target.value }))}
+                    <select value={editForm.course_id} onChange={(e) => {
+                      if (e.target.value === '__new__') { setShowCourseCreate(true); return; }
+                      setEditForm((f) => ({ ...f, course_id: e.target.value }));
+                    }}
                       className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none">
                       <option value="">None</option>
                       {courses.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+                      <option value="__new__">+ Add New Course...</option>
                     </select>
                   </div>
                   <div>
@@ -1352,6 +1604,12 @@ export const AdminVideos: React.FC = () => {
                           className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
                       </div>
                       <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Brand Title</label>
+                        <input value={bannerForm.brand_title} onChange={(e) => setBannerForm((f) => ({ ...f, brand_title: e.target.value }))}
+                          placeholder="e.g. AI Ignite"
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                      </div>
+                      <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Topic (Main Title)</label>
                         <input value={bannerForm.topic} onChange={(e) => setBannerForm((f) => ({ ...f, topic: e.target.value }))}
                           placeholder="e.g. Intro to AI Agents"
@@ -1371,8 +1629,24 @@ export const AdminVideos: React.FC = () => {
                         </div>
                         <div className="flex-1">
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Duration</label>
-                          <input value={bannerForm.duration} onChange={(e) => setBannerForm((f) => ({ ...f, duration: e.target.value }))}
-                            className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                          <div className="flex gap-1">
+                            <input value={bannerForm.duration} onChange={(e) => setBannerForm((f) => ({ ...f, duration: e.target.value }))}
+                              className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                            <button
+                              onClick={() => {
+                                const dur = playerDuration > 0 ? playerDuration : (selected?.duration_s || 0);
+                                if (dur > 0) {
+                                  const m = Math.floor(dur / 60);
+                                  const s = Math.floor(dur % 60);
+                                  setBannerForm((f) => ({ ...f, duration: `${m}:${String(s).padStart(2, '0')}` }));
+                                }
+                              }}
+                              className="px-2 py-1.5 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary text-xs font-bold transition-colors border border-primary/30"
+                              title="Sync duration from video"
+                            >
+                              <span className="material-symbols-outlined text-sm">sync</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
                       <div>
@@ -1440,6 +1714,8 @@ export const AdminVideos: React.FC = () => {
                 </div>
               </div>
             )}
+            </div>
+            </div>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-slate-500">

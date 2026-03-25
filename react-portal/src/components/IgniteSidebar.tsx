@@ -49,14 +49,23 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
   const [activeCategory, setActiveCategory] = useState('All');
   const [videos, setVideos] = useState<Video[]>(ALL_VIDEOS);
   const [loaded, setLoaded] = useState(false);
+  const [courseNames, setCourseNames] = useState<Record<string, string>>({});
+  const [videoCourseMap, setVideoCourseMap] = useState<Record<string, string>>({});
+  const [collapsedCourses, setCollapsedCourses] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    api.get<Array<{ id: string; slug: string }>>('/video/courses')
+    api.get<Array<{ id: string; slug: string; title?: string }>>('/video/courses')
       .then(async (courses) => {
         const allVids: Video[] = [];
+        const names: Record<string, string> = {};
+        const vidCourse: Record<string, string> = {};
         for (const course of courses) {
+          names[course.id] = course.title || course.slug;
           try {
             const data = await api.get<{ videos: ApiVideo[] }>(`/video/courses/${course.slug}`);
+            for (const v of data.videos) {
+              vidCourse[v.id] = course.id;
+            }
             allVids.push(
               ...data.videos.map((v) => ({
                 id: v.id,
@@ -72,6 +81,8 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
             );
           } catch { /* ignore */ }
         }
+        setCourseNames(names);
+        setVideoCourseMap(vidCourse);
         ALL_VIDEOS = allVids;
         setVideos(allVids);
         if (allVids.length > 0 && !allVids.find((v) => v.id === activeVideoId)) {
@@ -90,14 +101,48 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
     setActiveCategory(category);
   };
 
+  const toggleCourseCollapse = (courseId: string) => {
+    setCollapsedCourses(prev => {
+      const next = new Set(prev);
+      if (next.has(courseId)) next.delete(courseId);
+      else next.add(courseId);
+      return next;
+    });
+  };
+
   const filteredVideos = videos.filter((v) => {
     const matchesCategory = activeCategory === 'All' || v.category === activeCategory;
     const matchesSearch = v.title.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
+  // Group filtered videos by course
+  const groupedVideos = (() => {
+    const groups: { courseId: string; courseName: string; videos: Video[] }[] = [];
+    const courseMap = new Map<string, Video[]>();
+    const uncategorized: Video[] = [];
+    for (const v of filteredVideos) {
+      const cId = videoCourseMap[v.id];
+      if (cId) {
+        if (!courseMap.has(cId)) courseMap.set(cId, []);
+        courseMap.get(cId)!.push(v);
+      } else {
+        uncategorized.push(v);
+      }
+    }
+    for (const [cId, vids] of courseMap.entries()) {
+      groups.push({ courseId: cId, courseName: courseNames[cId] || 'Course', videos: vids });
+    }
+    if (uncategorized.length > 0) {
+      groups.push({ courseId: '__uncategorized__', courseName: 'Videos', videos: uncategorized });
+    }
+    return groups;
+  })();
+
+  let globalIdx = 0;
+
   return (
-    <aside className="w-80 bg-sidebar-light dark:bg-sidebar-dark border-r border-slate-200 dark:border-white/5 flex flex-col shrink-0 z-40">
+    <aside className="w-80 bg-sidebar-light dark:bg-sidebar-dark border-r border-slate-200 dark:border-white/5 flex flex-col shrink-0 z-40 font-sans">
       <div className="p-4 border-b border-slate-200 dark:border-white/5">
         <div className="relative">
           <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-500 text-lg">search</span>
@@ -127,49 +172,77 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {filteredVideos.map((video) => {
-          const isActive = video.id === activeVideoId;
+      <div className="flex-1 overflow-y-auto">
+        {groupedVideos.map((group) => {
+          const isCollapsed = collapsedCourses.has(group.courseId);
           return (
-            <div
-              key={video.id}
-              onClick={() => onSelectVideo(video)}
-              className={`p-3 rounded-xl cursor-pointer group transition-all ${
-                isActive
-                  ? 'active-lesson bg-primary/5 border border-primary/20'
-                  : 'border border-transparent hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:border-slate-200 dark:hover:border-slate-700'
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <div
-                  className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold mt-0.5 ${
-                    isActive
-                      ? 'bg-primary text-white shadow-[0_0_10px_rgba(37,140,244,0.5)]'
-                      : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700'
-                  }`}
-                >
-                  {filteredVideos.indexOf(video) + 1}
+            <div key={group.courseId}>
+              {/* Course header with expand/collapse */}
+              <button
+                onClick={() => toggleCourseCollapse(group.courseId)}
+                className="w-full flex items-center gap-2 px-4 py-2.5 bg-slate-50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors sticky top-0 z-10"
+              >
+                <span className={`material-symbols-outlined text-sm text-primary transition-transform duration-200 ${isCollapsed ? '' : 'rotate-90'}`}>
+                  chevron_right
+                </span>
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex-1 text-left truncate">
+                  {group.courseName}
+                </span>
+                <span className="text-[10px] text-slate-400 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded-full">
+                  {group.videos.length}
+                </span>
+              </button>
+              {/* Videos in this course */}
+              {!isCollapsed && (
+                <div className="p-2 space-y-1.5">
+                  {group.videos.map((video) => {
+                    globalIdx++;
+                    const isActive = video.id === activeVideoId;
+                    return (
+                      <div
+                        key={video.id}
+                        onClick={() => onSelectVideo(video)}
+                        className={`p-3 rounded-xl cursor-pointer group transition-all ${
+                          isActive
+                            ? 'active-lesson bg-primary/5 border border-primary/20'
+                            : 'border border-transparent hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:border-slate-200 dark:hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold mt-0.5 ${
+                              isActive
+                                ? 'bg-primary text-white shadow-[0_0_10px_rgba(37,140,244,0.5)]'
+                                : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700'
+                            }`}
+                          >
+                            {globalIdx}
+                          </div>
+                          <div className="flex-1">
+                            <h3
+                              className={`text-sm mb-1 group-hover:text-primary transition-colors ${
+                                isActive ? 'font-bold text-slate-900 dark:text-white' : 'font-medium text-slate-600 dark:text-slate-300'
+                              }`}
+                            >
+                              {video.title}
+                            </h3>
+                            <div className={`flex items-center gap-2 text-[10px] ${isActive ? 'text-slate-400' : 'text-slate-500 group-hover:text-slate-400'}`}>
+                              <span className={`px-1.5 rounded border ${isActive ? 'bg-primary/10 text-primary border-primary/20' : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700'}`}>
+                                {video.category}
+                              </span>
+                              <span>&bull;</span>
+                              <span>{video.duration}</span>
+                            </div>
+                          </div>
+                          {isActive && (
+                            <span className="material-symbols-outlined text-primary text-lg animate-pulse">play_circle</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="flex-1">
-                  <h3
-                    className={`text-sm mb-1 group-hover:text-primary transition-colors ${
-                      isActive ? 'font-bold text-slate-900 dark:text-white' : 'font-medium text-slate-600 dark:text-slate-300'
-                    }`}
-                  >
-                    {video.title}
-                  </h3>
-                  <div className={`flex items-center gap-2 text-[10px] ${isActive ? 'text-slate-400' : 'text-slate-500 group-hover:text-slate-400'}`}>
-                    <span className={`px-1.5 rounded border ${isActive ? 'bg-primary/10 text-primary border-primary/20' : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700'}`}>
-                      {video.category}
-                    </span>
-                    <span>&bull;</span>
-                    <span>{video.duration}</span>
-                  </div>
-                </div>
-                {isActive && (
-                  <span className="material-symbols-outlined text-primary text-lg animate-pulse">play_circle</span>
-                )}
-              </div>
+              )}
             </div>
           );
         })}

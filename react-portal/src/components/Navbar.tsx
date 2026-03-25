@@ -21,7 +21,7 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
 
   if (variant === 'solutions') {
     return (
-      <nav className="fixed top-0 w-full z-50 border-b border-slate-200 dark:border-primary/10 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md">
+      <nav className="fixed top-0 w-full z-50 border-b border-slate-200 dark:border-primary/10 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md font-sans">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="text-primary">
@@ -37,22 +37,22 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
               Solutions
             </Link>
             <Link
+              className={`text-sm font-medium transition-colors ${isActive('/ignite') ? 'text-primary' : 'text-slate-500 dark:text-slate-400 hover:text-primary'}`}
+              to="/ignite"
+            >
+              Learn
+            </Link>
+            <Link
               className={`text-sm font-medium transition-colors ${isActive('/marketplace') ? 'text-primary' : 'text-slate-500 dark:text-slate-400 hover:text-primary'}`}
               to="/marketplace"
             >
-              Forge
+              Marketplace
             </Link>
             <Link
               className={`text-sm font-medium transition-colors ${isActive('/news') ? 'text-primary' : 'text-slate-500 dark:text-slate-400 hover:text-primary'}`}
               to="/news"
             >
-              News
-            </Link>
-            <Link
-              className={`text-sm font-medium transition-colors ${isActive('/ignite') ? 'text-primary' : 'text-slate-500 dark:text-slate-400 hover:text-primary'}`}
-              to="/ignite"
-            >
-              AI Ignite
+              Articles
             </Link>
           </div>
           <div className="flex items-center gap-4">

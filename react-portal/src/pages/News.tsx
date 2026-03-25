@@ -69,14 +69,14 @@ export const News: React.FC = () => {
   const categoryLabel = (item: NewsItem) => item.badge || item.source;
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-sans">
       <Navbar variant="solutions" />
 
       <main className="relative pt-16">
         {/* ── Hero: Newsroom title ─────────────────────── */}
         <section className="max-w-6xl mx-auto px-6 pt-20 pb-10">
           <h1 className="text-5xl md:text-6xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Newsroom
+            Articles
           </h1>
         </section>
 
@@ -113,7 +113,7 @@ export const News: React.FC = () => {
                       <span className="text-slate-400 whitespace-nowrap">
                         {formatDate(featured.published_at)}
                       </span>
-                      <p className="text-slate-500 dark:text-slate-400 leading-relaxed">
+                      <p className="text-[15px] text-slate-500 dark:text-slate-400 leading-relaxed">
                         {featured.summary}
                       </p>
                     </div>
@@ -137,10 +137,10 @@ export const News: React.FC = () => {
                             {formatDate(item.published_at)}
                           </span>
                         </div>
-                        <h3 className="text-base font-bold text-slate-900 dark:text-white group-hover:text-primary transition-colors leading-snug mb-1.5">
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-primary transition-colors leading-snug mb-2">
                           {item.title}
                         </h3>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-3">
+                        <p className="text-[15px] text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-3">
                           {item.summary}
                         </p>
                       </article>
@@ -160,7 +160,7 @@ export const News: React.FC = () => {
               {/* Header row: title + search */}
               <div className="flex items-center justify-between mb-8">
                 <h2 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white">
-                  News
+                  Articles
                 </h2>
                 <div className="relative">
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
@@ -195,7 +195,7 @@ export const News: React.FC = () => {
                     <span className={`text-sm font-semibold capitalize ${CATEGORY_COLOR[item.source] || CATEGORY_COLOR.manual}`}>
                       {categoryLabel(item)}
                     </span>
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200 group-hover:text-primary transition-colors leading-snug">
+                    <span className="text-[15px] font-medium text-slate-700 dark:text-slate-200 group-hover:text-primary transition-colors leading-snug">
                       {item.title}
                     </span>
                   </article>

@@ -86,8 +86,8 @@ def run_ffmpeg(input_path: str, output_dir: str, quality: str, crf: int) -> bool
     return True
 
 
-def generate_thumbnail(input_path: str, output_path: str, timestamp: int = 5):
-    """Generate a thumbnail from the video."""
+def generate_thumbnail(input_path: str, output_path: str, timestamp: int = 30):
+    """Generate a thumbnail from the video at ~frame 30 (1s at 30fps)."""
     cmd = [
         settings.FFMPEG_PATH, "-y", "-i", input_path,
         "-ss", str(timestamp), "-vframes", "1", "-q:v", "2",

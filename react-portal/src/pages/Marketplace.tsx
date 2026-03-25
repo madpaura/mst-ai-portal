@@ -148,17 +148,17 @@ export const Marketplace: React.FC = () => {
   });
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-sans">
       <div className="relative flex flex-col min-h-screen w-full">
         {/* Header */}
-        <header className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 lg:px-12 py-4 bg-background-light dark:bg-background-dark sticky top-0 z-50">
+        <header className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 lg:px-12 py-4 bg-background-light dark:bg-background-dark sticky top-0 z-50 font-sans">
           <div className="flex items-center gap-8">
             <Link to="/marketplace" className="flex items-center gap-3">
               <div className="size-8 bg-primary rounded-lg flex items-center justify-center text-white">
                 <span className="material-symbols-outlined">memory</span>
               </div>
               <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white uppercase tracking-widest">
-                AI Forge
+                Marketplace
               </h2>
             </Link>
 
@@ -181,6 +181,18 @@ export const Marketplace: React.FC = () => {
                 className="text-slate-600 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors"
               >
                 Solutions
+              </Link>
+              <Link
+                to="/ignite"
+                className="text-slate-600 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors"
+              >
+                Learn
+              </Link>
+              <Link
+                to="/news"
+                className="text-slate-600 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors"
+              >
+                Articles
               </Link>
             </nav>
           </div>
@@ -279,7 +291,7 @@ export const Marketplace: React.FC = () => {
             <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
                 <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Semiconductor Agent Marketplace</h1>
-                <p className="text-slate-500 dark:text-slate-400 max-w-2xl">
+                <p className="text-sm text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
                   Deploy pre-trained silicon design agents, specialized UVM skills, and model-context protocol servers
                   directly to your EDA environment.
                 </p>
@@ -321,20 +333,20 @@ export const Marketplace: React.FC = () => {
                 return (
                   <div
                     key={card.id}
-                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col hover:border-primary/50 transition-all group min-h-[220px]"
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col hover:border-primary/50 transition-all group min-h-[240px]"
                   >
                     {/* Icon + title + badge on same line */}
-                    <div className="flex items-center gap-2.5 mb-2">
-                      <div className={`size-8 shrink-0 ${typeStyle.bg} rounded-lg flex items-center justify-center ${card.icon_color || typeStyle.color}`}>
-                        <span className="material-symbols-outlined text-[18px]">{card.icon || 'smart_toy'}</span>
+                    <div className="flex items-center gap-2.5 mb-3">
+                      <div className={`size-9 shrink-0 ${typeStyle.bg} rounded-lg flex items-center justify-center ${card.icon_color || typeStyle.color}`}>
+                        <span className="material-symbols-outlined text-[20px]">{card.icon || 'smart_toy'}</span>
                       </div>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white leading-tight flex-1 truncate">{card.name}</h3>
-                      <span className={`px-2 py-0.5 rounded ${displayBadge.bg} ${displayBadge.color} text-[9px] font-bold uppercase tracking-wider shrink-0`}>
+                      <h3 className="text-[15px] font-bold text-slate-900 dark:text-white leading-snug flex-1 truncate">{card.name}</h3>
+                      <span className={`px-2 py-0.5 rounded ${displayBadge.bg} ${displayBadge.color} text-[10px] font-bold uppercase tracking-wider shrink-0`}>
                         {displayBadge.label}
                       </span>
                     </div>
 
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 flex-grow line-clamp-2">{card.description}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 flex-grow leading-relaxed line-clamp-3">{card.description}</p>
 
                     <div className="bg-slate-100 dark:bg-slate-950 rounded-lg px-2.5 py-2 mb-3 font-mono text-[11px] flex items-center justify-between border border-slate-200 dark:border-slate-800">
                       <code className="text-primary/80 truncate">
@@ -350,10 +362,10 @@ export const Marketplace: React.FC = () => {
 
                     <div className="flex items-center justify-between mt-auto">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-slate-500 truncate max-w-[90px]">{card.author || 'MST Team'}</span>
+                        <span className="text-[11px] text-slate-500 truncate max-w-[100px]">{card.author || 'MST Team'}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-slate-500">{card.version} · {card.downloads}</span>
+                        <span className="text-[11px] text-slate-500">{card.version} · {card.downloads}</span>
                         {card.git_repo_url && (
                           <button
                             onClick={(e) => { e.stopPropagation(); handleDownload(card.slug); }}
@@ -431,7 +443,7 @@ export const Marketplace: React.FC = () => {
                           {displayBadge.label}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{card.description}</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 truncate mt-1 leading-relaxed">{card.description}</p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
                       <span className="text-[10px] text-slate-500 hidden sm:inline whitespace-nowrap">{card.author || 'MST Team'}</span>

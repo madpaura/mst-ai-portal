@@ -93,7 +93,7 @@ export const Solutions: React.FC = () => {
   };
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-sans">
       <Navbar variant="solutions" />
 
       <main className="relative pt-16">
@@ -181,7 +181,7 @@ export const Solutions: React.FC = () => {
                 <div
                   key={card.id}
                   onClick={() => handleCardClick(card)}
-                  className="min-w-[300px] max-w-[300px] snap-start glass-card p-8 rounded-2xl flex flex-col gap-5 group cursor-pointer hover:border-primary/30 transition-all shrink-0"
+                  className="min-w-[320px] max-w-[320px] snap-start glass-card p-8 rounded-2xl flex flex-col gap-6 group cursor-pointer hover:border-primary/30 transition-all shrink-0"
                 >
                   <div className="flex items-center justify-between">
                     <div className={`w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center ${card.icon_color} group-hover:bg-primary group-hover:text-white transition-all duration-300`}>
@@ -194,11 +194,11 @@ export const Solutions: React.FC = () => {
                     )}
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-1">{card.title}</h3>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1.5 leading-snug">{card.title}</h3>
                     {card.subtitle && (
-                      <p className="text-xs text-primary font-semibold uppercase tracking-wider mb-2">{card.subtitle}</p>
+                      <p className="text-sm text-primary font-semibold uppercase tracking-wider mb-3">{card.subtitle}</p>
                     )}
-                    <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">{card.description}</p>
+                    <p className="text-slate-500 dark:text-slate-400 text-[15px] leading-relaxed">{card.description}</p>
                   </div>
                   <div className="mt-auto flex items-center gap-1 text-primary text-sm font-medium group-hover:gap-2 transition-all">
                     Learn more
@@ -298,8 +298,8 @@ export const Solutions: React.FC = () => {
                         {ws.step}
                       </span>
                       <div>
-                        <h4 className="text-slate-900 dark:text-white font-semibold">{ws.title}</h4>
-                        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1 leading-relaxed">{ws.description}</p>
+                        <h4 className="text-slate-900 dark:text-white font-semibold text-base">{ws.title}</h4>
+                        <p className="text-slate-500 dark:text-slate-400 text-[15px] mt-1.5 leading-relaxed">{ws.description}</p>
                       </div>
                     </li>
                   ))}

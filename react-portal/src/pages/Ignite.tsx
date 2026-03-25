@@ -159,7 +159,7 @@ export const Ignite: React.FC = () => {
   const handleFormatList = () => {};
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col font-sans">
       <IgniteHeader notesTaken={0} />
 
       <div className="flex flex-1 overflow-hidden">

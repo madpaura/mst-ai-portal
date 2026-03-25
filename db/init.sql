@@ -130,6 +130,7 @@ CREATE TABLE video_banners (
     presenter_initial TEXT NOT NULL DEFAULT 'V',
     banner_duration_s INTEGER NOT NULL DEFAULT 3 CHECK (banner_duration_s >= 3 AND banner_duration_s <= 10),
     status          TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'generating', 'ready', 'error')),
+    brand_title     TEXT NOT NULL DEFAULT 'AI Ignite',
     banner_video_path TEXT,
     error           TEXT,
     created_at      TIMESTAMPTZ DEFAULT now(),

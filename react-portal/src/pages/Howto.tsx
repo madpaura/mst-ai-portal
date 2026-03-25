@@ -90,7 +90,7 @@ export const Howto: React.FC = () => {
                     <span className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-white text-sm">1</span>
                     Environment Configuration
                   </h2>
-                  <p className="text-slate-600 dark:text-slate-300 leading-relaxed mb-6">
+                  <p className="text-slate-600 dark:text-slate-300 leading-7 text-base mb-6">
                     Before initializing the agent, ensure your workspace has the necessary SDKs and secure access tokens.
                     The agent requires an active VPN connection to the internal Silicon Forge network.
                   </p>
@@ -121,7 +121,7 @@ export const Howto: React.FC = () => {
                       <span className="material-symbols-outlined">lightbulb</span>
                       <span>PRO TIP</span>
                     </div>
-                    <p className="text-sm text-slate-600 dark:text-slate-300">
+                    <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
                       For faster inference, use the <code className="bg-slate-800 px-1 rounded">--local-cache</code> flag during initialization. This reduces latency by 40%.
                     </p>
                   </div>
@@ -133,7 +133,7 @@ export const Howto: React.FC = () => {
                     <span className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-white text-sm">2</span>
                     IDE Integration
                   </h2>
-                  <p className="text-slate-600 dark:text-slate-300 leading-relaxed mb-6">
+                  <p className="text-slate-600 dark:text-slate-300 leading-7 text-base mb-6">
                     The Coding Agent works natively with VS Code and CLion. Install the{' '}
                     <span className="text-primary font-medium">&quot;Silicon-AI Copilot&quot;</span> extension from our internal marketplace.
                   </p>
@@ -185,8 +185,8 @@ export const Howto: React.FC = () => {
                       <div key={idx} className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-white/5 flex items-start gap-4">
                         <span className="material-symbols-outlined text-yellow-400 mt-0.5">{pitfall.icon}</span>
                         <div>
-                          <h4 className="text-slate-900 dark:text-white font-bold text-sm mb-1">{pitfall.title}</h4>
-                          <p className="text-slate-500 dark:text-slate-400 text-sm">{pitfall.text}</p>
+                          <h4 className="text-slate-900 dark:text-white font-bold text-[15px] mb-1.5">{pitfall.title}</h4>
+                          <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">{pitfall.text}</p>
                         </div>
                       </div>
                     ))}

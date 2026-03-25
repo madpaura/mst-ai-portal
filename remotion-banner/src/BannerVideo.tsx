@@ -19,7 +19,21 @@ export interface BannerProps {
   presenter: string;
   presenterInitial: string;
   durationInSeconds?: number;
+  brandTitle?: string;
 }
+
+// Helper to format the brand title with the first word in standard color,
+// and remaining words in the highlighted color (e.g. "AI Ignite" -> "AI <span style='...'>Ignite</span>")
+const renderBrandTitle = (title: string, highlightColor: string) => {
+  const words = (title || 'AI Ignite').trim().split(' ');
+  const firstWord = words[0] || '';
+  const remaining = words.slice(1).join(' ');
+  return (
+    <>
+      {firstWord} {remaining && <span style={{ color: highlightColor }}>{remaining}</span>}
+    </>
+  );
+};
 
 // ── Shared Logo SVG ──────────────────────────────────────
 
@@ -133,7 +147,7 @@ const VariantA: React.FC<BannerProps & { frame: number; fps: number }> = (props)
           }} />
           <div>
             <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 120, letterSpacing: "-0.03em", color: "#0a2a5e", lineHeight: 1 }}>
-              AI <span style={{ color: "#e35a1a" }}>Ignite</span>
+              {renderBrandTitle(props.brandTitle || 'AI Ignite', "#e35a1a")}
             </div>
             <div style={{ fontWeight: 300, fontSize: 28, letterSpacing: "0.22em", color: "#6b7a99", textTransform: "uppercase", marginTop: 8 }}>
               {props.seriesTag}
@@ -210,7 +224,7 @@ const VariantB: React.FC<BannerProps & { frame: number; fps: number }> = (props)
         </div>
         <AILogoSVG size={140} frame={frame} fps={fps} darkBg />
         <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 80, letterSpacing: "-0.03em", color: "#fff", lineHeight: 1, textAlign: "center" }}>
-          AI <span style={{ color: "#e35a1a" }}>Ignite</span>
+          {renderBrandTitle(props.brandTitle || 'AI Ignite', "#e35a1a")}
         </div>
         <div style={{ fontWeight: 300, fontSize: 22, letterSpacing: "0.2em", color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>
           {props.seriesTag}
@@ -293,7 +307,7 @@ const VariantC: React.FC<BannerProps & { frame: number; fps: number }> = (props)
         <div style={{ display: "flex", alignItems: "center", gap: 36 }}>
           <AILogoSVG size={140} frame={frame} fps={fps} />
           <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 110, letterSpacing: "-0.03em", color: "#0a2a5e", lineHeight: 1 }}>
-            AI <span style={{ color: "#e35a1a" }}>Ignite</span>
+            {renderBrandTitle(props.brandTitle || 'AI Ignite', "#e35a1a")}
           </div>
         </div>
         <div style={{ fontWeight: 500, fontSize: 48, color: "#0a2a5e", textAlign: "center" }}>

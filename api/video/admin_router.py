@@ -779,7 +779,8 @@ def _banner_row_to_response(r) -> BannerConfigResponse:
     return BannerConfigResponse(
         id=str(r["id"]), video_id=str(r["video_id"]),
         variant=r["variant"], company_logo=r["company_logo"],
-        series_tag=r["series_tag"], topic=r["topic"],
+        series_tag=r["series_tag"], brand_title=r.get("brand_title", "AI Ignite"),
+        topic=r["topic"],
         subtopic=r["subtopic"], episode=r["episode"],
         duration=r["duration"], presenter=r["presenter"],
         presenter_initial=r["presenter_initial"],
@@ -812,19 +813,19 @@ async def admin_upsert_banner(
     if existing:
         await db.execute(
             """UPDATE video_banners SET variant=$1, company_logo=$2, series_tag=$3,
-               topic=$4, subtopic=$5, episode=$6, duration=$7, presenter=$8,
-               presenter_initial=$9, banner_duration_s=$10, status='draft', updated_at=now()
-               WHERE video_id=$11""",
-            req.variant, req.company_logo, req.series_tag, req.topic,
+               brand_title=$4, topic=$5, subtopic=$6, episode=$7, duration=$8, presenter=$9,
+               presenter_initial=$10, banner_duration_s=$11, status='draft', updated_at=now()
+               WHERE video_id=$12""",
+            req.variant, req.company_logo, req.series_tag, req.brand_title, req.topic,
             req.subtopic, req.episode, req.duration, req.presenter,
             req.presenter_initial, req.banner_duration_s, video_id,
         )
     else:
         await db.execute(
             """INSERT INTO video_banners
-               (video_id, variant, company_logo, series_tag, topic, subtopic, episode, duration, presenter, presenter_initial, banner_duration_s)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)""",
-            video_id, req.variant, req.company_logo, req.series_tag, req.topic,
+               (video_id, variant, company_logo, series_tag, brand_title, topic, subtopic, episode, duration, presenter, presenter_initial, banner_duration_s)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)""",
+            video_id, req.variant, req.company_logo, req.series_tag, req.brand_title, req.topic,
             req.subtopic, req.episode, req.duration, req.presenter,
             req.presenter_initial, req.banner_duration_s,
         )
@@ -862,6 +863,7 @@ async def _generate_banner_video(video_id: str, db_url: str):
             "variant": banner["variant"],
             "companyLogo": banner["company_logo"],
             "seriesTag": banner["series_tag"],
+            "brandTitle": banner.get("brand_title", "AI Ignite"),
             "topic": banner["topic"],
             "subtopic": banner["subtopic"],
             "episode": banner["episode"],

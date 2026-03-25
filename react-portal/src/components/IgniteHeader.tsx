@@ -19,14 +19,14 @@ export const IgniteHeader: React.FC<IgniteHeaderProps> = ({
   const handleProfileClick = () => {};
 
   return (
-    <header className="h-20 bg-sidebar-light dark:bg-sidebar-dark border-b border-slate-200 dark:border-white/5 flex items-center justify-between px-6 z-50 shrink-0">
+    <header className="h-20 bg-sidebar-light dark:bg-sidebar-dark border-b border-slate-200 dark:border-white/5 flex items-center justify-between px-6 z-50 shrink-0 font-sans">
       <div className="flex items-center gap-12">
         <Link to="/ignite" className="flex items-center gap-3">
           <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-blue-600 shadow-lg shadow-primary/20">
-            <span className="material-symbols-outlined text-white text-2xl">rocket_launch</span>
+            <span className="material-symbols-outlined text-white text-2xl">school</span>
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white leading-none">AI Ignite</h1>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white leading-none">Learn</h1>
             <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono uppercase tracking-wider">Internal Training Series</span>
           </div>
         </Link>
