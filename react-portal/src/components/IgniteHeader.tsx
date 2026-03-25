@@ -26,7 +26,7 @@ export const IgniteHeader: React.FC<IgniteHeaderProps> = ({
             <span className="material-symbols-outlined text-white text-2xl">rocket_launch</span>
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white leading-none">AI Ignite</h1>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white leading-none">Learn</h1>
             <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono uppercase tracking-wider">Internal Training Series</span>
           </div>
         </Link>

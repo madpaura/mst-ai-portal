@@ -23,6 +23,7 @@ export const AdminLayout: React.FC = () => {
     { path: '/admin/marketplace', label: 'Marketplace', icon: 'storefront' },
     { path: '/admin/solutions', label: 'Solutions', icon: 'dashboard' },
     { path: '/admin/analytics', label: 'Analytics', icon: 'analytics' },
+    { path: '/admin/news', label: 'News', icon: 'newspaper' },
     { path: '/admin/settings', label: 'Settings', icon: 'settings' },
   ];
 

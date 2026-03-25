@@ -40,7 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
               className={`text-sm font-medium transition-colors ${isActive('/marketplace') ? 'text-primary' : 'text-slate-500 dark:text-slate-400 hover:text-primary'}`}
               to="/marketplace"
             >
-              Forge
+              Marketplace
             </Link>
             <Link
               className={`text-sm font-medium transition-colors ${isActive('/news') ? 'text-primary' : 'text-slate-500 dark:text-slate-400 hover:text-primary'}`}
@@ -52,7 +52,7 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
               className={`text-sm font-medium transition-colors ${isActive('/ignite') ? 'text-primary' : 'text-slate-500 dark:text-slate-400 hover:text-primary'}`}
               to="/ignite"
             >
-              AI Ignite
+              Learn
             </Link>
           </div>
           <div className="flex items-center gap-4">

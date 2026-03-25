@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MST AI Portal - Analytics Report</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #1a202c;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f7fafc;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 700;
+        }
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        .section {
+            background: white;
+            margin-bottom: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+        .section-header {
+            background: #f8f9fa;
+            padding: 20px 30px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .section-header h2 {
+            margin: 0;
+            font-size: 1.5em;
+            color: #2d3748;
+        }
+        .section-content {
+            padding: 30px;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .metric-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid #4299e1;
+        }
+        .metric-card.primary { border-left-color: #4299e1; }
+        .metric-card.success { border-left-color: #48bb78; }
+        .metric-card.warning { border-left-color: #ed8936; }
+        .metric-card.danger { border-left-color: #f56565; }
+        .metric-card.purple { border-left-color: #9f7aea; }
+        .metric-card.cyan { border-left-color: #38b2ac; }
+        .metric-card.orange { border-left-color: #ed8936; }
+        .metric-card.indigo { border-left-color: #667eea; }
+        .metric-value {
+            font-size: 2em;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+        .metric-label {
+            font-size: 0.9em;
+            color: #718096;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .chart-container {
+            margin: 20px 0;
+            text-align: center;
+            position: relative;
+            height: 400px;
+        }
+        .chart-container.small {
+            height: 300px;
+        }
+        .chart-placeholder {
+            background: #f8f9fa;
+            border: 2px dashed #cbd5e0;
+            border-radius: 8px;
+            padding: 40px;
+            color: #718096;
+            font-style: italic;
+        }
+        .heatmap-grid {
+            display: grid;
+            grid-template-columns: 80px repeat(24, 1fr);
+            gap: 2px;
+            font-size: 10px;
+            margin: 20px 0;
+        }
+        .heatmap-cell {
+            aspect-ratio: 1;
+            border-radius: 2px;
+            transition: background-color 0.2s;
+        }
+        .heatmap-label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: #4a5568;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #4a5568;
+        }
+        tr:hover {
+            background: #f8f9fa;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            font-size: 0.75em;
+            font-weight: 600;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+        .badge-primary { background: #bee3f8; color: #2c5282; }
+        .badge-success { background: #c6f6d5; color: #22543d; }
+        .badge-warning { background: #feebc8; color: #7c2d12; }
+        .badge-danger { background: #fed7d7; color: #742a2a; }
+        .badge-purple { background: #e9d8fd; color: #44337a; }
+        .badge-cyan { background: #b2f5ea; color: #234e52; }
+        .badge-orange { background: #feebc8; color: #7c2d12; }
+        .badge-indigo { background: #e0e7ff; color: #3730a3; }
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            color: #718096;
+            font-size: 0.9em;
+        }
+        .no-data {
+            text-align: center;
+            color: #718096;
+            font-style: italic;
+            padding: 40px;
+        }
+        @media print {
+            body { background: white; }
+            .section { break-inside: avoid; box-shadow: none; border: 1px solid #e2e8f0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 MST AI Portal Analytics Report</h1>
+        <p>Period: {{ period_days }} days ({{ start_date }} to {{ end_date }})</p>
+        <p>Generated on {{ generated_date }}</p>
+    </div>
+
+    <!-- Overview Section -->
+    <div class="section">
+        <div class="section-header">
+            <span style="font-size: 1.5em;">📈</span>
+            <h2>Overview</h2>
+        </div>
+        <div class="section-content">
+            <div class="metrics-grid">
+                <div class="metric-card primary">
+                    <div class="metric-value">{{ overview.total_views|default(0) }}</div>
+                    <div class="metric-label">Total Views</div>
+                </div>
+                <div class="metric-card success">
+                    <div class="metric-value">{{ overview.unique_visitors|default(0) }}</div>
+                    <div class="metric-label">Unique Visitors</div>
+                </div>
+                <div class="metric-card danger">
+                    <div class="metric-value">{{ overview.total_likes|default(0) }}</div>
+                    <div class="metric-label">Total Likes</div>
+                </div>
+                <div class="metric-card warning">
+                    <div class="metric-value">{{ overview.total_downloads|default(0) }}</div>
+                    <div class="metric-label">Downloads</div>
+                </div>
+                <div class="metric-card purple">
+                    <div class="metric-value">{{ overview.total_users|default(0) }}</div>
+                    <div class="metric-label">Users</div>
+                </div>
+                <div class="metric-card cyan">
+                    <div class="metric-value">{{ overview.published_videos|default(0) }}</div>
+                    <div class="metric-label">Videos</div>
+                </div>
+                <div class="metric-card orange">
+                    <div class="metric-value">{{ overview.total_news|default(0) }}</div>
+                    <div class="metric-label">News Articles</div>
+                </div>
+                <div class="metric-card indigo">
+                    <div class="metric-value">{{ overview.total_components|default(0) }}</div>
+                    <div class="metric-label">Components</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Traffic Section -->
+    <div class="section">
+        <div class="section-header">
+            <span style="font-size: 1.5em;">🌐</span>
+            <h2>Traffic Analysis</h2>
+        </div>
+        <div class="section-content">
+            <h3>Daily Traffic</h3>
+            <div class="chart-container">
+                <canvas id="dailyTrafficChart"></canvas>
+            </div>
+
+            <h3>View by Section</h3>
+            <div class="chart-container small">
+                <canvas id="sectionViewsChart"></canvas>
+            </div>
+
+            <h3>Activity Heatmap (Day × Hour)</h3>
+            <div id="activityHeatmap" class="chart-container small">
+                <!-- Heatmap will be generated here -->
+            </div>
+
+            <h3>Traffic by Section</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Section</th>
+                        <th>Views</th>
+                        <th>Unique Visitors</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in section_traffic %}
+                    <tr>
+                        <td><span class="badge badge-primary">{{ item.section|title }}</span></td>
+                        <td>{{ item.views|default(0) }}</td>
+                        <td>{{ item.unique_visitors|default(0) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="3" class="no-data">No traffic data available</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <h3>Top Pages</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Page</th>
+                        <th>Views</th>
+                        <th>Unique Visitors</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for page in top_pages[:10] %}
+                    <tr>
+                        <td><code>{{ page.path }}</code></td>
+                        <td>{{ page.views|default(0) }}</td>
+                        <td>{{ page.unique_visitors|default(0) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="3" class="no-data">No page data available</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Videos Section -->
+    <div class="section">
+        <div class="section-header">
+            <span style="font-size: 1.5em;">🎬</span>
+            <h2>Video Analytics</h2>
+        </div>
+        <div class="section-content">
+            <div class="metrics-grid">
+                <div class="metric-card danger">
+                    <div class="metric-value">{{ video_metrics.videos|sum(attribute='like_count')|default(0) }}</div>
+                    <div class="metric-label">Total Likes</div>
+                </div>
+                <div class="metric-card cyan">
+                    <div class="metric-value">{{ "%.1f"|format(video_metrics.videos|sum(attribute='total_watched_hours')|default(0)) }}h</div>
+                    <div class="metric-label">Watch Hours</div>
+                </div>
+                <div class="metric-card success">
+                    <div class="metric-value">{{ video_metrics.videos|sum(attribute='unique_viewers')|default(0) }}</div>
+                    <div class="metric-label">Unique Viewers</div>
+                </div>
+            </div>
+
+            <h3>Daily Likes (Last {{ period_days }} days)</h3>
+            <div class="chart-container small">
+                <canvas id="dailyLikesChart"></canvas>
+            </div>
+
+            <h3>Video Performance</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Video</th>
+                        <th>Category</th>
+                        <th>Likes</th>
+                        <th>Watch Hours</th>
+                        <th>Viewers</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for video in video_metrics.videos %}
+                    <tr>
+                        <td>{{ video.title }}</td>
+                        <td><span class="badge badge-cyan">{{ video.category|title }}</span></td>
+                        <td>{{ video.like_count|default(0) }}</td>
+                        <td>{{ "%.1f"|format(video.total_watched_hours|default(0)) }}</td>
+                        <td>{{ video.unique_viewers|default(0) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="no-data">No video data available</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Marketplace Section -->
+    <div class="section">
+        <div class="section-header">
+            <span style="font-size: 1.5em;">🏪</span>
+            <h2>Marketplace Analytics</h2>
+        </div>
+        <div class="section-content">
+            <h3>Daily Installs (Last {{ period_days }} days)</h3>
+            <div class="chart-container small">
+                <canvas id="dailyInstallsChart"></canvas>
+            </div>
+
+            <h3>Component Downloads</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Component</th>
+                        <th>Type</th>
+                        <th>Total Downloads</th>
+                        <th>Recent ({{ period_days }}d)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for comp in marketplace_metrics.components %}
+                    <tr>
+                        <td>{{ comp.name }}</td>
+                        <td><span class="badge badge-warning">{{ comp.component_type|title }}</span></td>
+                        <td>{{ comp.downloads|default(0) }}</td>
+                        <td>{{ comp.recent_installs|default(0) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="no-data">No marketplace data available</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- News Section -->
+    <div class="section">
+        <div class="section-header">
+            <span style="font-size: 1.5em;">📰</span>
+            <h2>News Analytics</h2>
+        </div>
+        <div class="section-content">
+            <h3>Article Performance</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Article</th>
+                        <th>Badge</th>
+                        <th>Published</th>
+                        <th>Visits</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for article in news_metrics.articles %}
+                    <tr>
+                        <td>{{ article.title }}</td>
+                        <td>
+                            {% if article.badge %}
+                                <span class="badge badge-purple">{{ article.badge|title }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ article.published_at[:10] if article.published_at else '—' }}</td>
+                        <td>{{ article.visit_count|default(0) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="no-data">No news data available</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Generated by MST AI Portal Analytics System</p>
+        <p>Data refreshed in real-time • Export generated on {{ generated_date }}</p>
+    </div>
+
+    <script>
+        // Chart configuration
+        Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        Chart.defaults.color = '#4a5568';
+        
+        // Daily Traffic Chart
+        const dailyTrafficCtx = document.getElementById('dailyTrafficChart');
+        if (dailyTrafficCtx) {
+            const trafficData = {{ traffic|tojson }};
+            new Chart(dailyTrafficCtx, {
+                type: 'line',
+                data: {
+                    labels: trafficData.map(d => d.day),
+                    datasets: [{
+                        label: 'Views',
+                        data: trafficData.map(d => d.views),
+                        borderColor: '#4299e1',
+                        backgroundColor: 'rgba(66, 153, 225, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }, {
+                        label: 'Unique Visitors',
+                        data: trafficData.map(d => d.unique_visitors),
+                        borderColor: '#48bb78',
+                        backgroundColor: 'rgba(72, 187, 120, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Daily Traffic Overview'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        // View by Section Chart
+        const sectionViewsCtx = document.getElementById('sectionViewsChart');
+        if (sectionViewsCtx) {
+            const sectionData = {{ section_traffic|tojson }};
+            new Chart(sectionViewsCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: sectionData.map(d => d.section.charAt(0).toUpperCase() + d.section.slice(1)),
+                    datasets: [{
+                        data: sectionData.map(d => d.views),
+                        backgroundColor: [
+                            '#4299e1',
+                            '#48bb78',
+                            '#ed8936',
+                            '#f56565',
+                            '#9f7aea',
+                            '#38b2ac'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Views by Section'
+                        },
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        // Daily Likes Chart
+        const dailyLikesCtx = document.getElementById('dailyLikesChart');
+        if (dailyLikesCtx) {
+            const likesData = {{ video_metrics.daily_likes|tojson }};
+            new Chart(dailyLikesCtx, {
+                type: 'bar',
+                data: {
+                    labels: likesData.map(d => d.day),
+                    datasets: [{
+                        label: 'Daily Likes',
+                        data: likesData.map(d => d.likes),
+                        backgroundColor: '#f56565',
+                        borderColor: '#e53e3e',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Daily Video Likes'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Daily Installs Chart
+        const dailyInstallsCtx = document.getElementById('dailyInstallsChart');
+        if (dailyInstallsCtx) {
+            const installsData = {{ marketplace_metrics.daily_installs|tojson }};
+            new Chart(dailyInstallsCtx, {
+                type: 'bar',
+                data: {
+                    labels: installsData.map(d => d.day),
+                    datasets: [{
+                        label: 'Daily Installs',
+                        data: installsData.map(d => d.installs),
+                        backgroundColor: '#9f7aea',
+                        borderColor: '#805ad5',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Daily Component Installs'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Activity Heatmap
+        const heatmapContainer = document.getElementById('activityHeatmap');
+        if (heatmapContainer) {
+            const heatmapData = {{ heatmap_data|tojson }};
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const hours = Array.from({length: 24}, (_, i) => i);
+            
+            // Create a lookup map for heatmap data
+            const dataMap = {};
+            let maxViews = 0;
+            heatmapData.forEach(d => {
+                const key = `${d.dow}-${d.hour}`;
+                dataMap[key] = d.views;
+                if (d.views > maxViews) maxViews = d.views;
+            });
+            
+            let heatmapHTML = '<div class="heatmap-grid">';
+            heatmapHTML += '<div></div>'; // Empty corner
+            hours.forEach(h => {
+                heatmapHTML += `<div class="heatmap-label" style="font-size: 9px;">${h}</div>`;
+            });
+            
+            days.forEach((day, dayIndex) => {
+                heatmapHTML += `<div class="heatmap-label">${day}</div>`;
+                hours.forEach(hour => {
+                    const key = `${dayIndex}-${hour}`;
+                    const views = dataMap[key] || 0;
+                    const intensity = maxViews > 0 ? views / maxViews : 0;
+                    const color = intensity > 0.8 ? '#f56565' : 
+                                  intensity > 0.6 ? '#ed8936' : 
+                                  intensity > 0.4 ? '#ecc94b' : 
+                                  intensity > 0.2 ? '#48bb78' : '#e2e8f0';
+                    heatmapHTML += `<div class="heatmap-cell" style="background-color: ${color};" title="${day} ${hour}:00 - ${views} views"></div>`;
+                });
+            });
+            heatmapHTML += '</div>';
+            
+            heatmapContainer.innerHTML = heatmapHTML;
+        }
+    </script>
+</body>
+</html>

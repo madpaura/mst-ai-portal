@@ -180,20 +180,89 @@ export const AdminAnalytics: React.FC = () => {
           </h1>
           <p className="text-sm text-slate-400 mt-1">Complete metrics across all portal sections</p>
         </div>
-        <div className="flex items-center gap-2 bg-slate-800/50 border border-white/10 rounded-lg p-1">
-          {PERIOD_OPTIONS.map(opt => (
+        <div className="flex items-center gap-3">
+          {/* Download buttons */}
+          <div className="flex items-center gap-1 bg-slate-800/50 border border-white/10 rounded-lg p-1">
             <button
-              key={opt.value}
-              onClick={() => setDays(opt.value)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                days === opt.value
-                  ? 'bg-primary text-white'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-              }`}
+              onClick={() => {
+                const token = localStorage.getItem('auth_token');
+                const url = `${import.meta.env.VITE_API_URL || ''}/admin/analytics/export/html?days=${days}`;
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `analytics_report_${new Date().toISOString().split('T')[0]}.html`;
+                if (token) {
+                  const headers = new Headers();
+                  headers.append('Authorization', `Bearer ${token}`);
+                  fetch(url, { headers })
+                    .then(res => res.text())
+                    .then(html => {
+                      const blob = new Blob([html], { type: 'text/html' });
+                      const url = URL.createObjectURL(blob);
+                      link.href = url;
+                      link.click();
+                      URL.revokeObjectURL(url);
+                    })
+                    .catch(() => {
+                      window.open(url, '_blank');
+                    });
+                } else {
+                  window.open(url, '_blank');
+                }
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md transition-all text-slate-400 hover:text-white hover:bg-slate-700/50"
+              title="Download as HTML"
             >
-              {opt.label}
+              <span className="material-symbols-outlined text-base">code</span>
+              HTML
             </button>
-          ))}
+            <button
+              onClick={() => {
+                const token = localStorage.getItem('auth_token');
+                const url = `${import.meta.env.VITE_API_URL || ''}/admin/analytics/export/pdf?days=${days}`;
+                if (token) {
+                  const headers = new Headers();
+                  headers.append('Authorization', `Bearer ${token}`);
+                  fetch(url, { headers })
+                    .then(res => res.blob())
+                    .then(blob => {
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = `analytics_report_${new Date().toISOString().split('T')[0]}.pdf`;
+                      link.click();
+                      URL.revokeObjectURL(url);
+                    })
+                    .catch(() => {
+                      window.open(url, '_blank');
+                    });
+                } else {
+                  window.open(url, '_blank');
+                }
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md transition-all text-slate-400 hover:text-white hover:bg-slate-700/50"
+              title="Download as PDF"
+            >
+              <span className="material-symbols-outlined text-base">picture_as_pdf</span>
+              PDF
+            </button>
+          </div>
+          
+          {/* Period selector */}
+          <div className="flex items-center gap-2 bg-slate-800/50 border border-white/10 rounded-lg p-1">
+            {PERIOD_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setDays(opt.value)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  days === opt.value
+                    ? 'bg-primary text-white'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

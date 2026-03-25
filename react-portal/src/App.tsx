@@ -12,6 +12,7 @@ import { AdminMarketplace } from './pages/AdminMarketplace';
 import { AdminSolutions } from './pages/AdminSolutions';
 import { AdminSettings } from './pages/AdminSettings';
 import { AdminAnalytics } from './pages/AdminAnalytics';
+import { AdminNews } from './pages/AdminNews';
 import { SolutionDetail } from './pages/SolutionDetail';
 import { News } from './pages/News';
 import { NewsArticle } from './pages/NewsArticle';
@@ -41,6 +42,7 @@ function App() {
             <Route path="marketplace" element={<AdminMarketplace />} />
             <Route path="solutions" element={<AdminSolutions />} />
             <Route path="analytics" element={<AdminAnalytics />} />
+            <Route path="news" element={<AdminNews />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
 
