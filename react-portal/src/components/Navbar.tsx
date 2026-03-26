@@ -27,7 +27,7 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
             <div className="text-primary">
               <span className="material-symbols-outlined text-3xl font-bold">memory</span>
             </div>
-            <Link to="/" className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">MST AI Portal</Link>
+            <Link to="/" className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">MST AI</Link>
           </div>
           <div className="hidden md:flex items-center gap-10">
             <Link

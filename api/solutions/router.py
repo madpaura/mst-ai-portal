@@ -1,11 +1,40 @@
+import json
 from fastapi import APIRouter
 
 from solutions.schemas import CapabilityResponse, AnnouncementResponse, ContactRequest
 from solutions.admin_schemas import SolutionCardResponse, NewsFeedResponse
+from video.schemas import VideoResponse
 from database import get_db
 
 router = APIRouter()
 
+
+@router.get("/solutions/landing_page")
+async def get_landing_page():
+    db = await get_db()
+    row = await db.fetchrow("SELECT value FROM app_settings WHERE key = 'landing_page'")
+    config = json.loads(row["value"]) if row else {"video_id": None, "highlights": []}
+    
+    video = None
+    if config.get("video_id"):
+        try:
+            v_row = await db.fetchrow("SELECT * FROM videos WHERE id = $1 AND is_active = true", config["video_id"])
+            if v_row:
+                video = VideoResponse(
+                    id=str(v_row["id"]), course_id=str(v_row["course_id"]) if v_row["course_id"] else None,
+                    title=v_row["title"], slug=v_row["slug"], description=v_row.get("description"),
+                    category=v_row["category"], duration_s=v_row.get("duration_s"),
+                    status=v_row["status"], hls_path=v_row.get("hls_path"),
+                    thumbnail=v_row.get("thumbnail"), is_published=v_row["is_published"],
+                    sort_order=v_row["sort_order"], created_at=v_row["created_at"],
+                )
+        except Exception:
+            pass
+
+    return {
+        "video": video,
+        "highlights": config.get("highlights", [])
+    }
 
 @router.get("/solutions/capabilities", response_model=list[CapabilityResponse])
 async def list_capabilities():

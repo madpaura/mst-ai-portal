@@ -11,9 +11,10 @@ export const Footer: React.FC = () => {
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
         <div className="flex items-center gap-3 opacity-50">
           <span className="material-symbols-outlined text-xl">memory</span>
-          <span className="text-sm font-bold tracking-tight">MST AI Suite</span>
+          <span className="text-sm font-bold tracking-tight">MST AI</span>
         </div>
-        <div className="flex gap-8 text-xs font-semibold text-slate-500 uppercase tracking-widest">
+        {/* make below hidden  */}
+        <div className="flex gap-8 text-xs font-semibold text-slate-500 uppercase tracking-widest hidden">
           <button onClick={() => handleFooterLink('System Status')} className="hover:text-primary transition-colors">
             System Status
           </button>
@@ -25,7 +26,7 @@ export const Footer: React.FC = () => {
           </button>
         </div>
         <p className="text-slate-500 dark:text-slate-600 text-xs">
-          &copy; 2024 MST Corp. Internal Use Only.
+          &copy; 2026 MST. Internal Use Only.
         </p>
       </div>
     </footer>

@@ -35,7 +35,7 @@ export const AdminLayout: React.FC = () => {
             <div className="w-8 h-8 rounded-lg bg-primary/20 border border-primary/30 flex items-center justify-center">
               <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
             </div>
-            <span className="text-white font-bold text-sm">MST AI Portal</span>
+            <span className="text-white font-bold text-sm">MST AI Admin</span>
           </Link>
 
           <div className="h-6 w-px bg-white/10" />
@@ -47,11 +47,10 @@ export const AdminLayout: React.FC = () => {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  location.pathname.startsWith(item.path)
-                    ? 'bg-primary/10 text-white border border-primary/20'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-                }`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${location.pathname.startsWith(item.path)
+                  ? 'bg-primary/10 text-white border border-primary/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                  }`}
               >
                 <span className="material-symbols-outlined text-base">{item.icon}</span>
                 {item.label}

@@ -4,14 +4,9 @@ import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { api } from '../api/client';
 import { usePageView } from '../hooks/usePageView';
+import { HlsPlayer } from '../components/HlsPlayer';
 
-interface Announcement {
-  id: string;
-  title: string;
-  content: string | null;
-  badge: string | null;
-  created_at: string;
-}
+
 
 interface SolutionCard {
   id: string;
@@ -26,40 +21,33 @@ interface SolutionCard {
   sort_order: number;
 }
 
-const WORKFLOW_STEPS = [
-  {
-    step: 1,
-    title: 'Describe the spec',
-    description: 'Provide natural language or architectural block diagrams to initialize the agent.',
-  },
-  {
-    step: 2,
-    title: 'Agent generates RTL',
-    description: 'The AI constructs syntactically correct and vendor-compliant Verilog/SystemVerilog.',
-  },
-  {
-    step: 3,
-    title: 'Real-time validation',
-    description: 'Instant syntax checks and logical verification against existing design constraints.',
-  },
-];
+interface LandingFeature {
+  title: string;
+  description: string;
+}
+
+interface LandingConfig {
+  video: { hls_path: string | null } | null;
+  highlights: LandingFeature[];
+}
 
 export const Solutions: React.FC = () => {
   usePageView('/');
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const [solutionCards, setSolutionCards] = useState<SolutionCard[]>([]);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
+  const [landingConfig, setLandingConfig] = useState<LandingConfig | null>(null);
+
   useEffect(() => {
-    api.get<Announcement[]>('/api/solutions/announcements')
-      .then((data) => { if (data.length > 0) setAnnouncement(data[0]); })
-      .catch(() => {});
     api.get<SolutionCard[]>('/api/solutions/cards')
       .then(setSolutionCards)
-      .catch(() => {});
+      .catch(() => { });
+    api.get<LandingConfig>('/api/solutions/landing_page')
+      .then(setLandingConfig)
+      .catch(() => { });
   }, []);
 
   const updateScrollButtons = () => {
@@ -98,49 +86,36 @@ export const Solutions: React.FC = () => {
 
       <main className="relative pt-16">
         {/* Hero Section */}
-        <section className="relative min-h-[85vh] flex flex-col items-center justify-center px-6 overflow-hidden circuit-bg">
+        <section className="relative py-10 flex flex-col items-center justify-center px-6 overflow-hidden circuit-bg pt-12">
           <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-[120px]" />
           <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-primary/5 rounded-full blur-[100px]" />
 
-          <div className="relative z-10 text-center max-w-4xl mx-auto">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-primary/20 bg-primary/5 mb-8">
-              <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
-              <span className="text-[10px] uppercase tracking-widest font-bold text-primary">{announcement?.badge ? `${announcement.badge} ${announcement.title}` : 'v2.4 Internal Release'}</span>
-            </div>
-
-            <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight text-slate-900 dark:text-white mb-6 leading-[1.1]">
-              The Next Era of <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-400 dark:glow-text">
-                Semiconductor
-              </span>{' '}
-              Development
+          <div className="relative z-10 text-center max-w-2xl mx-auto">
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight text-slate-900 dark:text-white mb-4 leading-[1.1]">
+              Transform your workflows <br />
+              with <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-400 dark:glow-text">AI Assisted</span> solutions
             </h1>
 
-            <p className="text-lg md:text-xl text-slate-500 dark:text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed font-light">
-              Accelerate RTL design, automate verification, and optimize performance with our integrated AI suite
-              tailored for hardware engineers.
+            <p className="text-base md:text-lg text-slate-500 dark:text-slate-400 max-w-xl mx-auto mb-6 leading-relaxed font-light">
+              Accelerate RTL design, automate verification, auto failure analysis, AI Assisted code review, increase code coverage with Auto UT generator.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
                 onClick={handleGetStarted}
-                className="w-full sm:w-auto px-10 py-4 bg-primary text-white font-bold rounded-xl text-lg hover:scale-105 active:scale-95 transition-all shadow-xl shadow-primary/20"
+                className="w-full sm:w-auto px-6 py-2.5 bg-primary text-white font-bold rounded-lg text-base hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/20"
               >
                 Get Started
               </button>
               <button
                 onClick={handleViewDocs}
-                className="w-full sm:w-auto px-10 py-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/50 dark:hover:bg-slate-800 text-slate-900 dark:text-white font-bold rounded-xl text-lg border border-slate-300 dark:border-slate-700 transition-all"
+                className="w-full sm:w-auto px-6 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/50 dark:hover:bg-slate-800 text-slate-900 dark:text-white font-bold rounded-lg text-base border border-slate-300 dark:border-slate-700 transition-all"
               >
                 View Docs
               </button>
             </div>
           </div>
 
-          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-slate-500">
-            <span className="text-[10px] uppercase tracking-widest font-semibold">Features</span>
-            <span className="material-symbols-outlined animate-bounce">keyboard_double_arrow_down</span>
-          </div>
         </section>
 
         {/* Solution Cards — scrollable up to 8 */}
@@ -219,70 +194,77 @@ export const Solutions: React.FC = () => {
                 <div className="h-1 w-20 bg-primary rounded-full" />
               </div>
 
-              <div className="relative group">
+              <div className="relative group min-h-[300px] w-full flex">
                 <div className="absolute -inset-1 bg-gradient-to-r from-primary/50 to-blue-500/50 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200" />
-                <div className="relative bg-black rounded-2xl overflow-hidden neon-border-glow aspect-video flex items-center justify-center">
-                  <div className="absolute inset-0 bg-slate-900 flex flex-col">
-                    {/* IDE Header */}
-                    <div className="h-8 bg-slate-800 border-b border-white/5 flex items-center px-4 gap-2">
-                      <div className="w-2 h-2 rounded-full bg-red-500" />
-                      <div className="w-2 h-2 rounded-full bg-yellow-500" />
-                      <div className="w-2 h-2 rounded-full bg-green-500" />
-                      <span className="text-[10px] text-slate-400 ml-4 font-mono">top_module.v — CodeAgent IDE</span>
-                    </div>
+                <div className="relative bg-black rounded-2xl overflow-hidden neon-border-glow aspect-video flex-1 flex items-center justify-center">
+                  {landingConfig?.video?.hls_path ? (
+                    <HlsPlayer
+                      hlsPath={landingConfig.video.hls_path}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 bg-slate-900 flex flex-col">
+                      {/* IDE Header */}
+                      <div className="h-8 bg-slate-800 border-b border-white/5 flex items-center px-4 gap-2">
+                        <div className="w-2 h-2 rounded-full bg-red-500" />
+                        <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                        <div className="w-2 h-2 rounded-full bg-green-500" />
+                        <span className="text-[10px] text-slate-400 ml-4 font-mono">top_module.v — CodeAgent IDE</span>
+                      </div>
 
-                    {/* Code Content */}
-                    <div className="flex-1 p-6 font-mono text-sm overflow-hidden">
-                      <div className="flex gap-4">
-                        <span className="text-slate-600 select-none">1</span>
-                        <span className="text-blue-400">module</span>
-                        <span className="text-white">top_module(</span>
+                      {/* Code Content */}
+                      <div className="flex-1 p-6 font-mono text-sm overflow-hidden">
+                        <div className="flex gap-4">
+                          <span className="text-slate-600 select-none">1</span>
+                          <span className="text-blue-400">module</span>
+                          <span className="text-white">top_module(</span>
+                        </div>
+                        <div className="flex gap-4">
+                          <span className="text-slate-600 select-none">2</span>
+                          <span className="text-slate-400 ml-4">input wire clk,</span>
+                        </div>
+                        <div className="flex gap-4">
+                          <span className="text-slate-600 select-none">3</span>
+                          <span className="text-slate-400 ml-4">input wire rst_n,</span>
+                        </div>
+                        <div className="flex gap-4 items-center animate-pulse">
+                          <span className="text-slate-600 select-none">4</span>
+                          <span className="text-primary bg-primary/10 px-1 rounded border border-primary/20">
+                            Agent: Generating RTL logic for AXI Bridge...
+                          </span>
+                        </div>
+                        <div className="flex gap-4 mt-2">
+                          <span className="text-slate-600 select-none">5</span>
+                          <span className="text-slate-400 ml-4">reg [31:0] data_reg;</span>
+                        </div>
+                        <div className="flex gap-4">
+                          <span className="text-slate-600 select-none">6</span>
+                          <span className="text-slate-400 ml-4">always @(posedge clk or negedge rst_n) begin</span>
+                        </div>
+                        <div className="flex gap-4">
+                          <span className="text-slate-600 select-none">7</span>
+                          <span className="text-slate-400 ml-8">if (!rst_n) data_reg &lt;= 32&apos;h0;</span>
+                        </div>
                       </div>
-                      <div className="flex gap-4">
-                        <span className="text-slate-600 select-none">2</span>
-                        <span className="text-slate-400 ml-4">input wire clk,</span>
-                      </div>
-                      <div className="flex gap-4">
-                        <span className="text-slate-600 select-none">3</span>
-                        <span className="text-slate-400 ml-4">input wire rst_n,</span>
-                      </div>
-                      <div className="flex gap-4 items-center animate-pulse">
-                        <span className="text-slate-600 select-none">4</span>
-                        <span className="text-primary bg-primary/10 px-1 rounded border border-primary/20">
-                          Agent: Generating RTL logic for AXI Bridge...
-                        </span>
-                      </div>
-                      <div className="flex gap-4 mt-2">
-                        <span className="text-slate-600 select-none">5</span>
-                        <span className="text-slate-400 ml-4">reg [31:0] data_reg;</span>
-                      </div>
-                      <div className="flex gap-4">
-                        <span className="text-slate-600 select-none">6</span>
-                        <span className="text-slate-400 ml-4">always @(posedge clk or negedge rst_n) begin</span>
-                      </div>
-                      <div className="flex gap-4">
-                        <span className="text-slate-600 select-none">7</span>
-                        <span className="text-slate-400 ml-8">if (!rst_n) data_reg &lt;= 32&apos;h0;</span>
-                      </div>
-                    </div>
 
-                    {/* Video Controls */}
-                    <div className="h-12 bg-slate-900/80 backdrop-blur-sm border-t border-white/5 flex items-center px-6 gap-6">
-                      <button onClick={handlePlayVideo} className="text-white/80 cursor-pointer hover:text-primary transition-colors">
-                        <span className="material-symbols-outlined">play_arrow</span>
-                      </button>
-                      <div className="flex-1 h-1 bg-slate-700 rounded-full relative">
-                        <div className="absolute top-0 left-0 w-1/3 h-full bg-primary rounded-full shadow-[0_0_8px_rgba(37,140,244,0.6)]" />
+                      {/* Video Controls */}
+                      <div className="h-12 bg-slate-900/80 backdrop-blur-sm border-t border-white/5 flex items-center px-6 gap-6">
+                        <button onClick={handlePlayVideo} className="text-white/80 cursor-pointer hover:text-primary transition-colors">
+                          <span className="material-symbols-outlined">play_arrow</span>
+                        </button>
+                        <div className="flex-1 h-1 bg-slate-700 rounded-full relative">
+                          <div className="absolute top-0 left-0 w-1/3 h-full bg-primary rounded-full shadow-[0_0_8px_rgba(37,140,244,0.6)]" />
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-mono">01:24 / 04:15</span>
+                        <button onClick={() => console.log('[Solutions] Settings clicked')} className="text-white/80 cursor-pointer hover:text-primary transition-colors">
+                          <span className="material-symbols-outlined">settings</span>
+                        </button>
+                        <button onClick={() => console.log('[Solutions] Fullscreen clicked')} className="text-white/80 cursor-pointer hover:text-primary transition-colors">
+                          <span className="material-symbols-outlined">fullscreen</span>
+                        </button>
                       </div>
-                      <span className="text-[10px] text-slate-400 font-mono">01:24 / 04:15</span>
-                      <button onClick={() => console.log('[Solutions] Settings clicked')} className="text-white/80 cursor-pointer hover:text-primary transition-colors">
-                        <span className="material-symbols-outlined">settings</span>
-                      </button>
-                      <button onClick={() => console.log('[Solutions] Fullscreen clicked')} className="text-white/80 cursor-pointer hover:text-primary transition-colors">
-                        <span className="material-symbols-outlined">fullscreen</span>
-                      </button>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -292,14 +274,18 @@ export const Solutions: React.FC = () => {
               <div className="glass-card p-8 rounded-2xl border-l-4 border-l-primary">
                 <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6">Workflow Highlights</h3>
                 <ul className="space-y-6">
-                  {WORKFLOW_STEPS.map((ws) => (
-                    <li key={ws.step} className="flex items-start gap-4">
+                  {(landingConfig?.highlights?.length ? landingConfig.highlights : [
+                    { title: 'Describe the spec', description: 'Provide natural language or architectural block diagrams to initialize the agent.' },
+                    { title: 'Agent generates RTL', description: 'The AI constructs syntactically correct and vendor-compliant Verilog/SystemVerilog.' },
+                    { title: 'Real-time validation', description: 'Instant syntax checks and logical verification against existing design constraints.' }
+                  ]).map((h, index) => (
+                    <li key={index} className="flex items-start gap-4">
                       <span className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center text-primary font-bold text-sm">
-                        {ws.step}
+                        {index + 1}
                       </span>
                       <div>
-                        <h4 className="text-slate-900 dark:text-white font-semibold text-base">{ws.title}</h4>
-                        <p className="text-slate-500 dark:text-slate-400 text-[15px] mt-1.5 leading-relaxed">{ws.description}</p>
+                        <h4 className="text-slate-900 dark:text-white font-semibold text-base">{h.title}</h4>
+                        <p className="text-slate-500 dark:text-slate-400 text-[15px] mt-1.5 leading-relaxed">{h.description}</p>
                       </div>
                     </li>
                   ))}
@@ -324,9 +310,6 @@ export const Solutions: React.FC = () => {
               <span className="material-symbols-outlined text-[120px] text-primary rotate-12">settings_input_component</span>
             </div>
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-6">Ready to transform your workflow?</h2>
-            <p className="text-slate-500 dark:text-slate-400 mb-10 max-w-xl mx-auto">
-              Join hundreds of internal engineers already using MST AI to deliver faster silicon.
-            </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
               <button
                 onClick={handleEnterDashboard}
@@ -339,7 +322,7 @@ export const Solutions: React.FC = () => {
                 onClick={handleSpeakWithTeam}
                 className="text-primary font-bold hover:underline"
               >
-                Speak with the tools team
+                Talk to Task Force Team
               </button>
             </div>
           </div>

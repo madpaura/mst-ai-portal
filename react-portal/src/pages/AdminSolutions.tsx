@@ -51,6 +51,21 @@ interface NewsForm {
   badge: string;
 }
 
+interface LandingFeature {
+  title: string;
+  description: string;
+}
+
+interface LandingConfig {
+  video_id: string | null;
+  highlights: LandingFeature[];
+}
+
+interface Video {
+  id: string;
+  title: string;
+}
+
 
 const EMPTY_CARD: CardForm = {
   title: '', subtitle: '', description: '', long_description: '',
@@ -78,9 +93,14 @@ const COLOR_OPTIONS = [
 ];
 
 export const AdminSolutions: React.FC = () => {
-  const [tab, setTab] = useState<'cards' | 'news'>('cards');
+  const [tab, setTab] = useState<'cards' | 'news' | 'landing'>('cards');
   const [cards, setCards] = useState<SolutionCard[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
+  const [videos, setVideos] = useState<Video[]>([]);
+  
+  const [landingConfig, setLandingConfig] = useState<LandingConfig>({ video_id: null, highlights: [] });
+  const [savingLanding, setSavingLanding] = useState(false);
+  
   const [loading, setLoading] = useState(true);
 
   // Card form state
@@ -118,9 +138,28 @@ export const AdminSolutions: React.FC = () => {
     }
   }, []);
 
+  const fetchLandingConfig = useCallback(async () => {
+    try {
+      const vids = await api.get<Video[]>('/admin/videos');
+      setVideos(vids);
+      const conf = await api.get<LandingConfig | null>('/settings/landing_page');
+      if (conf) setLandingConfig(conf);
+      else setLandingConfig({
+        video_id: null,
+        highlights: [
+          { title: 'Describe the spec', description: 'Provide natural language or architectural block diagrams to initialize the agent.' },
+          { title: 'Agent generates RTL', description: 'The AI constructs syntactically correct and vendor-compliant Verilog/SystemVerilog.' },
+          { title: 'Real-time validation', description: 'Instant syntax checks and logical verification against existing design constraints.' },
+        ],
+      });
+    } catch (err: any) {
+      console.warn('Failed to load setting', err);
+    }
+  }, []);
+
   useEffect(() => {
-    Promise.all([fetchCards(), fetchNews()]).finally(() => setLoading(false));
-  }, [fetchCards, fetchNews]);
+    Promise.all([fetchCards(), fetchNews(), fetchLandingConfig()]).finally(() => setLoading(false));
+  }, [fetchCards, fetchNews, fetchLandingConfig]);
 
   // ── Card handlers ──────────────────────────────────────
   const openCreateCard = () => {
@@ -244,6 +283,18 @@ export const AdminSolutions: React.FC = () => {
     }
   };
 
+  const handleSaveLanding = async () => {
+    setSavingLanding(true);
+    try {
+      await api.put('/settings/admin/landing_page', { value: landingConfig });
+      showMsg('success', 'Landing page settings saved');
+    } catch (err: any) {
+      showMsg('error', err.message);
+    } finally {
+      setSavingLanding(false);
+    }
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center h-full text-slate-400 p-20">Loading...</div>;
   }
@@ -279,6 +330,14 @@ export const AdminSolutions: React.FC = () => {
           }`}
         >
           News Feed ({news.length})
+        </button>
+        <button
+          onClick={() => setTab('landing')}
+          className={`text-sm font-bold pb-2 border-b-2 transition-all ${
+            tab === 'landing' ? 'text-white border-primary' : 'text-slate-400 border-transparent hover:text-white'
+          }`}
+        >
+          Landing Page Settings
         </button>
       </div>
 
@@ -417,6 +476,77 @@ export const AdminSolutions: React.FC = () => {
                 )}
               </tbody>
             </table>
+          </div>
+        </>
+      )}
+
+      {/* ── LANDING PAGE TAB ──────────────────────────── */}
+      {tab === 'landing' && (
+        <>
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-xl font-bold text-white">Landing Page Setup</h1>
+              <p className="text-sm text-slate-400 mt-1">Configure the "See it in Action" section to showcase dynamic videos and workflows.</p>
+            </div>
+            <button onClick={handleSaveLanding} disabled={savingLanding} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-bold rounded-lg transition-colors">
+              <span className="material-symbols-outlined text-sm">save</span>
+              {savingLanding ? 'Saving...' : 'Save Settings'}
+            </button>
+          </div>
+
+          <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/5 p-6 mb-8 max-w-3xl">
+            <h2 className="text-lg font-bold text-white mb-4">Featured Video</h2>
+            <div className="mb-6">
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Select Video</label>
+              <select
+                value={landingConfig.video_id || ''}
+                onChange={(e) => setLandingConfig(c => ({ ...c, video_id: e.target.value || null }))}
+                className="w-full px-4 py-3 rounded-lg bg-slate-900 border border-white/10 text-white focus:border-primary outline-none"
+              >
+                <option value="">— Placeholder IDE Animation —</option>
+                {videos.map(v => <option key={v.id} value={v.id}>{v.title}</option>)}
+              </select>
+              <p className="text-xs text-slate-500 mt-2">If no video is selected, the page will fall back to the placeholder CLI animation.</p>
+            </div>
+
+            <h2 className="text-lg font-bold text-white mb-4 mt-8">Workflow Highlights</h2>
+            <div className="space-y-4">
+              {landingConfig.highlights.map((h, i) => (
+                <div key={i} className="flex flex-col gap-3 p-4 bg-slate-900 rounded-lg border border-white/5 relative group">
+                  <button onClick={() => setLandingConfig(c => ({ ...c, highlights: c.highlights.filter((_, idx) => idx !== i) }))} className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="material-symbols-outlined text-[14px]">close</span>
+                  </button>
+                  <label className="text-xs font-bold text-slate-400 uppercase">Highlight {i + 1}</label>
+                  <input
+                    value={h.title}
+                    placeholder="e.g. Describe the spec"
+                    onChange={(e) => setLandingConfig(c => {
+                      const nh = [...c.highlights];
+                      nh[i].title = e.target.value;
+                      return { ...c, highlights: nh };
+                    })}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                  />
+                  <textarea
+                    value={h.description}
+                    placeholder="Brief description of this workflow step..."
+                    onChange={(e) => setLandingConfig(c => {
+                      const nh = [...c.highlights];
+                      nh[i].description = e.target.value;
+                      return { ...c, highlights: nh };
+                    })}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-primary outline-none resize-none"
+                    rows={2}
+                  />
+                </div>
+              ))}
+              <button
+                onClick={() => setLandingConfig(c => ({ ...c, highlights: [...c.highlights, { title: '', description: '' }] }))}
+                className="w-full py-3 rounded-lg border-2 border-dashed border-white/10 text-slate-400 hover:text-white hover:border-white/20 transition-all text-sm font-bold flex items-center justify-center gap-2"
+              >
+                <span className="material-symbols-outlined text-sm">add</span> Add New Highlight
+              </button>
+            </div>
           </div>
         </>
       )}

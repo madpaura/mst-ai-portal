@@ -34,7 +34,7 @@ export const Login: React.FC = () => {
               <div className="w-10 h-10 rounded-lg bg-primary/20 border border-primary/30 flex items-center justify-center">
                 <span className="material-symbols-outlined text-primary text-xl">smart_toy</span>
               </div>
-              <span className="text-xl font-bold text-slate-900 dark:text-white">MST AI Portal</span>
+              <span className="text-xl font-bold text-slate-900 dark:text-white">MST AI</span>
             </div>
             <p className="text-slate-500 dark:text-slate-400 text-sm">Sign in to access the admin panel</p>
           </div>
