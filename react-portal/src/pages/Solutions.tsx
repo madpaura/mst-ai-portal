@@ -97,7 +97,7 @@ export const Solutions: React.FC = () => {
             </h1>
 
             <p className="text-base md:text-lg text-slate-500 dark:text-slate-400 max-w-xl mx-auto mb-6 leading-relaxed font-light">
-              Accelerate RTL design, automate verification, auto failure analysis, AI Assisted code review, increase code coverage with Auto UT generator.
+              Accelerate RTL design, automate verification and failure analysis, enhance code reviews with AI assistance, and maximize coverage through automatic unit test generation.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
