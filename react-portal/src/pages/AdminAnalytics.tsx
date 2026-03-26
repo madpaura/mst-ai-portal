@@ -4,6 +4,7 @@ import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
+import html2pdf from 'html2pdf.js';
 
 // ── Types ────────────────────────────────────────────────
 
@@ -145,6 +146,67 @@ export const AdminAnalytics: React.FC = () => {
     ]).finally(() => setLoading(false));
   }, [days]);
 
+  const [isExporting, setIsExporting] = useState(false);
+
+  const exportToPdf = () => {
+    setIsExporting(true);
+    setTimeout(() => {
+      const el = document.getElementById('analytics-content');
+      if (!el) {
+        setIsExporting(false);
+        return;
+      }
+      const opt = {
+        margin:       0.5,
+        filename:     `analytics-export-all-${days}d.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, backgroundColor: '#0f172a' },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' },
+        pagebreak:    { mode: ['css', 'legacy'], avoid: ['.chart-card', '.stat-card'] }
+      };
+      html2pdf().from(el).set(opt).save().then(() => setIsExporting(false));
+    }, 800); // give recharts time to render all SVGs
+  };
+
+  const exportToHtml = () => {
+    setIsExporting(true);
+    setTimeout(() => {
+      const el = document.getElementById('analytics-content');
+      if (!el) {
+        setIsExporting(false);
+        return;
+      }
+      const htmlCode = `
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Analytics Export</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+    <style>
+      body { background-color: #0f172a; color: white; font-family: sans-serif; }
+      .chart-card { page-break-inside: avoid; margin-bottom: 2rem; }
+    </style>
+  </head>
+  <body class="p-8">
+    <div class="max-w-[1400px] mx-auto">
+      <h1 class="text-3xl font-bold mb-6 capitalize">Full Analytics Report (${days} Days)</h1>
+      ${el.innerHTML}
+    </div>
+  </body>
+</html>`;
+      const blob = new Blob([htmlCode], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `analytics-export-all-${days}d.html`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setIsExporting(false);
+    }, 800);
+  };
+
   const chartTraffic = useMemo(() =>
     traffic.map(t => ({ ...t, day: fmtDate(t.day) })),
   [traffic]);
@@ -180,20 +242,31 @@ export const AdminAnalytics: React.FC = () => {
           </h1>
           <p className="text-sm text-slate-400 mt-1">Complete metrics across all portal sections</p>
         </div>
-        <div className="flex items-center gap-2 bg-slate-800/50 border border-white/10 rounded-lg p-1">
-          {PERIOD_OPTIONS.map(opt => (
-            <button
-              key={opt.value}
-              onClick={() => setDays(opt.value)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                days === opt.value
-                  ? 'bg-primary text-white'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-              }`}
-            >
-              {opt.label}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <button onClick={exportToHtml} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-white/10 flex items-center gap-1.5 transition-colors">
+              <span className="material-symbols-outlined text-sm">html</span> Export HTML
             </button>
-          ))}
+            <button onClick={exportToPdf} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-white/10 flex items-center gap-1.5 transition-colors">
+              <span className="material-symbols-outlined text-sm">picture_as_pdf</span> Export PDF
+            </button>
+          </div>
+          <div className="h-6 w-px bg-white/10" />
+          <div className="flex items-center gap-2 bg-slate-800/50 border border-white/10 rounded-lg p-1">
+            {PERIOD_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setDays(opt.value)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  days === opt.value
+                    ? 'bg-primary text-white'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -223,10 +296,14 @@ export const AdminAnalytics: React.FC = () => {
           </div>
         </div>
       ) : (
-        <>
+        <div id="analytics-content" className={`pb-8 ${isExporting ? 'bg-[#0f172a]' : ''}`}>
+          {isExporting && (
+             <div className="text-white text-4xl font-bold mb-8">Full Analytics Report</div>
+          )}
           {/* ─── OVERVIEW ─── */}
-          {activeSection === 'overview' && overview && (
-            <div className="space-y-6">
+          {(isExporting || activeSection === 'overview') && overview && (
+            <div className="space-y-6 mb-12">
+              {isExporting && <h2 className="text-2xl font-bold text-white mb-4 border-b border-white/10 pb-2">Overview</h2>}
               {/* Summary Cards */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard icon="visibility" label="Total Views" value={fmtNum(overview.total_views)} color="text-primary" />
@@ -264,6 +341,7 @@ export const AdminAnalytics: React.FC = () => {
                 </ResponsiveContainer>
               </ChartCard>
 
+              {isExporting && <div className="html2pdf__page-break" />}
               {/* Section Breakdown + Heatmap */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <ChartCard title="Views by Section" icon="category">
@@ -325,8 +403,10 @@ export const AdminAnalytics: React.FC = () => {
           )}
 
           {/* ─── TRAFFIC ─── */}
-          {activeSection === 'traffic' && (
-            <div className="space-y-6">
+          {(isExporting || activeSection === 'traffic') && (
+            <div className="space-y-6 mb-12">
+              {isExporting && <div className="html2pdf__page-break" />}
+              {isExporting && <h2 className="text-2xl font-bold text-white mb-4 border-b border-white/10 pb-2 mt-8">Traffic</h2>}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Top Pages */}
                 <ChartCard title="Top Pages" icon="web">
@@ -370,6 +450,7 @@ export const AdminAnalytics: React.FC = () => {
                 </ChartCard>
               </div>
 
+              {isExporting && <div className="html2pdf__page-break" />}
               {/* Section breakdown bar chart */}
               <ChartCard title="Views by Section" icon="bar_chart">
                 <ResponsiveContainer width="100%" height={250}>
@@ -391,8 +472,10 @@ export const AdminAnalytics: React.FC = () => {
           )}
 
           {/* ─── VIDEOS ─── */}
-          {activeSection === 'videos' && videoMetrics && (
-            <div className="space-y-6">
+          {(isExporting || activeSection === 'videos') && videoMetrics && (
+            <div className="space-y-6 mb-12">
+              {isExporting && <div className="html2pdf__page-break" />}
+              {isExporting && <h2 className="text-2xl font-bold text-white mb-4 border-b border-white/10 pb-2 mt-8">Videos</h2>}
               {/* Video summary cards */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard icon="favorite" label="Total Likes" value={fmtNum(videoMetrics.videos.reduce((s, v) => s + v.like_count, 0))} color="text-rose-400" />
@@ -414,6 +497,7 @@ export const AdminAnalytics: React.FC = () => {
                 </ResponsiveContainer>
               </ChartCard>
 
+              {isExporting && <div className="html2pdf__page-break" />}
               {/* Video table */}
               <ChartCard title="Video Performance" icon="videocam">
                 <div className="overflow-x-auto">
@@ -463,8 +547,10 @@ export const AdminAnalytics: React.FC = () => {
           )}
 
           {/* ─── MARKETPLACE ─── */}
-          {activeSection === 'marketplace' && marketplaceMetrics && (
-            <div className="space-y-6">
+          {(isExporting || activeSection === 'marketplace') && marketplaceMetrics && (
+            <div className="space-y-6 mb-12">
+              {isExporting && <div className="html2pdf__page-break" />}
+              {isExporting && <h2 className="text-2xl font-bold text-white mb-4 border-b border-white/10 pb-2 mt-8">Marketplace</h2>}
               <StatCard icon="download" label="Total Downloads" value={fmtNum(marketplaceMetrics.components.reduce((s, c) => s + c.downloads, 0))} color="text-amber-400" />
 
               {/* Daily installs chart */}
@@ -486,6 +572,7 @@ export const AdminAnalytics: React.FC = () => {
                 </ResponsiveContainer>
               </ChartCard>
 
+              {isExporting && <div className="html2pdf__page-break" />}
               {/* Component table */}
               <ChartCard title="Component Downloads" icon="extension">
                 <div className="overflow-x-auto">
@@ -518,8 +605,10 @@ export const AdminAnalytics: React.FC = () => {
           )}
 
           {/* ─── NEWS ─── */}
-          {activeSection === 'news' && newsMetrics && (
-            <div className="space-y-6">
+          {(isExporting || activeSection === 'news') && newsMetrics && (
+            <div className="space-y-6 mb-12">
+              {isExporting && <div className="html2pdf__page-break" />}
+              {isExporting && <h2 className="text-2xl font-bold text-white mb-4 border-b border-white/10 pb-2 mt-8">News</h2>}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <StatCard icon="newspaper" label="Total Articles" value={fmtNum(newsMetrics.articles.length)} color="text-purple-400" />
                 <StatCard icon="visibility" label="Total Visits" value={fmtNum(newsMetrics.articles.reduce((s, a) => s + a.visit_count, 0))} color="text-primary" />
@@ -545,6 +634,7 @@ export const AdminAnalytics: React.FC = () => {
                 </ResponsiveContainer>
               </ChartCard>
 
+              {isExporting && <div className="html2pdf__page-break" />}
               {/* News article table */}
               <ChartCard title="Article Performance" icon="article">
                 <div className="overflow-x-auto">
@@ -577,7 +667,7 @@ export const AdminAnalytics: React.FC = () => {
               </ChartCard>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );
@@ -587,27 +677,27 @@ export const AdminAnalytics: React.FC = () => {
 // ── Sub-components ───────────────────────────────────────
 
 const StatCard: React.FC<{ icon: string; label: string; value: string; color: string; small?: boolean }> = ({ icon, label, value, color, small }) => (
-  <div className="bg-card-dark border border-white/5 rounded-xl p-4 flex items-center gap-4 hover:border-white/10 transition-colors">
-    <div className={`w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center ${color}`}>
+  <div className="stat-card bg-card-dark border border-white/5 rounded-xl p-4 flex items-center gap-4 hover:border-white/10 transition-colors">
+    <div className={`w-10 h-10 shrink-0 rounded-lg bg-white/5 flex items-center justify-center ${color}`}>
       <span className="material-symbols-outlined text-xl">{icon}</span>
     </div>
-    <div className="min-w-0">
-      <p className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">{label}</p>
+    <div className="min-w-0" style={{ overflow: 'hidden' }}>
+      <p className="text-[10px] text-slate-500 uppercase tracking-wider font-medium truncate">{label}</p>
       <p className={`font-bold text-white ${small ? 'text-sm truncate' : 'text-xl'}`}>{value}</p>
     </div>
   </div>
 );
 
 const ChartCard: React.FC<{ title: string; icon: string; subtitle?: string; children: React.ReactNode }> = ({ title, icon, subtitle, children }) => (
-  <div className="bg-card-dark border border-white/5 rounded-xl overflow-hidden">
+  <div className="chart-card bg-card-dark border border-white/5 rounded-xl overflow-hidden" style={{ pageBreakInside: 'avoid' }}>
     <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
-      <span className="material-symbols-outlined text-primary text-lg">{icon}</span>
-      <div>
-        <h3 className="text-sm font-bold text-white">{title}</h3>
-        {subtitle && <p className="text-[10px] text-slate-500">{subtitle}</p>}
+      <span className="material-symbols-outlined shrink-0 text-primary text-lg">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <h3 className="text-sm font-bold text-white truncate">{title}</h3>
+        {subtitle && <p className="text-[10px] text-slate-500 truncate">{subtitle}</p>}
       </div>
     </div>
-    <div className="p-5">
+    <div className="p-5 overflow-hidden">
       {children}
     </div>
   </div>
