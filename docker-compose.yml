@@ -21,6 +21,7 @@ services:
 
   # ── FastAPI Backend ───────────────────────────────────────
   backend:
+    image: mst-portal-backend:latest
     build:
       context: ./api
       dockerfile: Dockerfile
@@ -56,6 +57,7 @@ services:
   # For GPU (NVENC) acceleration, use: docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
   # Or run ./setup.sh deploy which auto-detects GPU availability.
   worker:
+    image: mst-portal-worker:latest
     build:
       context: ./api
       dockerfile: Dockerfile
@@ -75,6 +77,7 @@ services:
 
   # ── React Frontend (nginx) ───────────────────────────────
   frontend:
+    image: mst-portal-frontend:latest
     build:
       context: ./react-portal
       dockerfile: Dockerfile
