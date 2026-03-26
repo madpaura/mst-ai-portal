@@ -56,6 +56,7 @@ interface BannerConfig {
   id: string;
   video_id: string;
   variant: string;
+  brand_title: string;
   company_logo: string;
   series_tag: string;
   topic: string;
