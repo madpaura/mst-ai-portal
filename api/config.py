@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     MEDIA_STORAGE_PATH: str = os.path.join(os.path.dirname(__file__), "storage", "media")
 
     # Upload limits
-    MAX_UPLOAD_SIZE_MB: int = 5120  # 5 GB
+    MAX_UPLOAD_SIZE_MB: int = 5120  # 5 GB (video files)
+    MAX_ATTACHMENT_SIZE_MB: int = 100  # 100 MB (attachments)
 
     # Remotion banner
     REMOTION_BANNER_PATH: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "remotion-banner")

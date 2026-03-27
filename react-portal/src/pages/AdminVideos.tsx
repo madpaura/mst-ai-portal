@@ -1766,7 +1766,7 @@ export const AdminVideos: React.FC = () => {
                       }}
                     />
                   </label>
-                  <span className="text-xs text-slate-500">PDF, Word, PowerPoint, Excel, CSV, ZIP, images</span>
+                  <span className="text-xs text-slate-500">PDF, Word, PowerPoint, Excel, CSV, ZIP, images · Max 100 MB</span>
                 </div>
 
                 {/* List */}

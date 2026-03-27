@@ -1189,11 +1189,25 @@ async def admin_upload_attachment(
     os.makedirs(attach_dir, exist_ok=True)
     file_path = os.path.join(attach_dir, unique_name)
 
+    max_bytes = settings.MAX_ATTACHMENT_SIZE_MB * 1024 * 1024
     file_size = 0
-    with open(file_path, "wb") as f:
-        while chunk := await file.read(1024 * 1024):
-            f.write(chunk)
-            file_size += len(chunk)
+    try:
+        with open(file_path, "wb") as f:
+            while chunk := await file.read(1024 * 1024):
+                file_size += len(chunk)
+                if file_size > max_bytes:
+                    os.remove(file_path)
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File exceeds {settings.MAX_ATTACHMENT_SIZE_MB} MB limit",
+                    )
+                f.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as e:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise HTTPException(status_code=500, detail=str(e))
 
     mime, _ = mimetypes.guess_type(original_name)
 

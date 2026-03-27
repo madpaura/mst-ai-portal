@@ -346,7 +346,7 @@ export const Ignite: React.FC = () => {
                         <a
                           key={att.id}
                           href={`${apiBase}${att.download_url}`}
-                          download
+                          download={att.display_name || att.filename}
                           className="flex items-center gap-2.5 px-3 py-2 bg-slate-50 dark:bg-slate-800/40 hover:bg-primary/5 dark:hover:bg-primary/10 border border-slate-200 dark:border-white/10 hover:border-primary/30 rounded-lg transition-all group"
                         >
                           <span className="material-symbols-outlined text-lg text-primary">{icon}</span>
