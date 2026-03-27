@@ -16,6 +16,10 @@ import { SolutionDetail } from './pages/SolutionDetail';
 import { News } from './pages/News';
 import { NewsArticle } from './pages/NewsArticle';
 import { MarketplaceHowTo } from './pages/MarketplaceHowTo';
+import { Articles } from './pages/Articles';
+import { ArticleDetail } from './pages/ArticleDetail';
+import { ArticleEditor } from './pages/ArticleEditor';
+import { AdminArticles } from './pages/AdminArticles';
 
 function App() {
   return (
@@ -27,11 +31,16 @@ function App() {
           <Route path="/" element={<Solutions />} />
           <Route path="/marketplace" element={<Marketplace />} />
           <Route path="/ignite" element={<Ignite />} />
+          <Route path="/ignite/:videoSlug" element={<Ignite />} />
           <Route path="/howto" element={<Howto />} />
           <Route path="/solutions/:cardId" element={<SolutionDetail />} />
           <Route path="/news" element={<News />} />
           <Route path="/news/:newsId" element={<NewsArticle />} />
           <Route path="/marketplace/:slug/howto" element={<MarketplaceHowTo />} />
+          <Route path="/articles" element={<Articles />} />
+          <Route path="/articles/new" element={<ArticleEditor />} />
+          <Route path="/articles/edit/:articleId" element={<ArticleEditor />} />
+          <Route path="/articles/:articleSlug" element={<ArticleDetail />} />
           <Route path="/login" element={<Login />} />
 
           {/* Admin pages (protected by AdminLayout) */}
@@ -40,6 +49,7 @@ function App() {
             <Route path="videos" element={<AdminVideos />} />
             <Route path="marketplace" element={<AdminMarketplace />} />
             <Route path="solutions" element={<AdminSolutions />} />
+            <Route path="articles" element={<AdminArticles />} />
             <Route path="analytics" element={<AdminAnalytics />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>

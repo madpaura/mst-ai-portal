@@ -212,6 +212,23 @@ class CutRequest(BaseModel):
     end_seconds: float
 
 
+class AttachmentResponse(BaseModel):
+    id: str
+    video_id: str
+    filename: str
+    display_name: Optional[str] = None
+    file_size: int
+    mime_type: Optional[str] = None
+    sort_order: int
+    download_url: str
+    created_at: datetime
+
+
+class AttachmentUpdate(BaseModel):
+    display_name: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
 class JobStatusResponse(BaseModel):
     id: int
     video_id: str

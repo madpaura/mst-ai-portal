@@ -406,3 +406,46 @@ INSERT INTO solution_cards (title, subtitle, description, long_description, icon
 ('Unit Test Generator', 'Automated Verification', 'Automated verification suites that generate comprehensive UVM components and test benches to ensure silicon reliability.', '## Unit Test Generator\n\nAutomate your verification workflow:\n\n- **UVM Component Generation** — Sequences, drivers, monitors, and scoreboards\n- **Coverage-Driven** test generation to hit corner cases\n- **Regression Suite** management and tracking\n- **Assertion Generation** from design specifications', 'fact_check', 'text-green-500', 2),
 ('Spec-to-Code', 'Architecture Translation', 'Transform high-level architectural specifications directly into synthesizable, optimized RTL code with minimal manual overhead.', '## Spec-to-Code\n\nFrom specification to silicon:\n\n- **Natural Language** to RTL code generation\n- **Block Diagram** to hierarchical module structure\n- **Protocol Support** — AXI, AHB, APB, and custom interfaces\n- **Optimization** for area, power, and timing constraints', 'developer_board', 'text-amber-500', 3),
 ('Performance Monitoring', 'Silicon Analytics', 'Real-time telemetry and deep-dive analysis for silicon workloads during simulation and emulation phases.', '## Performance Monitoring\n\nDeep visibility into your silicon:\n\n- **Real-time Telemetry** during simulation runs\n- **Bottleneck Detection** with AI-driven analysis\n- **Resource Utilization** tracking and optimization\n- **Historical Trends** and regression comparison', 'monitoring', 'text-purple-500', 4);
+
+---------------------------------------------------
+-- VIDEO ATTACHMENTS
+---------------------------------------------------
+CREATE TABLE video_attachments (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    video_id        UUID REFERENCES videos(id) ON DELETE CASCADE,
+    filename        TEXT NOT NULL,
+    display_name    TEXT,
+    file_path       TEXT NOT NULL,
+    file_size       BIGINT NOT NULL,
+    mime_type       TEXT,
+    sort_order      INTEGER DEFAULT 0,
+    created_at      TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_video_attachments_video ON video_attachments(video_id);
+
+---------------------------------------------------
+-- ARTICLES
+---------------------------------------------------
+CREATE TABLE articles (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title           TEXT NOT NULL,
+    slug            TEXT UNIQUE NOT NULL,
+    summary         TEXT,
+    content         TEXT NOT NULL DEFAULT '',
+    category        TEXT NOT NULL DEFAULT 'General',
+    author_id       UUID REFERENCES users(id) ON DELETE SET NULL,
+    author_name     TEXT,
+    is_published    BOOLEAN DEFAULT false,
+    is_active       BOOLEAN DEFAULT true,
+    published_at    TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    updated_at      TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_articles_slug ON articles(slug);
+CREATE INDEX idx_articles_category ON articles(category);
+CREATE INDEX idx_articles_published ON articles(is_published) WHERE is_published = true;
+CREATE INDEX idx_articles_search ON articles USING GIN(
+    to_tsvector('english', title || ' ' || COALESCE(summary, '') || ' ' || content)
+);

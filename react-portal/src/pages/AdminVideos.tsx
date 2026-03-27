@@ -71,7 +71,19 @@ interface BannerConfig {
   error: string | null;
 }
 
-type Tab = 'metadata' | 'chapters' | 'howto' | 'quality' | 'seed-notes' | 'banner' | 'trim';
+interface Attachment {
+  id: string;
+  video_id: string;
+  filename: string;
+  display_name: string | null;
+  file_size: number;
+  mime_type: string | null;
+  sort_order: number;
+  download_url: string;
+  created_at: string;
+}
+
+type Tab = 'metadata' | 'chapters' | 'howto' | 'quality' | 'seed-notes' | 'banner' | 'trim' | 'attachments';
 
 const DEFAULT_CATEGORIES = ['Code-mate', 'RAG', 'Agents', 'Deep Dive'];
 
@@ -120,6 +132,10 @@ export const AdminVideos: React.FC = () => {
   });
   const [bannerGenerating, setBannerGenerating] = useState(false);
   const bannerPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Attachments
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachUploading, setAttachUploading] = useState(false);
 
   // Trim / Cut
   const [trimStart, setTrimStart] = useState(0);
@@ -241,6 +257,13 @@ export const AdminVideos: React.FC = () => {
       }
     } catch {
       setBannerConfig(null);
+    }
+    // Load attachments
+    try {
+      const att = await api.get<Attachment[]>(`/admin/videos/${video.id}/attachments`);
+      setAttachments(att);
+    } catch {
+      setAttachments([]);
     }
   };
 
@@ -1064,7 +1087,7 @@ export const AdminVideos: React.FC = () => {
 
             {/* Tabs */}
             <div className="flex items-center gap-1 border-b border-slate-200 dark:border-white/10 mb-4 shrink-0">
-              {(['metadata', 'banner', 'trim', 'chapters', 'howto', 'quality', 'seed-notes'] as Tab[]).map((tab) => (
+              {(['metadata', 'banner', 'trim', 'chapters', 'howto', 'quality', 'seed-notes', 'attachments'] as Tab[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -1074,7 +1097,7 @@ export const AdminVideos: React.FC = () => {
                       : 'text-slate-400 hover:text-white border-transparent'
                   }`}
                 >
-                  {tab === 'seed-notes' ? 'Seed Notes' : tab === 'howto' ? 'How-To' : tab === 'banner' ? '🎬 Banner' : tab === 'trim' ? '✂️ Trim' : tab}
+                  {tab === 'seed-notes' ? 'Seed Notes' : tab === 'howto' ? 'How-To' : tab === 'banner' ? '🎬 Banner' : tab === 'trim' ? '✂️ Trim' : tab === 'attachments' ? 'Attachments' : tab}
                 </button>
               ))}
             </div>
@@ -1713,6 +1736,79 @@ export const AdminVideos: React.FC = () => {
                     </a>
                   )}
                 </div>
+              </div>
+            )}
+
+            {activeTab === 'attachments' && (
+              <div className="space-y-4">
+                {/* Upload */}
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary text-sm font-bold rounded-lg transition-colors border border-primary/20 cursor-pointer">
+                    <span className="material-symbols-outlined text-sm">upload_file</span>
+                    {attachUploading ? 'Uploading...' : 'Upload File'}
+                    <input
+                      type="file"
+                      className="hidden"
+                      disabled={attachUploading}
+                      accept=".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.csv,.txt,.zip,.rar,.7z,.png,.jpg,.jpeg,.gif"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file || !selected) return;
+                        setAttachUploading(true);
+                        try {
+                          const att = await api.upload<Attachment>(`/admin/videos/${selected.id}/attachments`, file);
+                          setAttachments((prev) => [...prev, att]);
+                        } catch (err: unknown) {
+                          alert(err instanceof Error ? err.message : 'Upload failed');
+                        }
+                        setAttachUploading(false);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  <span className="text-xs text-slate-500">PDF, Word, PowerPoint, Excel, CSV, ZIP, images</span>
+                </div>
+
+                {/* List */}
+                {attachments.length === 0 ? (
+                  <p className="text-sm text-slate-500 py-4">No attachments yet. Upload files for users to download.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {attachments.map((att) => {
+                      const icon =
+                        att.mime_type?.includes('pdf') ? 'picture_as_pdf' :
+                        att.mime_type?.includes('word') || att.mime_type?.includes('document') ? 'description' :
+                        att.mime_type?.includes('presentation') || att.mime_type?.includes('powerpoint') ? 'slideshow' :
+                        att.mime_type?.includes('sheet') || att.mime_type?.includes('excel') ? 'table_chart' :
+                        att.mime_type?.includes('zip') || att.mime_type?.includes('rar') || att.mime_type?.includes('7z') ? 'folder_zip' :
+                        att.mime_type?.includes('image') ? 'image' :
+                        'draft';
+                      const sizeStr = att.file_size > 1048576
+                        ? `${(att.file_size / 1048576).toFixed(1)} MB`
+                        : `${(att.file_size / 1024).toFixed(0)} KB`;
+                      return (
+                        <div key={att.id} className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-lg border border-white/5 group">
+                          <span className="material-symbols-outlined text-xl text-primary">{icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-white truncate">{att.display_name || att.filename}</p>
+                            <p className="text-xs text-slate-500">{sizeStr}</p>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              try {
+                                await api.delete(`/admin/attachments/${att.id}`);
+                                setAttachments((prev) => prev.filter((a) => a.id !== att.id));
+                              } catch { /* ignore */ }
+                            }}
+                            className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-all"
+                          >
+                            <span className="material-symbols-outlined text-sm">delete</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
             </div>

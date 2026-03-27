@@ -3,6 +3,7 @@ import re
 import uuid
 import json
 import shutil
+import mimetypes
 import subprocess
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
 
@@ -11,7 +12,7 @@ from video.schemas import (
     ChapterCreate, ChapterUpdate, ChapterReorder, HowtoResponse, HowtoUpdate,
     QualitySettingResponse, QualitySettingUpdate, SeedNoteCreate,
     SeedNoteResponse, JobStatusResponse, BannerConfigResponse, BannerConfigUpdate,
-    TrimRequest, CutRequest,
+    TrimRequest, CutRequest, AttachmentResponse, AttachmentUpdate,
 )
 from auth.dependencies import require_admin
 from database import get_db
@@ -1131,3 +1132,115 @@ async def admin_generate_banner(
 
     background_tasks.add_task(_generate_banner_video, video_id, settings.DATABASE_URL)
     return {"message": "Banner generation started"}
+
+
+# ── Video Attachments ──────────────────────────────────────
+
+ALLOWED_ATTACHMENT_EXT = {
+    '.pdf', '.docx', '.doc', '.pptx', '.ppt', '.xlsx', '.xls',
+    '.csv', '.txt', '.zip', '.rar', '.7z', '.png', '.jpg', '.jpeg', '.gif',
+}
+
+
+def _attachment_row_to_response(r) -> AttachmentResponse:
+    return AttachmentResponse(
+        id=str(r["id"]),
+        video_id=str(r["video_id"]),
+        filename=r["filename"],
+        display_name=r.get("display_name"),
+        file_size=r["file_size"],
+        mime_type=r.get("mime_type"),
+        sort_order=r["sort_order"],
+        download_url=f"/media/attachments/{r['video_id']}/{r['filename']}",
+        created_at=r["created_at"],
+    )
+
+
+@router.get("/videos/{video_id}/attachments", response_model=list[AttachmentResponse])
+async def admin_list_attachments(video_id: str, admin: dict = Depends(require_admin)):
+    db = await get_db()
+    rows = await db.fetch(
+        "SELECT * FROM video_attachments WHERE video_id = $1 ORDER BY sort_order, created_at",
+        video_id,
+    )
+    return [_attachment_row_to_response(r) for r in rows]
+
+
+@router.post("/videos/{video_id}/attachments", response_model=AttachmentResponse)
+async def admin_upload_attachment(
+    video_id: str, file: UploadFile = File(...), admin: dict = Depends(require_admin)
+):
+    db = await get_db()
+    video = await db.fetchrow("SELECT id FROM videos WHERE id = $1", video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    original_name = file.filename or "attachment"
+    _, ext = os.path.splitext(original_name)
+    if ext.lower() not in ALLOWED_ATTACHMENT_EXT:
+        raise HTTPException(status_code=400, detail=f"File type '{ext}' is not allowed")
+
+    # Sanitize filename: keep only alphanums, dashes, dots, underscores
+    safe_name = re.sub(r'[^\w\-.]', '_', original_name)
+    # Prefix with short uuid to avoid collisions
+    unique_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
+
+    attach_dir = os.path.join(settings.MEDIA_STORAGE_PATH, "attachments", video_id)
+    os.makedirs(attach_dir, exist_ok=True)
+    file_path = os.path.join(attach_dir, unique_name)
+
+    file_size = 0
+    with open(file_path, "wb") as f:
+        while chunk := await file.read(1024 * 1024):
+            f.write(chunk)
+            file_size += len(chunk)
+
+    mime, _ = mimetypes.guess_type(original_name)
+
+    row = await db.fetchrow(
+        """
+        INSERT INTO video_attachments (video_id, filename, display_name, file_path, file_size, mime_type)
+        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *
+        """,
+        video_id, unique_name, original_name, file_path, file_size, mime,
+    )
+    return _attachment_row_to_response(row)
+
+
+@router.put("/attachments/{attachment_id}", response_model=AttachmentResponse)
+async def admin_update_attachment(
+    attachment_id: str, req: AttachmentUpdate, admin: dict = Depends(require_admin)
+):
+    db = await get_db()
+    row = await db.fetchrow("SELECT * FROM video_attachments WHERE id = $1", attachment_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    if req.display_name is not None:
+        await db.execute(
+            "UPDATE video_attachments SET display_name = $1 WHERE id = $2",
+            req.display_name, attachment_id,
+        )
+    if req.sort_order is not None:
+        await db.execute(
+            "UPDATE video_attachments SET sort_order = $1 WHERE id = $2",
+            req.sort_order, attachment_id,
+        )
+
+    row = await db.fetchrow("SELECT * FROM video_attachments WHERE id = $1", attachment_id)
+    return _attachment_row_to_response(row)
+
+
+@router.delete("/attachments/{attachment_id}")
+async def admin_delete_attachment(attachment_id: str, admin: dict = Depends(require_admin)):
+    db = await get_db()
+    row = await db.fetchrow("SELECT * FROM video_attachments WHERE id = $1", attachment_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    # Remove file from disk
+    if row["file_path"] and os.path.exists(row["file_path"]):
+        os.remove(row["file_path"])
+
+    await db.execute("DELETE FROM video_attachments WHERE id = $1", attachment_id)
+    return {"message": "Attachment deleted"}

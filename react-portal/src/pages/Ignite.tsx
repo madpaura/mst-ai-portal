@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -43,6 +44,18 @@ interface HowtoGuide {
   version: string;
 }
 
+interface Attachment {
+  id: string;
+  video_id: string;
+  filename: string;
+  display_name: string | null;
+  file_size: number;
+  mime_type: string | null;
+  sort_order: number;
+  download_url: string;
+  created_at: string;
+}
+
 const fmtTime = (s: number): string => {
   const m = Math.floor(s / 60);
   const sec = s % 60;
@@ -50,8 +63,11 @@ const fmtTime = (s: number): string => {
 };
 
 export const Ignite: React.FC = () => {
+  const { videoSlug } = useParams<{ videoSlug?: string }>();
+  const navigate = useNavigate();
   const playerRef = useRef<HlsPlayerHandle>(null);
   const [activeVideo, setActiveVideo] = useState<Video | null>(ALL_VIDEOS[0] || null);
+  const [shareCopied, setShareCopied] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const [activeTab, setActiveTab] = useState<'notes' | 'howto'>('howto');
@@ -61,6 +77,7 @@ export const Ignite: React.FC = () => {
   const [howto, setHowto] = useState<HowtoGuide | null>(null);
   const [likeData, setLikeData] = useState<VideoLikeData | null>(null);
   const [likePending, setLikePending] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
 
   const loadVideoData = useCallback(async (video: Video) => {
     // Load chapters
@@ -72,6 +89,9 @@ export const Ignite: React.FC = () => {
     // Load likes
     api.get<VideoLikeData>(`/video/videos/${video.slug}/likes`)
       .then(setLikeData).catch(() => setLikeData(null));
+    // Load attachments
+    api.get<Attachment[]>(`/video/videos/${video.slug}/attachments`)
+      .then(setAttachments).catch(() => setAttachments([]));
     // Load notes (requires auth)
     if (isLoggedIn()) {
       api.get<Note[]>(`/video/videos/${video.slug}/notes`)
@@ -81,12 +101,40 @@ export const Ignite: React.FC = () => {
     api.post('/analytics/pageview', { path: `/ignite/${video.slug}` }).catch(() => {});
   }, []);
 
+  // If URL has a videoSlug, try to load that video
+  useEffect(() => {
+    if (!videoSlug) return;
+    // Check if it's already in sidebar list
+    const found = ALL_VIDEOS.find((v) => v.slug === videoSlug);
+    if (found) {
+      setActiveVideo(found);
+    } else {
+      // Fetch from API (may be a video not in current sidebar list)
+      api.get<Video>(`/video/videos/${videoSlug}`)
+        .then((v) => setActiveVideo(v))
+        .catch(() => {}); // silently fail — might be invalid slug
+    }
+  }, [videoSlug]);
+
   useEffect(() => {
     if (activeVideo?.slug) loadVideoData(activeVideo);
   }, [activeVideo, loadVideoData]);
 
   const handleSelectVideo = (video: Video) => {
     setActiveVideo(video);
+    navigate(`/ignite/${video.slug}`, { replace: true });
+  };
+
+  const handleShare = async () => {
+    if (!activeVideo?.slug) return;
+    const url = `${window.location.origin}/ignite/${activeVideo.slug}`;
+    if (navigator.share) {
+      navigator.share({ title: activeVideo.title, url }).catch(() => {});
+    } else {
+      await navigator.clipboard.writeText(url);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    }
   };
 
   const handleTimeUpdate = (time: number, dur: number) => {
@@ -245,24 +293,74 @@ export const Ignite: React.FC = () => {
                       Learn how to properly configure your environment for the {activeVideo.category} AI assistant.
                     </p>
                   </div>
-                  <button
-                    onClick={handleToggleLike}
-                    disabled={likePending}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all duration-200 shrink-0 group ${
-                      likeData?.user_liked
-                        ? 'bg-rose-500/10 border-rose-500/30 text-rose-500 hover:bg-rose-500/20'
-                        : 'bg-slate-100 dark:bg-slate-800/50 border-slate-300 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:bg-rose-500/10 hover:border-rose-500/30 hover:text-rose-500'
-                    } ${likePending ? 'opacity-60 cursor-wait' : ''}`}
-                  >
-                    <span className={`material-symbols-outlined text-xl transition-transform duration-200 ${likeData?.user_liked ? 'scale-110' : 'group-hover:scale-110'}`}
-                      style={{ fontVariationSettings: likeData?.user_liked ? "'FILL' 1" : "'FILL' 0" }}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={handleToggleLike}
+                      disabled={likePending}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all duration-200 group ${
+                        likeData?.user_liked
+                          ? 'bg-rose-500/10 border-rose-500/30 text-rose-500 hover:bg-rose-500/20'
+                          : 'bg-slate-100 dark:bg-slate-800/50 border-slate-300 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:bg-rose-500/10 hover:border-rose-500/30 hover:text-rose-500'
+                      } ${likePending ? 'opacity-60 cursor-wait' : ''}`}
                     >
-                      favorite
-                    </span>
-                    <span className="text-sm font-bold">{likeData?.like_count ?? 0}</span>
-                  </button>
+                      <span className={`material-symbols-outlined text-xl transition-transform duration-200 ${likeData?.user_liked ? 'scale-110' : 'group-hover:scale-110'}`}
+                        style={{ fontVariationSettings: likeData?.user_liked ? "'FILL' 1" : "'FILL' 0" }}
+                      >
+                        favorite
+                      </span>
+                      <span className="text-sm font-bold">{likeData?.like_count ?? 0}</span>
+                    </button>
+                    <button
+                      onClick={handleShare}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 hover:bg-primary/10 hover:border-primary/30 hover:text-primary transition-all duration-200 group"
+                    >
+                      <span className="material-symbols-outlined text-xl group-hover:scale-110 transition-transform duration-200">share</span>
+                      <span className="text-sm font-bold">{shareCopied ? 'Copied!' : 'Share'}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
+
+              {/* Attachments */}
+              {attachments.length > 0 && (
+                <div className="bg-card-light dark:bg-card-dark border border-slate-400 dark:border-white/5 rounded-xl p-4">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-3">
+                    <span className="material-symbols-outlined text-base text-primary">attach_file</span>
+                    Attachments
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {attachments.map((att) => {
+                      const icon =
+                        att.mime_type?.includes('pdf') ? 'picture_as_pdf' :
+                        att.mime_type?.includes('word') || att.mime_type?.includes('document') ? 'description' :
+                        att.mime_type?.includes('presentation') || att.mime_type?.includes('powerpoint') ? 'slideshow' :
+                        att.mime_type?.includes('sheet') || att.mime_type?.includes('excel') ? 'table_chart' :
+                        att.mime_type?.includes('zip') || att.mime_type?.includes('rar') || att.mime_type?.includes('7z') ? 'folder_zip' :
+                        att.mime_type?.includes('image') ? 'image' :
+                        'draft';
+                      const sizeStr = att.file_size > 1048576
+                        ? `${(att.file_size / 1048576).toFixed(1)} MB`
+                        : `${(att.file_size / 1024).toFixed(0)} KB`;
+                      const apiBase = import.meta.env.VITE_API_URL || '';
+                      return (
+                        <a
+                          key={att.id}
+                          href={`${apiBase}${att.download_url}`}
+                          download
+                          className="flex items-center gap-2.5 px-3 py-2 bg-slate-50 dark:bg-slate-800/40 hover:bg-primary/5 dark:hover:bg-primary/10 border border-slate-200 dark:border-white/10 hover:border-primary/30 rounded-lg transition-all group"
+                        >
+                          <span className="material-symbols-outlined text-lg text-primary">{icon}</span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate max-w-[180px]">{att.display_name || att.filename}</p>
+                            <p className="text-[10px] text-slate-400">{sizeStr}</p>
+                          </div>
+                          <span className="material-symbols-outlined text-sm text-slate-400 group-hover:text-primary transition-colors">download</span>
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Tab Navigation */}
               <div className="flex items-center gap-1 border-b border-slate-300 dark:border-white/10">

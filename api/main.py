@@ -24,6 +24,8 @@ from video.course_admin_router import router as course_admin_router
 from analytics.router import router as analytics_router
 from analytics.admin_router import router as analytics_admin_router
 from settings.router import router as settings_router
+from articles.router import router as articles_router
+from articles.admin_router import router as articles_admin_router
 
 
 @asynccontextmanager
@@ -74,6 +76,8 @@ app.include_router(course_admin_router, prefix="/admin", tags=["admin-courses"])
 app.include_router(analytics_router, prefix="/analytics", tags=["analytics"])
 app.include_router(analytics_admin_router, prefix="/admin/analytics", tags=["admin-analytics"])
 app.include_router(settings_router, prefix="/settings", tags=["settings"])
+app.include_router(articles_router, prefix="/articles", tags=["articles"])
+app.include_router(articles_admin_router, prefix="/admin", tags=["admin-articles"])
 
 
 # Middleware to prevent caching of HLS manifests and segments
@@ -108,6 +112,10 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Serve transcoded video streams (HLS segments, manifests, thumbnails)
 os.makedirs(settings.VIDEO_STORAGE_PATH, exist_ok=True)
 app.mount("/streams", StaticFiles(directory=settings.VIDEO_STORAGE_PATH), name="streams")
+
+# Serve media files (attachments, etc.)
+os.makedirs(settings.MEDIA_STORAGE_PATH, exist_ok=True)
+app.mount("/media", StaticFiles(directory=settings.MEDIA_STORAGE_PATH), name="media")
 
 
 @app.get("/health")

@@ -49,8 +49,8 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
               Marketplace
             </Link>
             <Link
-              className={`text-sm font-medium transition-colors ${isActive('/news') ? 'text-primary' : 'text-slate-500 dark:text-slate-400 hover:text-primary'}`}
-              to="/news"
+              className={`text-sm font-medium transition-colors ${isActive('/articles') || isActive('/news') ? 'text-primary' : 'text-slate-500 dark:text-slate-400 hover:text-primary'}`}
+              to="/articles"
             >
               Articles
             </Link>

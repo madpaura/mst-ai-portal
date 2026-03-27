@@ -4,7 +4,7 @@ from typing import Optional
 from video.schemas import (
     CourseResponse, VideoResponse, ChapterResponse, ProgressResponse,
     ProgressUpdate, OverallProgressResponse, NoteResponse, NoteCreate,
-    NoteUpdate, HowtoResponse, VideoLikeResponse,
+    NoteUpdate, HowtoResponse, VideoLikeResponse, AttachmentResponse,
 )
 from auth.dependencies import get_current_user, get_optional_user
 from database import get_db
@@ -83,6 +83,35 @@ async def get_video(slug: str):
         thumbnail=row.get("thumbnail"), is_published=row["is_published"],
         sort_order=row["sort_order"], created_at=row["created_at"],
     )
+
+
+@router.get("/videos/{slug}/attachments", response_model=list[AttachmentResponse])
+async def get_video_attachments(slug: str):
+    db = await get_db()
+    video = await db.fetchrow(
+        "SELECT id FROM videos WHERE slug = $1 AND is_published = true AND is_active = true", slug
+    )
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    rows = await db.fetch(
+        "SELECT * FROM video_attachments WHERE video_id = $1 ORDER BY sort_order, created_at",
+        video["id"],
+    )
+    return [
+        AttachmentResponse(
+            id=str(r["id"]),
+            video_id=str(r["video_id"]),
+            filename=r["filename"],
+            display_name=r.get("display_name"),
+            file_size=r["file_size"],
+            mime_type=r.get("mime_type"),
+            sort_order=r["sort_order"],
+            download_url=f"/media/attachments/{r['video_id']}/{r['filename']}",
+            created_at=r["created_at"],
+        )
+        for r in rows
+    ]
 
 
 @router.get("/videos/{slug}/chapters", response_model=list[ChapterResponse])
