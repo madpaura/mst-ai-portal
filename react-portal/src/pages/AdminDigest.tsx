@@ -71,7 +71,7 @@ export const AdminDigest: React.FC = () => {
     }
   };
 
-  const handleLoadIssue = async (issueId: number, issueDaysCovered: number) => {
+  const handleLoadIssue = async (issueId: number) => {
     setLoadingIssueId(issueId);
     try {
       const data = await api.get<{
@@ -397,7 +397,7 @@ export const AdminDigest: React.FC = () => {
                       </div>
                       <div className="flex items-center gap-1.5 mt-2">
                         <button
-                          onClick={() => handleLoadIssue(issue.id, issue.days_covered)}
+                          onClick={() => handleLoadIssue(issue.id)}
                           disabled={loadingIssueId === issue.id}
                           className="flex items-center gap-1 px-2 py-1 bg-slate-700/60 hover:bg-slate-700 text-slate-300 text-xs rounded transition-colors border border-white/10 disabled:opacity-50"
                           title="Load this issue into preview"
