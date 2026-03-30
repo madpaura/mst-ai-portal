@@ -449,3 +449,11 @@ CREATE INDEX idx_articles_published ON articles(is_published) WHERE is_published
 CREATE INDEX idx_articles_search ON articles USING GIN(
     to_tsvector('english', title || ' ' || COALESCE(summary, '') || ' ' || content)
 );
+
+---------------------------------------------------
+-- APP SETTINGS (key-value store)
+---------------------------------------------------
+CREATE TABLE IF NOT EXISTS app_settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT '{}'
+);

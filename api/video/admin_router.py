@@ -14,10 +14,13 @@ from video.schemas import (
     SeedNoteResponse, JobStatusResponse, BannerConfigResponse, BannerConfigUpdate,
     TrimRequest, CutRequest, AttachmentResponse, AttachmentUpdate,
 )
+from pydantic import BaseModel
 from auth.dependencies import require_admin
 from database import get_db
 from config import settings
 from worker.gpu_detect import get_encode_args, get_hwaccel_args, get_gpu_info
+from video.email import generate_email_preview
+from email_utils.utils import send_email
 
 router = APIRouter()
 
@@ -1258,3 +1261,58 @@ async def admin_delete_attachment(attachment_id: str, admin: dict = Depends(requ
 
     await db.execute("DELETE FROM video_attachments WHERE id = $1", attachment_id)
     return {"message": "Attachment deleted"}
+
+
+# ── Email ────────────────────────────────────────────────────────
+
+class EmailPreviewRequest(BaseModel):
+    custom_content: str = ""
+
+
+class EmailPreviewResponse(BaseModel):
+    subject: str
+    html_content: str
+    plain_text: str
+
+
+class SendEmailRequest(BaseModel):
+    recipient_email: str
+    subject: str
+    html_content: str
+
+
+class SendEmailResponse(BaseModel):
+    success: bool
+    message: str
+
+
+@router.post("/videos/{video_id}/email-preview", response_model=EmailPreviewResponse)
+async def admin_email_preview(
+    video_id: str, req: EmailPreviewRequest, admin: dict = Depends(require_admin)
+):
+    try:
+        preview = await generate_email_preview(video_id, req.custom_content or None)
+        return EmailPreviewResponse(**preview)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate preview: {str(e)}")
+
+
+@router.post("/videos/{video_id}/send-email", response_model=SendEmailResponse)
+async def admin_send_email(
+    video_id: str, req: SendEmailRequest, admin: dict = Depends(require_admin)
+):
+    try:
+        success = await send_email(
+            to_email=req.recipient_email,
+            subject=req.subject,
+            html_content=req.html_content,
+        )
+
+        if success:
+            return SendEmailResponse(success=True, message="Email sent successfully")
+        else:
+            return SendEmailResponse(success=False, message="Failed to send email")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Email send error: {str(e)}")

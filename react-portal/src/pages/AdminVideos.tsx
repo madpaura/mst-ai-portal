@@ -83,7 +83,7 @@ interface Attachment {
   created_at: string;
 }
 
-type Tab = 'metadata' | 'chapters' | 'howto' | 'quality' | 'seed-notes' | 'banner' | 'trim' | 'attachments';
+type Tab = 'metadata' | 'chapters' | 'howto' | 'quality' | 'seed-notes' | 'banner' | 'trim' | 'attachments' | 'email';
 
 const DEFAULT_CATEGORIES = ['Code-mate', 'RAG', 'Agents', 'Deep Dive'];
 
@@ -136,6 +136,13 @@ export const AdminVideos: React.FC = () => {
   // Attachments
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attachUploading, setAttachUploading] = useState(false);
+
+  // Email
+  const [emailPreview, setEmailPreview] = useState<{ subject: string; html_content: string; plain_text: string } | null>(null);
+  const [emailGenerating, setEmailGenerating] = useState(false);
+  const [emailCustomContent, setEmailCustomContent] = useState('');
+  const [emailRecipient, setEmailRecipient] = useState('');
+  const [emailSending, setEmailSending] = useState(false);
 
   // Trim / Cut
   const [trimStart, setTrimStart] = useState(0);
@@ -1087,7 +1094,7 @@ export const AdminVideos: React.FC = () => {
 
             {/* Tabs */}
             <div className="flex items-center gap-1 border-b border-slate-200 dark:border-white/10 mb-4 shrink-0">
-              {(['metadata', 'banner', 'trim', 'chapters', 'howto', 'quality', 'seed-notes', 'attachments'] as Tab[]).map((tab) => (
+              {(['metadata', 'banner', 'trim', 'chapters', 'howto', 'quality', 'seed-notes', 'attachments', 'email'] as Tab[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -1097,7 +1104,7 @@ export const AdminVideos: React.FC = () => {
                       : 'text-slate-400 hover:text-white border-transparent'
                   }`}
                 >
-                  {tab === 'seed-notes' ? 'Seed Notes' : tab === 'howto' ? 'How-To' : tab === 'banner' ? '🎬 Banner' : tab === 'trim' ? '✂️ Trim' : tab === 'attachments' ? 'Attachments' : tab}
+                  {tab === 'seed-notes' ? 'Seed Notes' : tab === 'howto' ? 'How-To' : tab === 'banner' ? '🎬 Banner' : tab === 'trim' ? '✂️ Trim' : tab === 'attachments' ? 'Attachments' : tab === 'email' ? '📧 Email' : tab}
                 </button>
               ))}
             </div>
@@ -1808,6 +1815,166 @@ export const AdminVideos: React.FC = () => {
                       );
                     })}
                   </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'email' && selected && (
+              <div className="space-y-4">
+                {/* Generate Preview */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Custom Content (optional)</label>
+                    <textarea
+                      value={emailCustomContent}
+                      onChange={(e) => setEmailCustomContent(e.target.value)}
+                      placeholder="Add any additional content to include in the email..."
+                      className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
+                      rows={3}
+                    />
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!selected) return;
+                      setEmailGenerating(true);
+                      try {
+                        const preview = await api.post<{ subject: string; html_content: string; plain_text: string }>(
+                          `/admin/videos/${selected.id}/email-preview`,
+                          { custom_content: emailCustomContent },
+                        );
+                        setEmailPreview(preview);
+                        showMsg('success', 'Email preview generated!');
+                      } catch (err: any) {
+                        showMsg('error', err.message);
+                      } finally {
+                        setEmailGenerating(false);
+                      }
+                    }}
+                    disabled={emailGenerating}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary font-bold text-sm rounded-lg transition-colors border border-primary/20 disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-sm">refresh</span>
+                    {emailGenerating ? 'Generating...' : 'Generate Preview'}
+                  </button>
+                </div>
+
+                {/* Preview & Send */}
+                {emailPreview && (
+                  <div className="space-y-3 p-4 bg-slate-800/30 rounded-lg border border-white/5">
+                    {/* Action buttons toolbar */}
+                    <div className="flex items-center gap-2 mb-2">
+                      <button
+                        onClick={() => {
+                          const win = window.open('', '_blank');
+                          if (win) { win.document.write(emailPreview.html_content); win.document.close(); }
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition-colors border border-white/10"
+                        title="View in new tab"
+                      >
+                        <span className="material-symbols-outlined text-sm">open_in_new</span>
+                        View
+                      </button>
+                      <button
+                        onClick={() => {
+                          const win = window.open('', '_blank');
+                          if (win) {
+                            win.document.write(`<html><head><title>${emailPreview.subject}</title><style>@media print { body { margin: 0; } }</style></head><body onload="setTimeout(()=>{window.print();},500)">${emailPreview.html_content}</body></html>`);
+                            win.document.close();
+                          }
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition-colors border border-white/10"
+                        title="Download as PDF"
+                      >
+                        <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
+                        PDF
+                      </button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            const token = localStorage.getItem('mst_token');
+                            const apiBase = import.meta.env.VITE_API_URL || '';
+                            const res = await fetch(`${apiBase}/admin/generate-eml`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                              body: JSON.stringify({ subject: emailPreview.subject, html_content: emailPreview.html_content, plain_text: emailPreview.plain_text }),
+                            });
+                            if (!res.ok) throw new Error('Failed to generate .eml');
+                            const blob = await res.blob();
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = emailPreview.subject.replace(/[^a-zA-Z0-9 ]/g, '').trim().replace(/ +/g, '_').slice(0, 60) + '.eml';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                            showMsg('success', 'Downloaded .eml — open with Outlook, Thunderbird, or drag into Gmail');
+                          } catch (err: any) {
+                            showMsg('error', err.message);
+                          }
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-medium rounded-lg transition-colors border border-blue-500/20"
+                        title="Download .eml for external email client (Outlook, etc.)"
+                      >
+                        <span className="material-symbols-outlined text-sm">forward_to_inbox</span>
+                        Email Client
+                      </button>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Subject</label>
+                      <p className="text-sm text-white">{emailPreview.subject}</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Preview</label>
+                      <div
+                        className="bg-white dark:bg-slate-900 rounded-lg p-4 text-slate-900 dark:text-white text-sm max-h-64 overflow-y-auto border border-white/10"
+                        dangerouslySetInnerHTML={{ __html: emailPreview.html_content }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Send To</label>
+                      <input
+                        type="email"
+                        value={emailRecipient}
+                        onChange={(e) => setEmailRecipient(e.target.value)}
+                        placeholder="Enter recipient email address"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                      />
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (!selected || !emailRecipient) {
+                          showMsg('error', 'Please enter recipient email');
+                          return;
+                        }
+                        setEmailSending(true);
+                        try {
+                          await api.post(`/admin/videos/${selected.id}/send-email`, {
+                            recipient_email: emailRecipient,
+                            subject: emailPreview.subject,
+                            html_content: emailPreview.html_content,
+                          });
+                          showMsg('success', 'Email sent successfully!');
+                          setEmailRecipient('');
+                          setEmailPreview(null);
+                          setEmailCustomContent('');
+                        } catch (err: any) {
+                          showMsg('error', err.message);
+                        } finally {
+                          setEmailSending(false);
+                        }
+                      }}
+                      disabled={emailSending || !emailRecipient}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-500/10 hover:bg-green-500/20 text-green-400 font-bold text-sm rounded-lg transition-colors border border-green-500/20 disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-sm">send</span>
+                      {emailSending ? 'Sending...' : 'Send Email'}
+                    </button>
+                  </div>
+                )}
+
+                {!emailPreview && (
+                  <p className="text-sm text-slate-500 py-4">Generate a preview first to see the email content before sending.</p>
                 )}
               </div>
             )}

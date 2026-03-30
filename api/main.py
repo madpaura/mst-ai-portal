@@ -24,6 +24,7 @@ from video.course_admin_router import router as course_admin_router
 from analytics.router import router as analytics_router
 from analytics.admin_router import router as analytics_admin_router
 from settings.router import router as settings_router
+from settings.digest_admin_router import router as digest_admin_router
 from articles.router import router as articles_router
 from articles.admin_router import router as articles_admin_router
 
@@ -76,6 +77,7 @@ app.include_router(course_admin_router, prefix="/admin", tags=["admin-courses"])
 app.include_router(analytics_router, prefix="/analytics", tags=["analytics"])
 app.include_router(analytics_admin_router, prefix="/admin/analytics", tags=["admin-analytics"])
 app.include_router(settings_router, prefix="/settings", tags=["settings"])
+app.include_router(digest_admin_router, prefix="/admin", tags=["admin-digest"])
 app.include_router(articles_router, prefix="/articles", tags=["articles"])
 app.include_router(articles_admin_router, prefix="/admin", tags=["admin-articles"])
 

@@ -37,6 +37,17 @@ class Settings(BaseSettings):
     # Use localhost by default for local runs; Docker compose overrides this to host.docker.internal.
     OLLAMA_BASE_URL: str = "http://localhost:11434"
 
+    # Portal frontend URL (used for links in emails/newsletters)
+    PORTAL_URL: str = "http://localhost:9810"
+
+    # Email
+    SMTP_SERVER: str = "localhost"
+    SMTP_PORT: int = 1025  # Mailhog default
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "noreply@mst-ai-portal.local"
+    SMTP_FROM_NAME: str = "MST AI Portal"
+
     # Server — use allow_origin_regex in middleware instead for dev
     CORS_ORIGINS: list[str] = ["*"]
 

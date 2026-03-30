@@ -67,6 +67,17 @@ export const AdminSettings: React.FC = () => {
   const logEndRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // SMTP settings
+  const [smtpConfig, setSmtpConfig] = useState<Record<string, string> | null>(null);
+  const [showSmtpModal, setShowSmtpModal] = useState(false);
+  const [smtpForm, setSmtpForm] = useState({
+    smtp_server: '', smtp_port: '1025', smtp_user: '', smtp_password: '',
+    smtp_from_email: '', smtp_from_name: '', test_recipient: '',
+  });
+  const [smtpTesting, setSmtpTesting] = useState(false);
+  const [smtpSaving, setSmtpSaving] = useState(false);
+  const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
@@ -83,6 +94,24 @@ export const AdminSettings: React.FC = () => {
     }
   }, []);
 
+  const fetchSmtpSettings = useCallback(async () => {
+    try {
+      const data = await api.get<Record<string, string> | null>('/settings/smtp_config');
+      setSmtpConfig(data);
+      if (data) {
+        setSmtpForm((f) => ({
+          ...f,
+          smtp_server: data.smtp_server || '',
+          smtp_port: data.smtp_port || '1025',
+          smtp_user: data.smtp_user || '',
+          smtp_password: '', // never show stored password
+          smtp_from_email: data.smtp_from_email || '',
+          smtp_from_name: data.smtp_from_name || '',
+        }));
+      }
+    } catch { /* no saved settings yet */ }
+  }, []);
+
   const fetchJobs = useCallback(async (settingId: string) => {
     try {
       const data = await api.get<SyncJob[]>(`/admin/forge/settings/${settingId}/jobs`);
@@ -92,7 +121,7 @@ export const AdminSettings: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => { fetchSettings(); }, [fetchSettings]);
+  useEffect(() => { fetchSettings(); fetchSmtpSettings(); }, [fetchSettings, fetchSmtpSettings]);
 
   useEffect(() => {
     if (selectedSettingId) fetchJobs(selectedSettingId);
@@ -251,10 +280,54 @@ export const AdminSettings: React.FC = () => {
         </div>
       )}
 
-      {/* Header */}
+      {/* Page Header */}
+      <div className="mb-8">
+        <h1 className="text-xl font-bold text-white">Admin Settings</h1>
+        <p className="text-sm text-slate-400 mt-1">Configure SMTP email and marketplace repository scanning</p>
+      </div>
+
+      {/* ── SMTP Settings Card ──────────────────────────────────── */}
+      <div className="bg-card-dark rounded-xl border border-white/5 p-6 mb-8">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-primary">mail</span>
+            <div>
+              <h2 className="text-base font-bold text-white">SMTP Email Configuration</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Configure outgoing email server for newsletters</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowSmtpModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm">settings</span>
+            {smtpConfig ? 'Configure' : 'Set Up'}
+          </button>
+        </div>
+        {smtpConfig && (
+          <div className="mt-4 pt-4 border-t border-white/5">
+            <div className="flex flex-wrap gap-4 text-xs text-slate-400">
+              <span className="flex items-center gap-1">
+                <span className="material-symbols-outlined text-xs">server</span>
+                {smtpConfig.smtp_server}:{smtpConfig.smtp_port}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="material-symbols-outlined text-xs">email</span>
+                From: {smtpConfig.smtp_from_email}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="material-symbols-outlined text-xs">verified_user</span>
+                Auth: {smtpConfig.smtp_user ? 'Yes' : 'No'}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Marketplace Settings Header ────────────────────── */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-white">Marketplace Settings</h1>
+          <h2 className="text-base font-bold text-white">Marketplace Settings</h2>
           <p className="text-sm text-slate-400 mt-1">Configure git repositories for auto-scanning marketplace components</p>
         </div>
         <div className="flex gap-2">
@@ -536,6 +609,146 @@ export const AdminSettings: React.FC = () => {
                   {creating ? 'Add Repository' : 'Save Changes'}
                 </button>
                 <button onClick={closeForm} className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SMTP Settings Modal */}
+      {showSmtpModal && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowSmtpModal(false)} />
+          <div className="relative w-full max-w-lg bg-background-dark border-l border-white/10 overflow-y-auto p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-white">SMTP Email Configuration</h2>
+              <button onClick={() => setShowSmtpModal(false)} className="text-slate-400 hover:text-white transition-colors">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">SMTP Server</label>
+                <input value={smtpForm.smtp_server} onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_server: e.target.value }))}
+                  placeholder="smtp.gmail.com"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                <p className="text-xs text-slate-500 mt-1">Common: smtp.gmail.com, smtp.office365.com, smtp.sendgrid.net</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">SMTP Port</label>
+                <input value={smtpForm.smtp_port} onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_port: e.target.value }))}
+                  placeholder="587"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                <p className="text-xs text-slate-500 mt-1">587 (STARTTLS), 465 (SSL), 25 (unencrypted)</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Username</label>
+                <input value={smtpForm.smtp_user} onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_user: e.target.value }))}
+                  placeholder="user@example.com"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                <p className="text-xs text-slate-500 mt-1">Usually your full email address</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Password</label>
+                <input type="password" value={smtpForm.smtp_password} onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_password: e.target.value }))}
+                  placeholder="(leave blank to keep existing)"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                <p className="text-xs text-slate-500 mt-1">Gmail: Use App Password, not regular password</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">From Email</label>
+                <input value={smtpForm.smtp_from_email} onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_from_email: e.target.value }))}
+                  placeholder="noreply@company.com"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">From Name</label>
+                <input value={smtpForm.smtp_from_name} onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_from_name: e.target.value }))}
+                  placeholder="MST AI Portal"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Test Recipient Email</label>
+                <input value={smtpForm.test_recipient} onChange={(e) => setSmtpForm((f) => ({ ...f, test_recipient: e.target.value }))}
+                  placeholder="test@example.com"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+              </div>
+
+              {smtpTestResult && (
+                <div className={`p-3 rounded-lg border text-sm ${smtpTestResult.success
+                  ? 'bg-green-500/10 text-green-400 border-green-500/30'
+                  : 'bg-red-500/10 text-red-400 border-red-500/30'
+                }`}>
+                  <span className="material-symbols-outlined text-sm align-text-bottom mr-1">
+                    {smtpTestResult.success ? 'check_circle' : 'error'}
+                  </span>
+                  {smtpTestResult.message}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-4 border-t border-white/5">
+                <button
+                  onClick={async () => {
+                    if (!smtpForm.smtp_server || !smtpForm.test_recipient) {
+                      showMsg('error', 'Enter SMTP server and test recipient'); return;
+                    }
+                    setSmtpTesting(true); setSmtpTestResult(null);
+                    try {
+                      const res = await api.post<{ success: boolean; message: string }>('/admin/test-smtp', {
+                        smtp_server: smtpForm.smtp_server,
+                        smtp_port: parseInt(smtpForm.smtp_port) || 587,
+                        smtp_user: smtpForm.smtp_user,
+                        smtp_password: smtpForm.smtp_password,
+                        smtp_from_email: smtpForm.smtp_from_email,
+                        test_recipient: smtpForm.test_recipient,
+                      });
+                      setSmtpTestResult(res);
+                    } catch (err: any) {
+                      setSmtpTestResult({ success: false, message: err.message });
+                    } finally { setSmtpTesting(false); }
+                  }}
+                  disabled={smtpTesting}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-sm font-bold rounded-lg transition-colors border border-amber-500/20 disabled:opacity-50"
+                >
+                  <span className={`material-symbols-outlined text-sm ${smtpTesting ? 'animate-spin' : ''}`}>{smtpTesting ? 'progress_activity' : 'send'}</span>
+                  {smtpTesting ? 'Testing...' : 'Test'}
+                </button>
+                <button
+                  onClick={async () => {
+                    setSmtpSaving(true);
+                    try {
+                      const payload: Record<string, string> = {
+                        smtp_server: smtpForm.smtp_server,
+                        smtp_port: smtpForm.smtp_port,
+                        smtp_user: smtpForm.smtp_user,
+                        smtp_from_email: smtpForm.smtp_from_email,
+                        smtp_from_name: smtpForm.smtp_from_name,
+                      };
+                      if (smtpForm.smtp_password) payload.smtp_password = smtpForm.smtp_password;
+                      await api.put('/settings/admin/smtp_config', { value: payload });
+                      showMsg('success', 'SMTP settings saved');
+                      await fetchSmtpSettings(); // Refresh config display
+                      setShowSmtpModal(false);
+                    } catch (err: any) {
+                      showMsg('error', err.message);
+                    } finally { setSmtpSaving(false); }
+                  }}
+                  disabled={smtpSaving}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-sm">save</span>
+                  {smtpSaving ? 'Saving...' : 'Save'}
+                </button>
+                <button onClick={() => setShowSmtpModal(false)} className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg transition-colors">
                   Cancel
                 </button>
               </div>
