@@ -3,17 +3,12 @@ import { Link } from 'react-router-dom';
 import { useTheme } from '../context/theme';
 
 interface IgniteHeaderProps {
-  completedVideos?: number;
-  totalVideos?: number;
   notesTaken?: number;
 }
 
 export const IgniteHeader: React.FC<IgniteHeaderProps> = ({
-  completedVideos = 0,
-  totalVideos = 6,
   notesTaken = 0,
 }) => {
-  const progressPercent = totalVideos > 0 ? Math.round((completedVideos / totalVideos) * 100) : 0;
   const { theme, toggleTheme } = useTheme();
 
   const handleProfileClick = () => {};
@@ -31,35 +26,25 @@ export const IgniteHeader: React.FC<IgniteHeaderProps> = ({
           </div>
         </Link>
 
-        <div className="hidden lg:flex items-center gap-4 pl-8 border-l border-slate-200 dark:border-white/5">
-          <div className="flex flex-col gap-1 w-48">
-            <div className="flex justify-between text-[10px] uppercase font-bold text-slate-400">
-              <span>Overall Progress</span>
-              <span className="text-slate-900 dark:text-white">{progressPercent}% ({completedVideos}/{totalVideos} Videos)</span>
-            </div>
-            <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full transition-all duration-500"
-                style={{ width: `${Math.max(progressPercent, 5)}%` }}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="hidden xl:flex items-center gap-2">
-          {[
-            { label: 'Code-mate', done: 0, total: 3 },
-            { label: 'RAG', done: 0, total: 1 },
-            { label: 'Agents', done: 0, total: 1 },
-            { label: 'Deep Dive', done: 0, total: 1 },
-          ].map((cat) => (
-            <div key={cat.label} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-white/5">
-              <span className="flex items-center justify-center w-5 h-5 rounded bg-slate-200 dark:bg-slate-700 text-[10px] font-bold">
-                {cat.done}/{cat.total}
-              </span>
-              <span className="text-xs text-slate-600 dark:text-slate-300">{cat.label}</span>
-            </div>
-          ))}
+        <div className="hidden lg:flex items-center gap-6 pl-8 border-l border-slate-200 dark:border-white/5">
+          <Link
+            to="/"
+            className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary transition-colors"
+          >
+            Solutions
+          </Link>
+          <Link
+            to="/marketplace"
+            className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary transition-colors"
+          >
+            Marketplace
+          </Link>
+          <Link
+            to="/articles"
+            className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary transition-colors"
+          >
+            Articles
+          </Link>
         </div>
       </div>
 

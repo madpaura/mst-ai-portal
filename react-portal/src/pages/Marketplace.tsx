@@ -31,11 +31,6 @@ const SIDEBAR_CATEGORIES = [
   { icon: 'lightbulb', label: 'All', key: 'all', type: '' },
 ];
 
-const NAV_TABS = [
-  { label: 'Agents', type: 'agent' },
-  { label: 'Skills', type: 'skill' },
-  { label: 'MCP Servers', type: 'mcp_server' },
-];
 
 const BADGE_STYLES: Record<string, { label: string; color: string; bg: string }> = {
   verified: { label: 'Verified', color: 'text-green-500', bg: 'bg-green-500/10' },
@@ -77,12 +72,7 @@ export const Marketplace: React.FC = () => {
     setActiveTab(cat?.type || '');
   };
 
-  const handleTabClick = (type: string) => {
-    setActiveTab(type);
-    const cat = SIDEBAR_CATEGORIES.find((c) => c.type === type);
-    if (cat) setActiveCategory(cat.key);
-  };
-
+  
   const handleCopyCommand = (cmd: string) => {
     navigator.clipboard?.writeText(cmd).catch(() => {});
   };
@@ -163,19 +153,6 @@ export const Marketplace: React.FC = () => {
             </Link>
 
             <nav className="hidden md:flex items-center gap-8">
-              {NAV_TABS.map((tab) => (
-                <button
-                  key={tab.type}
-                  onClick={() => handleTabClick(tab.type)}
-                  className={`text-sm font-medium transition-colors ${
-                    activeTab === tab.type
-                      ? 'text-primary font-semibold border-b-2 border-primary pb-1'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-primary'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
               <Link
                 to="/"
                 className="text-slate-600 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors"
