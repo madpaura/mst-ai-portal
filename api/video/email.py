@@ -88,6 +88,7 @@ Return ONLY the summary text, nothing else."""
         video_data=video_data,
         featured_items=related_items if related_items else None,
         stats=stats,
+        issue_label=f"AI Ignite Update · {video['title']}",
     )
 
     return {

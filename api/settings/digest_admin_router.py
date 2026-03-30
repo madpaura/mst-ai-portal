@@ -1,15 +1,18 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import Response
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
+from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import smtplib
+import asyncpg
 
 from auth.dependencies import require_admin
 from email_utils.digest import generate_learning_digest
 from email_utils.utils import send_email
 from config import settings
+from database import get_db
 
 router = APIRouter()
 
@@ -30,6 +33,121 @@ class SendDigestRequest(BaseModel):
     recipient_emails: list[str]
     subject: str
     html_content: str
+    plain_text: str
+    summary: dict
+    days_covered: int = 7
+    custom_content: str = ""
+    issue_number: Optional[int] = None
+    title: str = ""
+
+
+class DigestIssue(BaseModel):
+    id: int
+    issue_number: int
+    title: str
+    subject: str
+    created_at: datetime
+    sent_at: Optional[datetime]
+    recipient_count: int
+    days_covered: int
+
+
+@router.get("/digest-issues", response_model=List[DigestIssue])
+async def get_digest_issues(admin: dict = Depends(require_admin)):
+    """Get list of all digest issues"""
+    pool = await get_db()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT id, issue_number, title, subject, created_at, sent_at, 
+                   recipient_count, days_covered
+            FROM digest_issues 
+            ORDER BY issue_number DESC
+        """)
+        return [DigestIssue(**dict(row)) for row in rows]
+
+
+class DigestIssueFull(BaseModel):
+    id: int
+    issue_number: int
+    title: str
+    subject: str
+    html_content: str
+    plain_text: str
+    summary: dict
+    days_covered: int
+    custom_content: str
+    created_at: datetime
+    sent_at: Optional[datetime]
+    recipient_count: int
+
+
+@router.get("/digest-issues/{issue_id}", response_model=DigestIssueFull)
+async def get_digest_issue(issue_id: int, admin: dict = Depends(require_admin)):
+    """Get a single digest issue with full content"""
+    import json
+    pool = await get_db()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT id, issue_number, title, subject, html_content, plain_text,
+                   summary, days_covered, custom_content, created_at, sent_at, recipient_count
+            FROM digest_issues
+            WHERE id = $1
+        """, issue_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Digest issue not found")
+        data = dict(row)
+        if isinstance(data['summary'], str):
+            data['summary'] = json.loads(data['summary'])
+        return DigestIssueFull(**data)
+
+
+@router.delete("/digest-issues/{issue_id}")
+async def delete_digest_issue(issue_id: int, admin: dict = Depends(require_admin)):
+    """Delete a digest issue"""
+    pool = await get_db()
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            "DELETE FROM digest_issues WHERE id = $1", issue_id
+        )
+        if result == "DELETE 0":
+            raise HTTPException(status_code=404, detail="Digest issue not found")
+        return {"message": "Digest issue deleted"}
+
+
+async def get_next_issue_number() -> int:
+    """Get the next issue number"""
+    pool = await get_db()
+    async with pool.acquire() as conn:
+        # Try to get the current max issue number
+        result = await conn.fetchval(
+            "SELECT MAX(issue_number) FROM digest_issues"
+        )
+        return (result or 0) + 1
+
+
+async def save_digest_issue(
+    issue_number: int,
+    title: str,
+    subject: str,
+    html_content: str,
+    plain_text: str,
+    summary: dict,
+    days_covered: int,
+    custom_content: str
+) -> int:
+    """Save a digest issue to the database"""
+    import json
+    pool = await get_db()
+    async with pool.acquire() as conn:
+        record_id = await conn.fetchval("""
+            INSERT INTO digest_issues
+            (issue_number, title, subject, html_content, plain_text,
+             summary, days_covered, custom_content)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING id
+        """, issue_number, title, subject, html_content, plain_text,
+            json.dumps(summary), days_covered, custom_content)
+        return record_id
 
 
 class SendDigestResponse(BaseModel):
@@ -42,16 +160,82 @@ class SendDigestResponse(BaseModel):
 async def digest_preview(req: DigestPreviewRequest, admin: dict = Depends(require_admin)):
     """Generate a preview of the learning digest email"""
     try:
-        preview = await generate_learning_digest(req.days, req.custom_content or None)
+        # Get next issue number
+        issue_number = await get_next_issue_number()
+        
+        # Generate digest content (pass issue_number so it appears in email header)
+        preview = await generate_learning_digest(req.days, req.custom_content or None, issue_number=issue_number)
+
+        # Update subject and title with issue number
+        title = f"AI Ignite Digest · {req.days}-Day Update - #{issue_number}"
+        preview["subject"] = title
+        preview["issue_number"] = issue_number
+        preview["title"] = title
+        
         return DigestPreviewResponse(**preview)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate digest: {str(e)}")
+
+
+class SaveDigestRequest(BaseModel):
+    subject: str
+    html_content: str
+    plain_text: str
+    summary: dict
+    days_covered: int = 7
+    custom_content: str = ""
+    issue_number: Optional[int] = None
+    title: str = ""
+
+
+class SaveDigestResponse(BaseModel):
+    success: bool
+    message: str
+    issue_number: int
+
+
+@router.post("/save-digest", response_model=SaveDigestResponse)
+async def save_digest(req: SaveDigestRequest, admin: dict = Depends(require_admin)):
+    """Save digest as a draft without sending"""
+    try:
+        issue_number = req.issue_number or await get_next_issue_number()
+        title = req.title or f"AI Ignite Digest · {req.days_covered}-Day Update - #{issue_number}"
+
+        await save_digest_issue(
+            issue_number=issue_number,
+            title=title,
+            subject=req.subject,
+            html_content=req.html_content,
+            plain_text=req.plain_text,
+            summary=req.summary,
+            days_covered=req.days_covered,
+            custom_content=req.custom_content,
+        )
+        return SaveDigestResponse(success=True, message=f"Issue #{issue_number} saved", issue_number=issue_number)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Save error: {str(e)}")
 
 
 @router.post("/send-digest", response_model=SendDigestResponse)
 async def send_digest(req: SendDigestRequest, admin: dict = Depends(require_admin)):
     """Send learning digest to multiple recipients"""
     try:
+        # Save the digest issue
+        issue_number = req.issue_number or await get_next_issue_number()
+        title = req.title or f"AI Ignite Digest · Issue #{issue_number}"
+        
+        await save_digest_issue(
+            issue_number=issue_number,
+            title=title,
+            subject=req.subject,
+            html_content=req.html_content,
+            plain_text=req.plain_text,
+            summary=req.summary,
+            days_covered=req.days_covered,
+            custom_content=req.custom_content
+        )
+
+        # Send emails
         sent_count = 0
         failed = []
 
@@ -66,16 +250,24 @@ async def send_digest(req: SendDigestRequest, admin: dict = Depends(require_admi
             else:
                 failed.append(recipient)
 
+        # Update recipient count
+        pool = await get_db()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE digest_issues SET sent_at = NOW(), recipient_count = $1 WHERE issue_number = $2",
+                sent_count, issue_number
+            )
+
         if sent_count == len(req.recipient_emails):
             return SendDigestResponse(
                 success=True,
-                message=f"Successfully sent digest to all {sent_count} recipients",
+                message=f"Successfully sent Issue #{issue_number} to all {sent_count} recipients",
                 sent_count=sent_count,
             )
         else:
             return SendDigestResponse(
                 success=False,
-                message=f"Sent to {sent_count}/{len(req.recipient_emails)} recipients. Failed: {', '.join(failed)}",
+                message=f"Sent Issue #{issue_number} to {sent_count}/{len(req.recipient_emails)} recipients. Failed: {', '.join(failed)}",
                 sent_count=sent_count,
             )
     except Exception as e:

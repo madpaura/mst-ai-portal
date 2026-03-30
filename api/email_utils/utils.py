@@ -61,7 +61,7 @@ async def send_email(
         return False
 
 
-def generate_email_html(video_data: dict, featured_items: list = None, stats: dict = None, series: dict = None) -> str:
+def generate_email_html(video_data: dict, featured_items: list = None, stats: dict = None, series: dict = None, issue_label: str = None) -> str:
     """
     Generate HTML email using editorial template.
 
@@ -128,4 +128,5 @@ def generate_email_html(video_data: dict, featured_items: list = None, stats: di
         featured_series=series,
         cta_text="Explore the full library",
         cta_link=settings.PORTAL_URL,
+        issue_label=issue_label,
     )

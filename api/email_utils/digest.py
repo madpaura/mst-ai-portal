@@ -21,7 +21,7 @@ Return ONLY the summary text, nothing else."""
         return ""
 
 
-async def generate_learning_digest(days: int = 7, custom_content: Optional[str] = None) -> dict:
+async def generate_learning_digest(days: int = 7, custom_content: Optional[str] = None, issue_number: int = None) -> dict:
     """
     Generate a comprehensive multi-page learning digest email covering:
     - Page 1: Learning (recently published videos)
@@ -211,6 +211,7 @@ async def generate_learning_digest(days: int = 7, custom_content: Optional[str] 
         announcements=[dict(a) for a in announcements],
         custom_content=custom_content,
         portal_url=settings.PORTAL_URL,
+        issue_number=issue_number,
     )
 
     return {

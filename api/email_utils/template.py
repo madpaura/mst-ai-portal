@@ -12,6 +12,7 @@ def generate_editorial_email(
     featured_series: Optional[dict] = None,
     cta_text: str = "Explore the full library",
     cta_link: str = "http://localhost:9810",
+    issue_label: str = None,
 ) -> str:
     """
     Generate email HTML using editorial template.
@@ -32,7 +33,8 @@ def generate_editorial_email(
     # Build featured item card
     featured_card = f"""
       <div class="hero-card">
-        <div class="hero-thumb">
+        <a href="{featured_item.get('link', '')}" style="text-decoration:none;color:inherit;display:block;">
+          <div class="hero-thumb">
           <svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 568 240" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
             <rect width="568" height="240" fill="#1a1614"/>
             <rect width="568" height="240" fill="url(#hg1)"/>
@@ -67,7 +69,7 @@ def generate_editorial_email(
             </div>
             <a href="{featured_item.get('link', '')}" class="watch-link">Watch Now ↗</a>
           </div>
-        </div>
+        </a>
       </div>
     """
 
@@ -83,7 +85,8 @@ def generate_editorial_email(
 
         grid_items += f"""
       <div class="gc">
-        <div class="gc-thumb" style="background:linear-gradient(135deg,#{bg_dark},#{bg_darker})">
+        <a href="{item.get('link', '')}" style="text-decoration:none;color:inherit;display:block;">
+          <div class="gc-thumb" style="background:linear-gradient(135deg,#{bg_dark},#{bg_darker})">
           <svg width="100%" height="108" viewBox="0 0 200 108" xmlns="http://www.w3.org/2000/svg">
             <defs><radialGradient id="gc{idx+1}" cx="50%" cy="50%" r="60%"><stop offset="0%" stop-color="#{accent}" stop-opacity="0.4"/><stop offset="100%" stop-opacity="0"/></radialGradient></defs>
             <rect width="200" height="108" fill="url(#gc{idx+1})"/>
@@ -98,6 +101,7 @@ def generate_editorial_email(
           <div class="gc-title">{item.get('title', '')}</div>
           <div class="gc-dur">{item.get('duration', '')} · {item.get('level', 'Beginner')}</div>
         </div>
+        </a>
       </div>
         """
 
@@ -639,7 +643,7 @@ def generate_editorial_email(
   <div class="header">
     <div class="header-inner">
       <div class="header-left">
-        <div class="issue-label">AI Ignite Weekly · Issue No. {issue_number}</div>
+        <div class="issue-label">{issue_label or f"AI Ignite Update · Issue No. {issue_number}"}</div>
         <h1 class="header-title">{issue_title}</h1>
       </div>
       <div class="header-right">
@@ -727,6 +731,7 @@ def generate_digest_email(
     announcements: list = None,
     custom_content: str = None,
     portal_url: str = "http://localhost:9810",
+    issue_number: int = None,
 ) -> str:
     """
     Generate a multi-page digest email HTML.
@@ -744,13 +749,15 @@ def generate_digest_email(
             tag_bg = accent
             cards += f"""
         <div style="background:#fff;border:1px solid #e0ddd8;border-radius:2px;padding:18px 20px;margin-bottom:10px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <a href="{item.get('link', '#')}" style="text-decoration:none;color:inherit;display:block;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
             <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:#fff;background:{tag_bg};padding:3px 8px;border-radius:1px;">{item.get('tag', 'New')}</span>
             <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#bbb;letter-spacing:0.1em;">{item.get('category', '')}</span>
           </div>
           <div style="font-family:'Playfair Display',Georgia,serif;font-size:16px;color:#1a1614;margin-bottom:6px;line-height:1.3;">{item.get('title', '')}</div>
           <p style="font-size:12.5px;color:#777;line-height:1.55;margin:0 0 10px 0;">{item.get('description', '')}</p>
           <a href="{item.get('link', '#')}" style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:{accent};text-decoration:none;">View {icon} &#8599;</a>
+          </a>
         </div>"""
         return cards
 
@@ -826,7 +833,7 @@ def generate_digest_email(
     <div style="padding:40px 48px 32px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;">
         <div>
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#e84830;margin-bottom:10px;">AI Ignite Digest · {days}-Day Update</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:#e84830;margin-bottom:10px;">AI Ignite Digest · {days}-Day Update{f' — Issue #{issue_number}' if issue_number else ''}</div>
           <h1 style="font-family:'Playfair Display',Georgia,serif;font-size:36px;line-height:1.05;color:#1a1614;letter-spacing:-0.02em;">Learning<br><em style="color:#e84830;">Digest</em></h1>
         </div>
         <div style="text-align:right;flex-shrink:0;">
