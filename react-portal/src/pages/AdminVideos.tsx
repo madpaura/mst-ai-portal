@@ -154,6 +154,9 @@ export const AdminVideos: React.FC = () => {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
+  // Beautify
+  const [beautifying, setBeautifying] = useState<string | null>(null);
+
   // Message
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -174,6 +177,20 @@ export const AdminVideos: React.FC = () => {
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
+  };
+
+  const handleBeautify = async (field: string, content: string, setter: (val: string) => void) => {
+    if (!content.trim()) return;
+    setBeautifying(field);
+    try {
+      const result = await api.post<{ content: string }>('/admin/articles/beautify', { content });
+      setter(result.content);
+      showMsg('success', 'Content beautified with AI');
+    } catch (err: any) {
+      showMsg('error', 'Beautify failed: ' + err.message);
+    } finally {
+      setBeautifying(null);
+    }
   };
 
   const fetchVideos = useCallback(async () => {
@@ -1136,7 +1153,17 @@ export const AdminVideos: React.FC = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Description</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Description</label>
+                    <button
+                      onClick={() => handleBeautify('meta-desc', editForm.description, (v) => setEditForm((f) => ({ ...f, description: v })))}
+                      disabled={beautifying === 'meta-desc' || !editForm.description.trim()}
+                      className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-purple-400 hover:text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded transition-colors disabled:opacity-40"
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '11px' }}>{beautifying === 'meta-desc' ? 'autorenew' : 'auto_fix_high'}</span>
+                      {beautifying === 'meta-desc' ? 'Beautifying…' : 'Beautify'}
+                    </button>
+                  </div>
                   <textarea value={editForm.description} onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
                     rows={3} className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none" />
                 </div>
@@ -1260,7 +1287,17 @@ export const AdminVideos: React.FC = () => {
                     placeholder="Getting Started with the Coding Agent" className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Content (Markdown)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Content (Markdown)</label>
+                    <button
+                      onClick={() => handleBeautify('howto', howtoContent, setHowtoContent)}
+                      disabled={beautifying === 'howto' || !howtoContent.trim()}
+                      className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-purple-400 hover:text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded transition-colors disabled:opacity-40"
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '11px' }}>{beautifying === 'howto' ? 'autorenew' : 'auto_fix_high'}</span>
+                      {beautifying === 'howto' ? 'Beautifying…' : 'Beautify'}
+                    </button>
+                  </div>
                   <textarea value={howtoContent} onChange={(e) => setHowtoContent(e.target.value)}
                     rows={15} placeholder="# Step 1: Install the CLI&#10;&#10;```bash&#10;curl -s https://ai.internal.corp/install | bash&#10;```"
                     className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none font-mono" />

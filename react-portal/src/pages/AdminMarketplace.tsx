@@ -69,10 +69,25 @@ export const AdminMarketplace: React.FC = () => {
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
 
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [beautifying, setBeautifying] = useState(false);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
+  };
+
+  const handleBeautifyLongDesc = async () => {
+    if (!form.long_description.trim()) return;
+    setBeautifying(true);
+    try {
+      const result = await api.post<{ content: string }>('/admin/articles/beautify', { content: form.long_description });
+      setForm((f) => ({ ...f, long_description: result.content }));
+      showMsg('success', 'Content beautified with AI');
+    } catch (err: any) {
+      showMsg('error', 'Beautify failed: ' + err.message);
+    } finally {
+      setBeautifying(false);
+    }
   };
 
   const fetchComponents = useCallback(async () => {
@@ -369,7 +384,17 @@ export const AdminMarketplace: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Long Description (Markdown)</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Long Description (Markdown)</label>
+                  <button
+                    onClick={handleBeautifyLongDesc}
+                    disabled={beautifying || !form.long_description.trim()}
+                    className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-purple-400 hover:text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded transition-colors disabled:opacity-40"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '11px' }}>{beautifying ? 'autorenew' : 'auto_fix_high'}</span>
+                    {beautifying ? 'Beautifying…' : 'Beautify'}
+                  </button>
+                </div>
                 <textarea value={form.long_description} onChange={(e) => setForm((f) => ({ ...f, long_description: e.target.value }))}
                   rows={5} className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none font-mono" />
               </div>

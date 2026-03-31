@@ -114,10 +114,25 @@ export const AdminSolutions: React.FC = () => {
   const [newsForm, setNewsForm] = useState<NewsForm>(EMPTY_NEWS);
 
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [beautifying, setBeautifying] = useState<string | null>(null);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
+  };
+
+  const handleBeautify = async (field: string, content: string, setter: (val: string) => void) => {
+    if (!content.trim()) return;
+    setBeautifying(field);
+    try {
+      const result = await api.post<{ content: string }>('/admin/articles/beautify', { content });
+      setter(result.content);
+      showMsg('success', 'Content beautified with AI');
+    } catch (err: any) {
+      showMsg('error', 'Beautify failed: ' + err.message);
+    } finally {
+      setBeautifying(null);
+    }
   };
 
   const fetchCards = useCallback(async () => {
@@ -592,7 +607,17 @@ export const AdminSolutions: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Long Description (Markdown)</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Long Description (Markdown)</label>
+                  <button
+                    onClick={() => handleBeautify('card-long', cardForm.long_description, (v) => setCardForm((f) => ({ ...f, long_description: v })))}
+                    disabled={beautifying === 'card-long' || !cardForm.long_description.trim()}
+                    className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-purple-400 hover:text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded transition-colors disabled:opacity-40"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '11px' }}>{beautifying === 'card-long' ? 'autorenew' : 'auto_fix_high'}</span>
+                    {beautifying === 'card-long' ? 'Beautifying…' : 'Beautify'}
+                  </button>
+                </div>
                 <textarea value={cardForm.long_description} onChange={(e) => setCardForm((f) => ({ ...f, long_description: e.target.value }))}
                   rows={8} className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none resize-none font-mono" />
               </div>
