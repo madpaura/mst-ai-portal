@@ -176,6 +176,12 @@ export const AdminVideos: React.FC = () => {
   // Beautify
   const [beautifying, setBeautifying] = useState<string | null>(null);
 
+  // Storage / cleanup
+  interface StorageFile { name: string; size: number; is_intermediate: boolean; is_primary: boolean }
+  const [showCleanup, setShowCleanup] = useState(false);
+  const [storageInfo, setStorageInfo] = useState<{ files: StorageFile[]; hls_size: number; thumb_size: number } | null>(null);
+  const [cleaningUp, setCleaningUp] = useState(false);
+
   // Message
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -672,6 +678,35 @@ export const AdminVideos: React.FC = () => {
     }
   };
 
+  const handleOpenCleanup = async () => {
+    if (!selected) return;
+    try {
+      const info = await api.get<{ files: any[]; hls_size: number; thumb_size: number }>(`/admin/videos/${selected.id}/storage-info`);
+      setStorageInfo(info);
+      setShowCleanup(true);
+    } catch (err: any) {
+      showMsg('error', 'Failed to load storage info: ' + err.message);
+    }
+  };
+
+  const handleCleanup = async () => {
+    if (!selected) return;
+    setCleaningUp(true);
+    try {
+      const result = await api.post<{ deleted: string[]; freed_bytes: number }>(`/admin/videos/${selected.id}/cleanup`);
+      const mb = (result.freed_bytes / 1024 / 1024).toFixed(1);
+      showMsg('success', `Cleaned up ${result.deleted.length} file(s), freed ${mb} MB`);
+      setShowCleanup(false);
+      setStorageInfo(null);
+    } catch (err: any) {
+      showMsg('error', err.message);
+    } finally {
+      setCleaningUp(false);
+    }
+  };
+
+  const fmtBytes = (b: number) => b > 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${(b / 1024).toFixed(0)} KB`;
+
   const bannerPreviewHtml = `
     <!DOCTYPE html><html><head>
     <style>
@@ -938,6 +973,81 @@ export const AdminVideos: React.FC = () => {
         </div>
       )}
 
+      {/* Cleanup Modal */}
+      {showCleanup && storageInfo && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="material-symbols-outlined text-amber-400">cleaning_services</span>
+                Storage Cleanup
+              </h3>
+              <button onClick={() => setShowCleanup(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Raw Files</p>
+              {storageInfo.files.map((f) => (
+                <div key={f.name} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${
+                  f.is_intermediate ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/5'
+                }`}>
+                  <span className={`material-symbols-outlined text-sm ${f.is_intermediate ? 'text-amber-400' : f.is_primary ? 'text-green-400' : 'text-slate-400'}`}>
+                    {f.is_primary ? 'check_circle' : f.is_intermediate ? 'warning' : 'draft'}
+                  </span>
+                  <span className={`flex-1 font-mono ${f.is_intermediate ? 'text-amber-300' : 'text-slate-700 dark:text-slate-300'}`}>{f.name}</span>
+                  <span className="text-slate-500">{fmtBytes(f.size)}</span>
+                  {f.is_intermediate && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold">Backup</span>}
+                  {f.is_primary && <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 font-bold">Active</span>}
+                </div>
+              ))}
+              {storageInfo.hls_size > 0 && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/5">
+                  <span className="material-symbols-outlined text-sm text-primary">video_library</span>
+                  <span className="flex-1 text-slate-700 dark:text-slate-300">HLS streams/</span>
+                  <span className="text-slate-500">{fmtBytes(storageInfo.hls_size)}</span>
+                </div>
+              )}
+              {storageInfo.thumb_size > 0 && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/5">
+                  <span className="material-symbols-outlined text-sm text-slate-400">image</span>
+                  <span className="flex-1 text-slate-700 dark:text-slate-300">thumb.jpg</span>
+                  <span className="text-slate-500">{fmtBytes(storageInfo.thumb_size)}</span>
+                </div>
+              )}
+            </div>
+
+            {storageInfo.files.some(f => f.is_intermediate) ? (
+              <div className="pt-2 border-t border-slate-200 dark:border-white/5">
+                <p className="text-xs text-slate-500 mb-3">
+                  Will delete {storageInfo.files.filter(f => f.is_intermediate).length} backup file(s) — freeing&nbsp;
+                  <strong className="text-amber-400">{fmtBytes(storageInfo.files.filter(f => f.is_intermediate).reduce((s, f) => s + f.size, 0))}</strong>.
+                  The active <code className="text-green-400">original.mp4</code> and HLS streams are untouched.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleCleanup}
+                    disabled={cleaningUp}
+                    className="flex items-center gap-1.5 px-5 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-sm font-bold rounded-lg transition-colors border border-amber-500/20 disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-sm">cleaning_services</span>
+                    {cleaningUp ? 'Cleaning...' : 'Delete Backups'}
+                  </button>
+                  <button onClick={() => setShowCleanup(false)} className="px-5 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 py-2 border-t border-slate-200 dark:border-white/5">
+                No backup files to clean up. Storage is already lean.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Left Panel — Video List grouped by course */}
       <aside className="w-80 border-r border-slate-200 dark:border-white/10 bg-sidebar-light dark:bg-sidebar-dark flex flex-col shrink-0">
         <div className="p-4 border-b border-slate-200 dark:border-white/10 space-y-3">
@@ -1117,9 +1227,14 @@ export const AdminVideos: React.FC = () => {
             <div className="p-4 rounded-xl bg-card-light dark:bg-card-dark border border-slate-200 dark:border-white/5 sticky top-0">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">Video File</h3>
-                <button onClick={handleReloadPlayer} title="Reload player" className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
-                  <span className="material-symbols-outlined text-sm">refresh</span>
-                </button>
+                <div className="flex items-center gap-1">
+                  <button onClick={handleOpenCleanup} title="Cleanup backup files" className="p-1 rounded hover:bg-amber-500/10 text-slate-400 hover:text-amber-400 transition-colors">
+                    <span className="material-symbols-outlined text-sm">cleaning_services</span>
+                  </button>
+                  <button onClick={handleReloadPlayer} title="Reload player" className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                    <span className="material-symbols-outlined text-sm">refresh</span>
+                  </button>
+                </div>
               </div>
               {selected.status === 'processing' && (
                 <div className="flex flex-col items-center justify-center py-4 gap-2">
@@ -1209,10 +1324,10 @@ export const AdminVideos: React.FC = () => {
                   </button>
                 </div>
               )}
-              {selected.job_status && (
-                <div className="mt-3 text-xs text-slate-400">
-                  Last job: <span className={`font-bold ${selected.job_status === 'completed' ? 'text-green-400' : selected.job_status === 'failed' ? 'text-red-400' : 'text-amber-400'}`}>{selected.job_status}</span>
-                  {selected.job_error && <span className="text-red-400 ml-2">— {selected.job_error}</span>}
+              {selected.job_status === 'failed' && (
+                <div className="mt-3 text-xs text-red-400 bg-red-500/10 rounded-lg px-3 py-2 border border-red-500/20">
+                  <span className="font-bold">Last job failed</span>
+                  {selected.job_error && <span className="ml-1 opacity-80">— {selected.job_error}</span>}
                 </div>
               )}
               {opsLog.length > 0 && (

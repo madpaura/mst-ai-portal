@@ -246,6 +246,75 @@ async def admin_cancel_job(video_id: str, admin: dict = Depends(require_admin)):
     return {"message": "Job cancelled"}
 
 
+@router.get("/videos/{video_id}/storage-info")
+async def admin_storage_info(video_id: str, admin: dict = Depends(require_admin)):
+    """List raw files with sizes and flag intermediate/backup files."""
+    video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
+    raw_dir = os.path.join(video_dir, "raw")
+
+    files = []
+    if os.path.isdir(raw_dir):
+        intermediate_names = {"original_pretrim.mp4", "original_precut.mp4", "original_no_banner.mp4"}
+        for fname in sorted(os.listdir(raw_dir)):
+            fpath = os.path.join(raw_dir, fname)
+            if not os.path.isfile(fpath):
+                continue
+            is_intermediate = (
+                fname in intermediate_names
+                or ".cut_" in fname
+                or ".trimmed" in fname
+            )
+            files.append({
+                "name": fname,
+                "size": os.path.getsize(fpath),
+                "is_intermediate": is_intermediate,
+                "is_primary": fname == "original.mp4",
+            })
+
+    hls_size = 0
+    hls_dir = os.path.join(video_dir, "hls")
+    if os.path.isdir(hls_dir):
+        for root, _dirs, fnames in os.walk(hls_dir):
+            for f in fnames:
+                hls_size += os.path.getsize(os.path.join(root, f))
+
+    thumb_size = 0
+    thumb_path = os.path.join(video_dir, "thumb.jpg")
+    if os.path.isfile(thumb_path):
+        thumb_size = os.path.getsize(thumb_path)
+
+    return {"files": files, "hls_size": hls_size, "thumb_size": thumb_size}
+
+
+@router.post("/videos/{video_id}/cleanup")
+async def admin_cleanup_video(video_id: str, admin: dict = Depends(require_admin)):
+    """Delete intermediate/backup files to free disk space."""
+    video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
+    raw_dir = os.path.join(video_dir, "raw")
+
+    deleted = []
+    freed_bytes = 0
+
+    if os.path.isdir(raw_dir):
+        intermediate_names = {"original_pretrim.mp4", "original_precut.mp4", "original_no_banner.mp4"}
+        for fname in os.listdir(raw_dir):
+            fpath = os.path.join(raw_dir, fname)
+            if not os.path.isfile(fpath):
+                continue
+            is_intermediate = (
+                fname in intermediate_names
+                or ".cut_" in fname
+                or ".trimmed" in fname
+            )
+            if is_intermediate:
+                size = os.path.getsize(fpath)
+                os.remove(fpath)
+                freed_bytes += size
+                deleted.append(fname)
+
+    return {"deleted": deleted, "freed_bytes": freed_bytes}
+
+
 @router.post("/videos/{video_id}/transcode")
 async def admin_transcode(video_id: str, admin: dict = Depends(require_admin)):
     db = await get_db()

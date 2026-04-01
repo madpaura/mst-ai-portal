@@ -1,14 +1,16 @@
 import React from 'react';
 import { Link, useLocation, Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from '../api/auth';
+import { useTheme } from '../context/theme';
 
 export const AdminLayout: React.FC = () => {
   const { user, isAdmin, loading, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
 
   if (loading) {
     return (
-      <div className="dark min-h-screen bg-background-dark flex items-center justify-center">
+      <div className="min-h-screen bg-background-dark flex items-center justify-center">
         <div className="text-slate-400">Loading...</div>
       </div>
     );
@@ -29,9 +31,9 @@ export const AdminLayout: React.FC = () => {
   ];
 
   return (
-    <div className="dark min-h-screen bg-background-dark text-slate-100 flex flex-col">
+    <div className={`${theme === 'dark' ? 'dark' : ''} min-h-screen bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 flex flex-col`}>
       {/* Admin Header */}
-      <header className="h-16 bg-sidebar-dark border-b border-white/10 flex items-center justify-between px-6 shrink-0 z-50">
+      <header className="h-16 bg-sidebar-light dark:bg-sidebar-dark border-b border-slate-200 dark:border-white/10 flex items-center justify-between px-6 shrink-0 z-50">
         <div className="flex items-center gap-6">
           <Link to="/" className="flex items-center gap-2 group">
             <div className="w-8 h-8 rounded-lg bg-primary/20 border border-primary/30 flex items-center justify-center">
@@ -62,6 +64,15 @@ export const AdminLayout: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-4">
+          <button
+            onClick={toggleTheme}
+            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors"
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            <span className="material-symbols-outlined text-sm">
+              {theme === 'dark' ? 'light_mode' : 'dark_mode'}
+            </span>
+          </button>
           <Link
             to="/"
             className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors"
