@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
 import { HlsPlayer, type HlsPlayerHandle } from '../components/HlsPlayer';
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 interface Video {
   id: string;
   title: string;
@@ -95,6 +97,17 @@ export const AdminVideos: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Last-edited tracking
+  const [lastEditedId, setLastEditedId] = useState<string | null>(
+    () => localStorage.getItem('mst_last_edited_video')
+  );
+  const [opsLog, setOpsLog] = useState<Array<{ op: string; file: string; ts: string }>>([]);
+
+  const markEdited = (id: string) => {
+    setLastEditedId(id);
+    localStorage.setItem('mst_last_edited_video', id);
+  };
+
   // Create video form
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ title: '', slug: '', description: '', category: 'Code-mate', course_id: '' });
@@ -104,8 +117,14 @@ export const AdminVideos: React.FC = () => {
 
   // Shared video player
   const playerRef = useRef<HlsPlayerHandle>(null);
+  const rawVideoRef = useRef<HTMLVideoElement>(null);
   const [playerTime, setPlayerTime] = useState(0);
   const [playerDuration, setPlayerDuration] = useState(0);
+  const [playerKey, setPlayerKey] = useState(0);
+
+  // Processing poll
+  const processingPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevStatusRef = useRef<string | null>(null);
 
   // Chapters
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -197,6 +216,7 @@ export const AdminVideos: React.FC = () => {
     try {
       const data = await api.get<Video[]>('/admin/videos');
       setVideos(data);
+      setSelected(prev => prev ? (data.find(v => v.id === prev.id) ?? prev) : null);
     } catch (err: any) {
       showMsg('error', err.message);
     } finally {
@@ -289,6 +309,20 @@ export const AdminVideos: React.FC = () => {
     } catch {
       setAttachments([]);
     }
+    // Load ops log
+    try {
+      const ops = await api.get<Array<{ op: string; file: string; ts: string }>>(`/admin/videos/${video.id}/ops-log`);
+      setOpsLog(ops);
+    } catch {
+      setOpsLog([]);
+    }
+  };
+
+  const refreshOpsLog = async (videoId: string) => {
+    try {
+      const ops = await api.get<Array<{ op: string; file: string; ts: string }>>(`/admin/videos/${videoId}/ops-log`);
+      setOpsLog(ops);
+    } catch { /* ignore */ }
   };
 
   // ── Handlers ──────────────────────────────────────────
@@ -368,6 +402,8 @@ export const AdminVideos: React.FC = () => {
       await api.upload(`/admin/videos/${selected.id}/upload`, uploadFile);
       setUploadFile(null);
       await fetchVideos();
+      markEdited(selected.id);
+      refreshOpsLog(selected.id);
       showMsg('success', 'Video uploaded successfully');
     } catch (err: any) {
       showMsg('error', err.message);
@@ -410,12 +446,13 @@ export const AdminVideos: React.FC = () => {
     }
   };
 
-  const handleRetranscode = async () => {
+  const handleTranscode = async () => {
     if (!selected) return;
     try {
-      await api.post(`/admin/videos/${selected.id}/retranscode`);
+      await api.post(`/admin/videos/${selected.id}/transcode`);
       await fetchVideos();
-      showMsg('success', 'Re-transcode queued');
+      markEdited(selected.id);
+      showMsg('success', 'Transcode queued');
     } catch (err: any) {
       showMsg('error', err.message);
     }
@@ -434,7 +471,8 @@ export const AdminVideos: React.FC = () => {
         end_seconds: trimEnd,
       });
       await fetchVideos();
-      showMsg('success', `Trim started: ${trimStart}s — ${trimEnd}s. Video will re-transcode after trimming.`);
+      markEdited(selected.id);
+      showMsg('success', `Trim started: ${trimStart}s — ${trimEnd}s. Transcode when ready.`);
     } catch (err: any) {
       showMsg('error', err.message);
     } finally {
@@ -455,7 +493,8 @@ export const AdminVideos: React.FC = () => {
         end_seconds: trimEnd,
       });
       await fetchVideos();
-      showMsg('success', `Cut started: removing ${trimStart}s — ${trimEnd}s. Video will re-transcode after cutting.`);
+      markEdited(selected.id);
+      showMsg('success', `Cut started: removing ${trimStart}s — ${trimEnd}s. Transcode when ready.`);
     } catch (err: any) {
       showMsg('error', err.message);
     } finally {
@@ -569,7 +608,9 @@ export const AdminVideos: React.FC = () => {
             setBannerConfig(b);
             if (bannerPollRef.current) clearInterval(bannerPollRef.current);
             if (b.status === 'ready') {
-              showMsg('success', 'Banner generated & prepended to video! Re-transcode queued.');
+              showMsg('success', 'Banner generated & prepended to video! Transcode when ready.');
+              markEdited(selected.id);
+              refreshOpsLog(selected.id);
               fetchVideos();
             } else if (b.status === 'error') {
               showMsg('error', `Banner generation failed: ${b.error || 'Unknown error'}`);
@@ -582,12 +623,54 @@ export const AdminVideos: React.FC = () => {
     }
   };
 
-  // Cleanup poll on unmount
+  // Cleanup polls on unmount
   useEffect(() => {
     return () => {
       if (bannerPollRef.current) clearInterval(bannerPollRef.current);
+      if (processingPollRef.current) clearInterval(processingPollRef.current);
     };
   }, []);
+
+  // Poll when processing; auto-reload player when status changes
+  useEffect(() => {
+    const status = selected?.status ?? null;
+    if (prevStatusRef.current === 'processing' && status !== 'processing') {
+      setPlayerKey(k => k + 1);
+      if (selected?.id) refreshOpsLog(selected.id);
+    }
+    prevStatusRef.current = status;
+
+    if (processingPollRef.current) {
+      clearInterval(processingPollRef.current);
+      processingPollRef.current = null;
+    }
+    if (status === 'processing') {
+      processingPollRef.current = setInterval(() => { fetchVideos(); }, 3000);
+    }
+    return () => {
+      if (processingPollRef.current) {
+        clearInterval(processingPollRef.current);
+        processingPollRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.status, selected?.id]);
+
+  const handleReloadPlayer = async () => {
+    await fetchVideos();
+    setPlayerKey(k => k + 1);
+  };
+
+  const handleCancelJob = async () => {
+    if (!selected) return;
+    try {
+      await api.post(`/admin/videos/${selected.id}/cancel-job`);
+      await fetchVideos();
+      showMsg('success', 'Job cancelled');
+    } catch (err: any) {
+      showMsg('error', err.message);
+    }
+  };
 
   const bannerPreviewHtml = `
     <!DOCTYPE html><html><head>
@@ -925,9 +1008,14 @@ export const AdminVideos: React.FC = () => {
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{v.title}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">{v.category} · {formatDuration(v.duration_s)}</p>
+                      <div className="min-w-0 flex items-center gap-1.5">
+                        {v.id === lastEditedId && (
+                          <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-primary" title="Last edited" />
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{v.title}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">{v.category} · {formatDuration(v.duration_s)}</p>
+                        </div>
                       </div>
                       {statusBadge(v)}
                     </div>
@@ -1027,10 +1115,34 @@ export const AdminVideos: React.FC = () => {
             <div className="w-[45%] shrink-0 flex flex-col">
             {/* Video File Section */}
             <div className="p-4 rounded-xl bg-card-light dark:bg-card-dark border border-slate-200 dark:border-white/5 sticky top-0">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Video File</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Video File</h3>
+                <button onClick={handleReloadPlayer} title="Reload player" className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                  <span className="material-symbols-outlined text-sm">refresh</span>
+                </button>
+              </div>
+              {selected.status === 'processing' && (
+                <div className="flex flex-col items-center justify-center py-4 gap-2">
+                  <svg className="w-12 h-12" viewBox="0 0 44 44">
+                    <circle cx="22" cy="22" r="18" fill="none" stroke="currentColor" strokeWidth="4" className="text-slate-700" />
+                    <circle
+                      cx="22" cy="22" r="18" fill="none"
+                      stroke="currentColor" strokeWidth="4" strokeLinecap="round"
+                      strokeDasharray="56 57" className="text-primary animate-spin"
+                      style={{ transformOrigin: '22px 22px' }}
+                    />
+                  </svg>
+                  <p className="text-xs text-slate-400">Transcoding…</p>
+                  <button onClick={handleCancelJob} className="mt-1 flex items-center gap-1 px-3 py-1.5 text-xs text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-colors">
+                    <span className="material-symbols-outlined text-xs">cancel</span>
+                    Cancel
+                  </button>
+                </div>
+              )}
               {selected.hls_path ? (
                 <div>
                   <HlsPlayer
+                    key={playerKey}
                     ref={playerRef}
                     hlsPath={selected.hls_path}
                     chapters={chapters}
@@ -1043,6 +1155,37 @@ export const AdminVideos: React.FC = () => {
                       Current: {formatDuration(Math.floor(playerTime))}
                     </span>
                     <span className="font-mono text-[10px] text-slate-500">{formatDuration(Math.floor(playerDuration))}</span>
+                  </div>
+                </div>
+              ) : selected.status !== 'draft' && selected.status !== 'processing' ? (
+                <div>
+                  <video
+                    key={`${selected.id}-${playerKey}`}
+                    ref={rawVideoRef}
+                    src={`${API_BASE}/streams/${selected.id}/raw/original.mp4?_t=${playerKey}`}
+                    controls
+                    className="w-full rounded-xl border border-white/10 bg-black"
+                    onTimeUpdate={(e) => setPlayerTime((e.target as HTMLVideoElement).currentTime)}
+                    onLoadedMetadata={(e) => setPlayerDuration((e.target as HTMLVideoElement).duration)}
+                  />
+                  <div className="flex items-center justify-between mt-2 px-1">
+                    <span className="font-mono text-[10px] text-slate-500">0:00</span>
+                    <span className="font-mono text-[10px] text-slate-400">
+                      Current: {formatDuration(Math.floor(playerTime))}
+                    </span>
+                    <span className="font-mono text-[10px] text-slate-500">{formatDuration(Math.floor(playerDuration))}</span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-3">
+                    <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-slate-300 dark:border-white/10 hover:border-primary/50 cursor-pointer transition-colors">
+                      <span className="material-symbols-outlined text-slate-500 text-sm">cloud_upload</span>
+                      <span className="text-xs text-slate-400">{uploadFile ? uploadFile.name : 'Choose video'}</span>
+                      <input type="file" accept="video/*" className="hidden" onChange={(e) => setUploadFile(e.target.files?.[0] || null)} />
+                    </label>
+                    {uploadFile && (
+                      <button onClick={handleUpload} disabled={uploading} className="px-4 py-2 bg-primary hover:bg-blue-500 disabled:opacity-30 text-white text-xs font-bold rounded-lg transition-colors">
+                        {uploading ? 'Uploading...' : 'Upload'}
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -1072,6 +1215,26 @@ export const AdminVideos: React.FC = () => {
                   {selected.job_error && <span className="text-red-400 ml-2">— {selected.job_error}</span>}
                 </div>
               )}
+              {opsLog.length > 0 && (
+                <div className="mt-3 border-t border-slate-200 dark:border-white/5 pt-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Operations</p>
+                  <div className="space-y-1 max-h-28 overflow-y-auto">
+                    {[...opsLog].reverse().map((entry, i) => (
+                      <div key={i} className="flex items-center gap-2 text-[10px]">
+                        <span className={`px-1.5 py-0.5 rounded font-bold uppercase ${
+                          entry.op === 'transcode' ? 'bg-green-500/15 text-green-400' :
+                          entry.op === 'banner' ? 'bg-purple-500/15 text-purple-400' :
+                          entry.op === 'trim' ? 'bg-blue-500/15 text-blue-400' :
+                          entry.op === 'cut' ? 'bg-orange-500/15 text-orange-400' :
+                          'bg-slate-500/15 text-slate-400'
+                        }`}>{entry.op}</span>
+                        <span className="text-slate-500">{entry.file}</span>
+                        <span className="text-slate-600 ml-auto">{new Date(entry.ts).toLocaleTimeString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             </div>
 
@@ -1098,10 +1261,17 @@ export const AdminVideos: React.FC = () => {
                     Publish
                   </button>
                 )}
-                <button onClick={handleRetranscode} className="flex items-center gap-1.5 px-3 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-lg transition-colors border border-slate-300 dark:border-white/10">
-                  <span className="material-symbols-outlined text-sm">refresh</span>
-                  Re-transcode
-                </button>
+                {selected.status === 'processing' ? (
+                  <button onClick={handleCancelJob} className="flex items-center gap-1.5 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs rounded-lg transition-colors border border-red-500/20">
+                    <span className="material-symbols-outlined text-sm">cancel</span>
+                    Cancel Job
+                  </button>
+                ) : (
+                  <button onClick={handleTranscode} className="flex items-center gap-1.5 px-3 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-lg transition-colors border border-slate-300 dark:border-white/10">
+                    <span className="material-symbols-outlined text-sm">refresh</span>
+                    Transcode
+                  </button>
+                )}
                 <button onClick={handleDelete} className="flex items-center gap-1.5 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs rounded-lg transition-colors border border-red-500/20">
                   <span className="material-symbols-outlined text-sm">delete</span>
                   Delete
@@ -1426,7 +1596,7 @@ export const AdminVideos: React.FC = () => {
                 </p>
 
                 {/* Timeline with trim markers */}
-                {selected.hls_path && playerDuration > 0 ? (
+                {(selected.hls_path || selected.status !== 'draft') && playerDuration > 0 ? (
                   <div className="px-1">
                     <div className="relative w-full h-10 bg-slate-800/50 rounded-lg border border-white/5 overflow-hidden">
                       {/* Playhead */}
@@ -1496,7 +1666,7 @@ export const AdminVideos: React.FC = () => {
                   </div>
                 ) : (
                   <div className="p-4 rounded-xl bg-slate-800/30 border border-white/5 text-center">
-                    <p className="text-slate-500 text-sm">Upload and transcode a video first to use the trim tool.</p>
+                    <p className="text-slate-500 text-sm">Upload a video first to use the trim tool.</p>
                   </div>
                 )}
 

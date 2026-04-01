@@ -5,6 +5,7 @@ import json
 import shutil
 import mimetypes
 import subprocess
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
 
 from video.schemas import (
@@ -23,6 +24,22 @@ from video.email import generate_email_preview
 from email_utils.utils import send_email
 
 router = APIRouter()
+
+
+def _write_ops_log(raw_dir: str, op: str, filename: str = "original.mp4") -> None:
+    """Append an operation entry to {raw_dir}/ops.json."""
+    log_path = os.path.join(raw_dir, "ops.json")
+    try:
+        ops = json.loads(open(log_path).read()) if os.path.exists(log_path) else []
+    except Exception:
+        ops = []
+    ops.append({"op": op, "file": filename, "ts": datetime.now(timezone.utc).isoformat()})
+    ops = ops[-50:]  # keep last 50 entries
+    try:
+        with open(log_path, "w") as f:
+            json.dump(ops, f)
+    except Exception:
+        pass
 
 
 def _video_row_to_admin(r, job=None) -> VideoAdminResponse:
@@ -213,12 +230,24 @@ async def admin_upload_video_file(
 
     # Update video status to uploaded (no auto-transcode)
     await db.execute("UPDATE videos SET status = 'uploaded' WHERE id = $1", video_id)
+    _write_ops_log(raw_dir, "upload")
 
     return {"message": "Video uploaded"}
 
 
-@router.post("/videos/{video_id}/retranscode")
-async def admin_retranscode(video_id: str, admin: dict = Depends(require_admin)):
+@router.post("/videos/{video_id}/cancel-job")
+async def admin_cancel_job(video_id: str, admin: dict = Depends(require_admin)):
+    db = await get_db()
+    await db.execute(
+        "UPDATE transcode_jobs SET status = 'cancelled' WHERE video_id = $1 AND status IN ('pending', 'processing')",
+        video_id,
+    )
+    await db.execute("UPDATE videos SET status = 'uploaded' WHERE id = $1", video_id)
+    return {"message": "Job cancelled"}
+
+
+@router.post("/videos/{video_id}/transcode")
+async def admin_transcode(video_id: str, admin: dict = Depends(require_admin)):
     db = await get_db()
     video = await db.fetchrow("SELECT id FROM videos WHERE id = $1", video_id)
     if not video:
@@ -230,7 +259,7 @@ async def admin_retranscode(video_id: str, admin: dict = Depends(require_admin))
 
     await db.execute("UPDATE videos SET status = 'processing' WHERE id = $1", video_id)
     await db.execute("INSERT INTO transcode_jobs (video_id) VALUES ($1)", video_id)
-    return {"message": "Re-transcode job queued"}
+    return {"message": "Transcode job queued"}
 
 
 # ── Trim / Cut ─────────────────────────────────────────────
@@ -337,10 +366,9 @@ async def _trim_video_task(
                 "UPDATE videos SET duration_s = $1 WHERE id = $2", new_duration, video_id,
             )
 
-        # Queue re-transcode
-        await pool.execute("UPDATE videos SET status = 'processing' WHERE id = $1", video_id)
-        await pool.execute("INSERT INTO transcode_jobs (video_id) VALUES ($1)", video_id)
-        print(f"[trim] Video {video_id} trimmed successfully, re-transcode queued")
+        await pool.execute("UPDATE videos SET status = 'uploaded' WHERE id = $1", video_id)
+        _write_ops_log(os.path.dirname(raw_path), "trim")
+        print(f"[trim] Video {video_id} trimmed successfully")
 
     except Exception as e:
         print(f"[trim] Unexpected error: {e}")
@@ -498,10 +526,9 @@ async def _cut_video_task(
                 "UPDATE videos SET duration_s = $1 WHERE id = $2", new_duration, video_id,
             )
 
-        # Queue re-transcode
-        await pool.execute("UPDATE videos SET status = 'processing' WHERE id = $1", video_id)
-        await pool.execute("INSERT INTO transcode_jobs (video_id) VALUES ($1)", video_id)
-        print(f"[cut] Video {video_id} cut successfully, re-transcode queued")
+        await pool.execute("UPDATE videos SET status = 'uploaded' WHERE id = $1", video_id)
+        _write_ops_log(os.path.dirname(raw_path), "cut")
+        print(f"[cut] Video {video_id} cut successfully")
 
     except Exception as e:
         print(f"[cut] Unexpected error: {e}")
@@ -535,6 +562,18 @@ async def admin_job_status(video_id: str, admin: dict = Depends(require_admin)):
         )
         for r in rows
     ]
+
+
+@router.get("/videos/{video_id}/ops-log")
+async def admin_ops_log(video_id: str, admin: dict = Depends(require_admin)):
+    raw_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw")
+    log_path = os.path.join(raw_dir, "ops.json")
+    if not os.path.exists(log_path):
+        return []
+    try:
+        return json.loads(open(log_path).read())
+    except Exception:
+        return []
 
 
 # ── Chapters ────────────────────────────────────────────────
@@ -1084,10 +1123,10 @@ async def _generate_banner_video(video_id: str, db_url: str):
                         except Exception:
                             pass
 
-                # Trigger re-transcode
-                await pool.execute("UPDATE videos SET status='processing' WHERE id=$1", video_id)
-                await pool.execute("INSERT INTO transcode_jobs (video_id) VALUES ($1)", video_id)
-                print(f"[banner] Banner prepended, re-transcode queued for {video_id}")
+                await pool.execute("UPDATE videos SET status='uploaded' WHERE id=$1", video_id)
+                raw_dir_banner = os.path.join(video_dir, "raw")
+                _write_ops_log(raw_dir_banner, "banner")
+                print(f"[banner] Banner prepended for {video_id}")
             else:
                 error = f"FFmpeg concat failed: {concat_result.stderr[-300:]}"
                 print(f"[banner] ERROR: {error}")

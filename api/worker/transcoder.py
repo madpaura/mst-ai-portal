@@ -6,6 +6,7 @@ Run standalone: python -m worker.transcoder
 """
 import asyncio
 import os
+import shutil
 import subprocess
 import sys
 
@@ -137,7 +138,37 @@ async def process_job(pool: asyncpg.Pool, job):
     print(f"\n[worker] Processing job #{job_id} for video {video_id}")
 
     video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
-    raw_path = os.path.join(video_dir, "raw", "original.mp4")
+    raw_dir = os.path.join(video_dir, "raw")
+    raw_path = os.path.join(raw_dir, "original.mp4")
+
+    if not os.path.exists(raw_path):
+        # 1. Check ops.json for the last known source file
+        ops_path = os.path.join(raw_dir, "ops.json")
+        if os.path.exists(ops_path):
+            try:
+                import json as _json
+                ops = _json.loads(open(ops_path).read())
+                if ops:
+                    tracked_file = ops[-1].get("file", "original.mp4")
+                    tracked_path = os.path.join(raw_dir, tracked_file)
+                    if os.path.exists(tracked_path) and tracked_path != raw_path:
+                        shutil.copy2(tracked_path, raw_path)
+                        print(f"  [worker] Recovered from ops.json: {tracked_file} → original.mp4")
+            except Exception as e:
+                print(f"  [worker] ops.json read error: {e}")
+
+        # 2. Fall back to newest .mp4 in the raw directory
+        if not os.path.exists(raw_path) and os.path.isdir(raw_dir):
+            _exclude = {"original_pretrim.mp4", "original_precut.mp4", "original_no_banner.mp4"}
+            candidates = [
+                f for f in os.listdir(raw_dir)
+                if f.endswith(".mp4") and f not in _exclude and ".cut_" not in f and ".trimmed" not in f
+            ]
+            if candidates:
+                candidates.sort(key=lambda f: os.path.getmtime(os.path.join(raw_dir, f)), reverse=True)
+                fallback_path = os.path.join(raw_dir, candidates[0])
+                shutil.copy2(fallback_path, raw_path)
+                print(f"  [worker] Recovered from newest file: {candidates[0]} → original.mp4")
 
     if not os.path.exists(raw_path):
         error = f"Raw file not found: {raw_path}"
@@ -177,6 +208,12 @@ async def process_job(pool: asyncpg.Pool, job):
             )
         return
 
+    # Check if job was cancelled while ffmpeg was running
+    current_status = await pool.fetchval("SELECT status FROM transcode_jobs WHERE id = $1", job_id)
+    if current_status == "cancelled":
+        print(f"[worker] Job #{job_id} was cancelled — discarding result")
+        return
+
     # Generate master manifest
     generate_master_manifest(hls_dir, qualities)
 
@@ -199,6 +236,18 @@ async def process_job(pool: asyncpg.Pool, job):
         "UPDATE transcode_jobs SET status = 'completed', completed_at = now() WHERE id = $1",
         job_id,
     )
+    # Log the transcode operation
+    ops_path = os.path.join(raw_dir, "ops.json")
+    try:
+        from datetime import datetime, timezone
+        import json as _json
+        ops = _json.loads(open(ops_path).read()) if os.path.exists(ops_path) else []
+        ops.append({"op": "transcode", "file": "original.mp4", "ts": datetime.now(timezone.utc).isoformat()})
+        ops = ops[-50:]
+        with open(ops_path, "w") as _f:
+            _json.dump(ops, _f)
+    except Exception:
+        pass
     print(f"[worker] Job #{job_id} completed successfully")
 
 
