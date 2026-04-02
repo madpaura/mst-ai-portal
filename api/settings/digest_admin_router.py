@@ -135,7 +135,7 @@ async def save_digest_issue(
     days_covered: int,
     custom_content: str
 ) -> int:
-    """Save a digest issue to the database"""
+    """Upsert a digest issue — insert or update if issue_number already exists."""
     import json
     pool = await get_db()
     async with pool.acquire() as conn:
@@ -144,6 +144,14 @@ async def save_digest_issue(
             (issue_number, title, subject, html_content, plain_text,
              summary, days_covered, custom_content)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (issue_number) DO UPDATE SET
+                title        = EXCLUDED.title,
+                subject      = EXCLUDED.subject,
+                html_content = EXCLUDED.html_content,
+                plain_text   = EXCLUDED.plain_text,
+                summary      = EXCLUDED.summary,
+                days_covered = EXCLUDED.days_covered,
+                custom_content = EXCLUDED.custom_content
             RETURNING id
         """, issue_number, title, subject, html_content, plain_text,
             json.dumps(summary), days_covered, custom_content)

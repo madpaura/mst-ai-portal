@@ -158,6 +158,7 @@ export const AdminVideos: React.FC = () => {
 
   // Email
   const [emailPreview, setEmailPreview] = useState<{ subject: string; html_content: string; plain_text: string } | null>(null);
+  const [emailSubject, setEmailSubject] = useState('');
   const [emailGenerating, setEmailGenerating] = useState(false);
   const [emailCustomContent, setEmailCustomContent] = useState('');
   const [emailRecipient, setEmailRecipient] = useState('');
@@ -2165,6 +2166,7 @@ export const AdminVideos: React.FC = () => {
                           { custom_content: emailCustomContent },
                         );
                         setEmailPreview(preview);
+                        setEmailSubject(preview.subject);
                         showMsg('success', 'Email preview generated!');
                       } catch (err: any) {
                         showMsg('error', err.message);
@@ -2200,7 +2202,7 @@ export const AdminVideos: React.FC = () => {
                         onClick={() => {
                           const win = window.open('', '_blank');
                           if (win) {
-                            win.document.write(`<html><head><title>${emailPreview.subject}</title><style>@media print { body { margin: 0; } }</style></head><body onload="setTimeout(()=>{window.print();},500)">${emailPreview.html_content}</body></html>`);
+                            win.document.write(`<html><head><title>${emailSubject || emailPreview.subject}</title><style>@media print { body { margin: 0; } }</style></head><body onload="setTimeout(()=>{window.print();},500)">${emailPreview.html_content}</body></html>`);
                             win.document.close();
                           }
                         }}
@@ -2218,14 +2220,14 @@ export const AdminVideos: React.FC = () => {
                             const res = await fetch(`${apiBase}/admin/generate-eml`, {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-                              body: JSON.stringify({ subject: emailPreview.subject, html_content: emailPreview.html_content, plain_text: emailPreview.plain_text }),
+                              body: JSON.stringify({ subject: emailSubject || emailPreview.subject, html_content: emailPreview.html_content, plain_text: emailPreview.plain_text }),
                             });
                             if (!res.ok) throw new Error('Failed to generate .eml');
                             const blob = await res.blob();
                             const url = URL.createObjectURL(blob);
                             const a = document.createElement('a');
                             a.href = url;
-                            a.download = emailPreview.subject.replace(/[^a-zA-Z0-9 ]/g, '').trim().replace(/ +/g, '_').slice(0, 60) + '.eml';
+                            a.download = (emailSubject || emailPreview.subject).replace(/[^a-zA-Z0-9 ]/g, '').trim().replace(/ +/g, '_').slice(0, 60) + '.eml';
                             document.body.appendChild(a);
                             a.click();
                             document.body.removeChild(a);
@@ -2244,7 +2246,12 @@ export const AdminVideos: React.FC = () => {
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Subject</label>
-                      <p className="text-sm text-white">{emailPreview.subject}</p>
+                      <input
+                        type="text"
+                        value={emailSubject}
+                        onChange={(e) => setEmailSubject(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Preview</label>
@@ -2273,12 +2280,13 @@ export const AdminVideos: React.FC = () => {
                         try {
                           await api.post(`/admin/videos/${selected.id}/send-email`, {
                             recipient_email: emailRecipient,
-                            subject: emailPreview.subject,
+                            subject: emailSubject || emailPreview.subject,
                             html_content: emailPreview.html_content,
                           });
                           showMsg('success', 'Email sent successfully!');
                           setEmailRecipient('');
                           setEmailPreview(null);
+                          setEmailSubject('');
                           setEmailCustomContent('');
                         } catch (err: any) {
                           showMsg('error', err.message);
