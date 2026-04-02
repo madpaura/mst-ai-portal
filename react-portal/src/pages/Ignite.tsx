@@ -202,6 +202,14 @@ export const Ignite: React.FC = () => {
   };
 
   const handleTabClick = (tab: 'notes' | 'howto') => setActiveTab(tab);
+
+  // Prev/next video within the same course
+  const courseVideos = activeVideo?.course_id
+    ? ALL_VIDEOS.filter((v) => v.course_id === activeVideo.course_id).sort((a, b) => a.sort_order - b.sort_order)
+    : [];
+  const activeVideoIdx = courseVideos.findIndex((v) => v.id === activeVideo?.id);
+  const prevVideo = activeVideoIdx > 0 ? courseVideos[activeVideoIdx - 1] : null;
+  const nextVideo = activeVideoIdx >= 0 && activeVideoIdx < courseVideos.length - 1 ? courseVideos[activeVideoIdx + 1] : null;
   const handleFormatBold = () => {};
   const handleFormatCode = () => {};
   const handleFormatList = () => {};
@@ -277,6 +285,42 @@ export const Ignite: React.FC = () => {
                 </div>
               </div>
             </div>
+            )}
+
+            {/* Course video navigation */}
+            {(prevVideo || nextVideo) && (
+              <div className="flex items-stretch gap-3">
+                <button
+                  onClick={() => prevVideo && handleSelectVideo(prevVideo)}
+                  disabled={!prevVideo}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all flex-1 text-left ${
+                    prevVideo
+                      ? 'border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-slate-800/40 hover:bg-primary/5 dark:hover:bg-primary/10 hover:border-primary/30 group'
+                      : 'border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-900/20 opacity-40 cursor-not-allowed'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-xl text-slate-400 group-hover:text-primary transition-colors shrink-0">arrow_back</span>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Previous</p>
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{prevVideo?.title ?? ''}</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => nextVideo && handleSelectVideo(nextVideo)}
+                  disabled={!nextVideo}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all flex-1 text-right justify-end ${
+                    nextVideo
+                      ? 'border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-slate-800/40 hover:bg-primary/5 dark:hover:bg-primary/10 hover:border-primary/30 group'
+                      : 'border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-slate-900/20 opacity-40 cursor-not-allowed'
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Next</p>
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{nextVideo?.title ?? ''}</p>
+                  </div>
+                  <span className="material-symbols-outlined text-xl text-slate-400 group-hover:text-primary transition-colors shrink-0">arrow_forward</span>
+                </button>
+              </div>
             )}
 
             {/* Video Info & Tabs */}

@@ -263,6 +263,27 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
     setShowQualityMenu(false);
   };
 
+  const handlePrevChapter = useCallback(() => {
+    if (chapters.length === 0 || !videoRef.current) return;
+    const sorted = [...chapters].sort((a, b) => a.start_time - b.start_time);
+    const currentIdx = sorted.reduce((acc, ch, i) => (ch.start_time <= currentTime ? i : acc), -1);
+    const targetIdx = currentIdx > 0 ? currentIdx - 1 : 0;
+    const t = sorted[targetIdx].start_time;
+    videoRef.current.currentTime = t;
+    setCurrentTime(t);
+  }, [chapters, currentTime]);
+
+  const handleNextChapter = useCallback(() => {
+    if (chapters.length === 0 || !videoRef.current) return;
+    const sorted = [...chapters].sort((a, b) => a.start_time - b.start_time);
+    const currentIdx = sorted.reduce((acc, ch, i) => (ch.start_time <= currentTime ? i : acc), -1);
+    if (currentIdx < sorted.length - 1) {
+      const t = sorted[currentIdx + 1].start_time;
+      videoRef.current.currentTime = t;
+      setCurrentTime(t);
+    }
+  }, [chapters, currentTime]);
+
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
   const bufferedPct = duration > 0 ? (buffered / duration) * 100 : 0;
 
@@ -370,6 +391,16 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
                 {isPlaying ? 'pause' : 'play_arrow'}
               </span>
             </button>
+
+            {/* Chapter navigation */}
+            {chapters.length > 0 && (<>
+              <button onClick={handlePrevChapter} className="text-white/70 hover:text-white transition-colors" title="Previous chapter">
+                <span className="material-symbols-outlined text-xl">skip_previous</span>
+              </button>
+              <button onClick={handleNextChapter} className="text-white/70 hover:text-white transition-colors" title="Next chapter">
+                <span className="material-symbols-outlined text-xl">skip_next</span>
+              </button>
+            </>)}
 
             {/* Volume */}
             <div className="flex items-center gap-1 group/vol">
