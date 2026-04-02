@@ -3,6 +3,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional
 from config import settings
+from database import get_db
 from email_utils.template import generate_editorial_email
 
 
@@ -48,9 +49,17 @@ async def send_email(
         part2 = MIMEText(html_content, "html")
         msg.attach(part2)
 
-        server = smtplib.SMTP(smtp_server, smtp_port)
+        if smtp_port == 465:
+            server = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=15)
+            server.ehlo()
+        else:
+            server = smtplib.SMTP(smtp_server, smtp_port, timeout=15)
+            server.ehlo()
+            if server.has_extn("starttls"):
+                server.starttls()
+                server.ehlo()
+
         if smtp_user and smtp_password:
-            server.starttls()
             server.login(smtp_user, smtp_password)
 
         server.sendmail(smtp_from_email, to_email, msg.as_string())
