@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { api } from '../api/client';
 
 export interface Video {
@@ -47,6 +48,7 @@ interface IgniteSidebarProps {
 }
 
 export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onSelectVideo }) => {
+  const { videoSlug: urlSlug } = useParams<{ videoSlug?: string }>();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [videos, setVideos] = useState<Video[]>(ALL_VIDEOS);
@@ -89,8 +91,16 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
         setVideoCourseMap(vidCourse);
         ALL_VIDEOS = allVids;
         setVideos(allVids);
-        if (allVids.length > 0 && !allVids.find((v) => v.id === activeVideoId)) {
-          onSelectVideo(allVids[0]);
+        if (allVids.length > 0) {
+          if (urlSlug) {
+            // URL-based navigation: select the video matching the slug
+            const urlVideo = allVids.find((v) => v.slug === urlSlug);
+            if (urlVideo) onSelectVideo(urlVideo);
+            // If not found in course videos, Ignite.tsx has already fetched it from the API
+          } else if (!allVids.find((v) => v.id === activeVideoId)) {
+            // No URL slug and no active video yet: default to first
+            onSelectVideo(allVids[0]);
+          }
         }
       })
       .catch(() => {})
