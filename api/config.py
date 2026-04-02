@@ -48,8 +48,10 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = "noreply@mst-ai-portal.local"
     SMTP_FROM_NAME: str = "MST AI Portal"
 
-    # Server — use allow_origin_regex in middleware instead for dev
+    # CORS — CORS_ORIGINS defaults to wildcard (safe with Bearer tokens, no cookies)
+    # Set CORS_ALLOW_ORIGIN_REGEX for fine-grained control (e.g. restrict to your domain)
     CORS_ORIGINS: list[str] = ["*"]
+    CORS_ALLOW_ORIGIN_REGEX: str = ""
 
     class Config:
         env_file = ".env"
