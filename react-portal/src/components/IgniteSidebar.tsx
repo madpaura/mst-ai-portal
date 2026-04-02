@@ -11,6 +11,8 @@ export interface Video {
   description: string | null;
   hls_path: string | null;
   thumbnail: string | null;
+  course_id?: string | null;
+  sort_order: number;
 }
 
 interface ApiVideo {
@@ -77,6 +79,8 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
                 description: v.description,
                 hls_path: v.hls_path,
                 thumbnail: v.thumbnail,
+                course_id: course.id,
+                sort_order: v.sort_order,
               }))
             );
           } catch { /* ignore */ }
