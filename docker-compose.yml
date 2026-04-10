@@ -43,6 +43,18 @@ services:
       PORTAL_URL: http://host.docker.internal:${FRONTEND_PORT:-9800}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       CORS_ALLOW_ORIGIN_REGEX: ${CORS_ALLOW_ORIGIN_REGEX:-}
+      SAML_SP_ENTITY_ID: ${SAML_SP_ENTITY_ID:-}
+      SAML_SP_ACS_URL: ${SAML_SP_ACS_URL:-}
+      SAML_SP_SLS_URL: ${SAML_SP_SLS_URL:-}
+      SAML_IDP_ENTITY_ID: ${SAML_IDP_ENTITY_ID:-}
+      SAML_IDP_SSO_URL: ${SAML_IDP_SSO_URL:-}
+      SAML_IDP_SLO_URL: ${SAML_IDP_SLO_URL:-}
+      SAML_IDP_CERT: ${SAML_IDP_CERT:-}
+      SAML_SP_CERT: ${SAML_SP_CERT:-}
+      SAML_SP_KEY: ${SAML_SP_KEY:-}
+      SAML_GROUP_ROLE_MAP: ${SAML_GROUP_ROLE_MAP:-}
+      SAML_DEFAULT_ROLE: ${SAML_DEFAULT_ROLE:-user}
+      SAML_STRICT: ${SAML_STRICT:-true}
     volumes:
       - "${VIDEO_DATA_VOLUME}:/data/videos"
       - "${MEDIA_DATA_VOLUME}:/data/media"
@@ -86,6 +98,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:${BACKEND_PORT:-8000}}
+        VITE_AUTH_MODE: ${AUTH_MODE:-open}
     restart: unless-stopped
     depends_on:
       - backend
