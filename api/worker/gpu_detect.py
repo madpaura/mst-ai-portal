@@ -77,19 +77,21 @@ def detect_nvenc() -> dict:
         pass
 
     # Step 4: Quick smoke test — try to actually encode a single frame
+    # Use explicit size/rate/format flags; lavfi color source needs pix_fmt for nvenc
     try:
         test = subprocess.run(
             [
                 ffmpeg_path, "-y",
-                "-f", "lavfi", "-i", "color=black:s=64x64:d=0.1",
+                "-f", "lavfi", "-i", "color=c=black:s=64x64:r=1",
+                "-vf", "format=yuv420p",
                 "-c:v", "h264_nvenc", "-frames:v", "1",
                 "-f", "null", "-",
             ],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, timeout=15,
         )
         if test.returncode != 0:
             print(f"[gpu] NVENC smoke test failed — falling back to CPU")
-            print(f"[gpu]   stderr: {test.stderr[-300:]}")
+            print(f"[gpu]   stderr: {test.stderr[-400:]}")
             return info
     except (FileNotFoundError, subprocess.TimeoutExpired):
         print("[gpu] NVENC smoke test timed out — falling back to CPU")
