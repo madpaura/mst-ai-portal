@@ -11,7 +11,6 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile.gpu
-    runtime: nvidia
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-portal}:${POSTGRES_PASSWORD:-portal123}@db:5432/${POSTGRES_DB:-mst_portal}
       VIDEO_STORAGE_PATH: /data/videos
@@ -19,3 +18,10 @@ services:
       FFMPEG_HWACCEL: ${FFMPEG_HWACCEL:-auto}
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility,video
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, compute, utility, video]
