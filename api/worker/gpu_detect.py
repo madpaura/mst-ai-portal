@@ -7,6 +7,7 @@ Falls back gracefully to CPU (libx264) if not.
 import subprocess
 import os
 import functools
+from loguru import logger as log
 
 
 @functools.lru_cache(maxsize=1)
@@ -35,7 +36,7 @@ def detect_nvenc() -> dict:
 
     # Allow explicit override: FFMPEG_HWACCEL=none disables GPU
     if os.environ.get("FFMPEG_HWACCEL", "").lower() == "none":
-        print("[gpu] GPU acceleration explicitly disabled via FFMPEG_HWACCEL=none")
+        log.info("GPU acceleration explicitly disabled via FFMPEG_HWACCEL=none")
         return info
 
     # Step 1: Check if nvidia-smi is present (GPU driver loaded)
@@ -45,11 +46,11 @@ def detect_nvenc() -> dict:
             capture_output=True, text=True, timeout=5,
         )
         if smi.returncode != 0:
-            print("[gpu] nvidia-smi not available — falling back to CPU encoding")
+            log.info("nvidia-smi not available — falling back to CPU encoding")
             return info
         info["gpu_name"] = smi.stdout.strip().split("\n")[0]
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        print("[gpu] nvidia-smi not found — falling back to CPU encoding")
+        log.info("nvidia-smi not found — falling back to CPU encoding")
         return info
 
     # Step 2: Check if ffmpeg has h264_nvenc encoder
@@ -59,10 +60,10 @@ def detect_nvenc() -> dict:
             capture_output=True, text=True, timeout=10,
         )
         if "h264_nvenc" not in enc.stdout:
-            print(f"[gpu] GPU '{info['gpu_name']}' found but ffmpeg lacks h264_nvenc — falling back to CPU")
+            log.info(f"GPU '{info['gpu_name']}' found but ffmpeg lacks h264_nvenc — falling back to CPU")
             return info
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        print("[gpu] Could not query ffmpeg encoders — falling back to CPU")
+        log.info("Could not query ffmpeg encoders — falling back to CPU")
         return info
 
     # Step 3: Check if CUDA hwaccel is available
@@ -93,11 +94,11 @@ def detect_nvenc() -> dict:
             capture_output=True, text=True, timeout=15,
         )
         if test.returncode != 0:
-            print(f"[gpu] NVENC smoke test failed — falling back to CPU")
-            print(f"[gpu]   stderr: {test.stderr[-400:]}")
+            log.warning(f"NVENC smoke test failed — falling back to CPU")
+            log.warning(f"stderr: {test.stderr[-400:]}")
             return info
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        print("[gpu] NVENC smoke test timed out — falling back to CPU")
+        log.warning("NVENC smoke test timed out — falling back to CPU")
         return info
 
     # All checks passed
@@ -109,8 +110,8 @@ def detect_nvenc() -> dict:
     if has_cuda:
         info["hwaccel_args"] = ["-hwaccel", "cuda"]
 
-    print(f"[gpu] ✔ NVIDIA GPU acceleration enabled: {info['gpu_name']}")
-    print(f"[gpu]   Encoder: h264_nvenc | Preset: p4 | CUDA hwaccel: {has_cuda}")
+    log.info(f"✔ NVIDIA GPU acceleration enabled: {info['gpu_name']}")
+    log.info(f"Encoder: h264_nvenc | Preset: p4 | CUDA hwaccel: {has_cuda}")
     return info
 
 

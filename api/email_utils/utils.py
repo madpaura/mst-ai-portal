@@ -2,6 +2,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional
+from loguru import logger as log
 from config import settings
 from database import get_db
 from email_utils.template import generate_editorial_email
@@ -66,7 +67,7 @@ async def send_email(
         server.quit()
         return True
     except Exception as e:
-        print(f"Email send failed: {str(e)}")
+        log.error(f"Email send failed: {e}")
         return False
 
 

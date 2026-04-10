@@ -9,3 +9,5 @@ python-multipart==0.0.20
 aiofiles==24.1.0
 feedparser==6.0.11
 httpx==0.27.0
+python3-saml==1.16.0
+loguru==0.7.2

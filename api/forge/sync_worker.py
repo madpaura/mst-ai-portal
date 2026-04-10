@@ -17,6 +17,7 @@ from datetime import datetime
 from typing import Optional
 
 import asyncpg
+from loguru import logger as log
 
 
 async def _append_log(pool, job_id: int, message: str):
@@ -165,7 +166,7 @@ async def run_sync_job(job_id: int, db_url: str):
             shutil.rmtree(tmpdir, ignore_errors=True)
 
     except Exception as e:
-        print(f"[sync] Error in job {job_id}: {e}")
+        log.error(f"Sync job {job_id} error: {e}")
         try:
             await _append_log(pool, job_id, f"FATAL ERROR: {str(e)[:400]}")
             await pool.execute(
