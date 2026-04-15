@@ -44,6 +44,12 @@ const TYPE_BADGES: Record<string, { label: string; color: string; bg: string }> 
   mcp_server: { label: 'MCP Server', color: 'text-purple-500', bg: 'bg-purple-500/10' },
 };
 
+interface ContributingGuide {
+  video_slug: string | null;
+  video_title: string | null;
+  video_link: string | null;
+}
+
 export const Marketplace: React.FC = () => {
   usePageView('/marketplace');
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,9 +63,11 @@ export const Marketplace: React.FC = () => {
   const [instructions, setInstructions] = useState<Record<string, string>>({});
   const [downloading, setDownloading] = useState<Record<string, boolean>>({});
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
+  const [contributingGuide, setContributingGuide] = useState<ContributingGuide | null>(null);
 
   useEffect(() => {
     api.get<ForgeComponent[]>('/forge/components').then(setComponents).catch(() => {});
+    api.get<ContributingGuide>('/forge/contributing-guide').then(setContributingGuide).catch(() => {});
   }, []);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -220,6 +228,36 @@ export const Marketplace: React.FC = () => {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Interested in Contributing */}
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-primary text-[18px]">volunteer_activism</span>
+                  <h3 className="text-xs font-bold text-primary uppercase tracking-widest">Contribute</h3>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 leading-relaxed">
+                  Interested in contributing an agent, skill, or MCP server to the marketplace?
+                </p>
+                {contributingGuide?.video_link ? (
+                  <a
+                    href={contributingGuide.video_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 w-full px-3 py-2 rounded-lg bg-primary text-white text-xs font-bold hover:bg-blue-500 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">play_circle</span>
+                    {contributingGuide.video_title ? `Watch: ${contributingGuide.video_title}` : 'Watch Guide'}
+                  </a>
+                ) : (
+                  <a
+                    href="/ignite"
+                    className="flex items-center gap-2 w-full px-3 py-2 rounded-lg bg-primary text-white text-xs font-bold hover:bg-blue-500 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                    Learn More
+                  </a>
+                )}
               </div>
 
               <div>

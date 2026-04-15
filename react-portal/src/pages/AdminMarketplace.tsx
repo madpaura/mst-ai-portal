@@ -71,6 +71,10 @@ export const AdminMarketplace: React.FC = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [beautifying, setBeautifying] = useState(false);
 
+  // Contributing guide video setting
+  const [contributingVideoSlug, setContributingVideoSlug] = useState('');
+  const [savingGuide, setSavingGuide] = useState(false);
+
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
@@ -103,7 +107,23 @@ export const AdminMarketplace: React.FC = () => {
 
   useEffect(() => {
     fetchComponents();
+    // Load current contributing guide setting
+    api.get<{ video_slug: string | null }>('/forge/contributing-guide')
+      .then((g) => { if (g?.video_slug) setContributingVideoSlug(g.video_slug); })
+      .catch(() => {});
   }, [fetchComponents]);
+
+  const handleSaveContributingGuide = async () => {
+    setSavingGuide(true);
+    try {
+      await api.put('/settings/admin/marketplace_contributing_video', { value: contributingVideoSlug.trim() || null });
+      showMsg('success', 'Contributing guide video saved');
+    } catch (err: any) {
+      showMsg('error', err.message);
+    } finally {
+      setSavingGuide(false);
+    }
+  };
 
   const openCreate = () => {
     setEditing(null);
@@ -234,6 +254,32 @@ export const AdminMarketplace: React.FC = () => {
           <span className="material-symbols-outlined text-sm">add</span>
           Add Component
         </button>
+      </div>
+
+      {/* Contributing Guide Config */}
+      <div className="mb-6 p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800/30">
+        <h2 className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-1 flex items-center gap-2">
+          <span className="material-symbols-outlined text-primary text-[18px]">volunteer_activism</span>
+          "Interested in Contributing?" Video Guide
+        </h2>
+        <p className="text-xs text-slate-500 mb-3">Set the video slug that will be shown as the guide for users who want to contribute to the marketplace.</p>
+        <div className="flex items-center gap-3">
+          <input
+            type="text"
+            placeholder="e.g. how-to-contribute-marketplace"
+            value={contributingVideoSlug}
+            onChange={(e) => setContributingVideoSlug(e.target.value)}
+            className="flex-1 max-w-sm px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:border-primary outline-none"
+          />
+          <button
+            onClick={handleSaveContributingGuide}
+            disabled={savingGuide}
+            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors disabled:opacity-50"
+          >
+            {savingGuide ? <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span> : <span className="material-symbols-outlined text-sm">save</span>}
+            Save
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
