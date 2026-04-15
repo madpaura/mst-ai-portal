@@ -1,0 +1,47 @@
+{
+  "_comment": "Copy this file to settings.json and fill in the values. Alternatively, set all SAML_* env vars and leave settings.json absent.",
+
+  "strict": true,
+  "debug": false,
+
+  "sp": {
+    "entityId": "https://mst-ai-portal.ai.x.net/saml/metadata",
+    "assertionConsumerService": {
+      "url":     "https://mst-ai-portal.ai.x.net/saml/acs",
+      "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
+    },
+    "singleLogoutService": {
+      "url":     "https://mst-ai-portal.ai.x.net/saml/sls",
+      "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
+    },
+    "NameIDFormat": "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
+    "x509cert":  "<paste contents of saml/certs/sp.crt.b64 here>",
+    "privateKey": "<paste contents of saml/certs/sp.key.b64 here>"
+  },
+
+  "idp": {
+    "entityId": "https://adfs.x.net/adfs/services/trust",
+    "singleSignOnService": {
+      "url":     "https://adfs.x.net/adfs/ls/",
+      "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
+    },
+    "singleLogoutService": {
+      "url":     "https://adfs.x.net/adfs/ls/?wa=wsignout1.0",
+      "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
+    },
+    "x509cert": "<ADFS token-signing cert base64 — from AD admin — no headers>"
+  },
+
+  "security": {
+    "nameIdEncrypted":        false,
+    "authnRequestsSigned":    true,
+    "logoutRequestSigned":    true,
+    "logoutResponseSigned":   true,
+    "signMetadata":           false,
+    "wantMessagesSigned":     false,
+    "wantAssertionsSigned":   true,
+    "wantAssertionsEncrypted": false,
+    "signatureAlgorithm":     "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256",
+    "digestAlgorithm":        "http://www.w3.org/2001/04/xmlenc#sha256"
+  }
+}
