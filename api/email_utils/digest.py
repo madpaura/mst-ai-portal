@@ -62,7 +62,7 @@ async def generate_learning_digest(days: int = 7, custom_content: Optional[str] 
         cutoff_date,
     )
 
-    # Fetch recently added forge components (marketplace)
+    # Fetch recently added forge components (marketplace) — only NEW additions within window
     forge_components = await db.fetch(
         """
         SELECT slug, name, component_type, description, badge, downloads, created_at
@@ -74,33 +74,16 @@ async def generate_learning_digest(days: int = 7, custom_content: Optional[str] 
         cutoff_date,
     )
 
-    # Also fetch featured/badged marketplace items if we have few recent ones
-    if len(forge_components) < 3:
-        featured_forge = await db.fetch(
-            """
-            SELECT slug, name, component_type, description, badge, downloads, created_at
-            FROM forge_components
-            WHERE is_active = true AND badge IS NOT NULL
-            ORDER BY downloads DESC, created_at DESC
-            LIMIT 8
-            """,
-        )
-        existing_slugs = {fc['slug'] for fc in forge_components}
-        for ff in featured_forge:
-            if ff['slug'] not in existing_slugs:
-                forge_components.append(ff)
-                if len(forge_components) >= 8:
-                    break
-
-    # Fetch new solutions
+    # Fetch new solutions (only within the time window)
     solutions = await db.fetch(
         """
         SELECT id, title, subtitle, description, icon, created_at
         FROM solution_cards
-        WHERE is_active = true
+        WHERE is_active = true AND created_at > $1
         ORDER BY created_at DESC
         LIMIT 6
         """,
+        cutoff_date,
     )
 
     # Fetch active announcements
@@ -123,12 +106,15 @@ async def generate_learning_digest(days: int = 7, custom_content: Optional[str] 
     marketplace_summary = ""
     if forge_components or solutions:
         mkt_ctx = ""
+        # Group by type for context
+        type_groups: dict = {}
         for fc in forge_components[:6]:
             comp_type = fc['component_type'].replace('_', ' ').title()
+            type_groups.setdefault(comp_type, []).append(fc['name'])
             mkt_ctx += f"- {fc['name']} ({comp_type}): {fc.get('description', '')[:100]}\n"
         for s in solutions[:4]:
-            mkt_ctx += f"- {s['title']}: {s.get('description', '')[:100]}\n"
-        marketplace_summary = await _llm_brief_summary("Marketplace & Solutions", mkt_ctx)
+            mkt_ctx += f"- {s['title']} (Solution): {s.get('description', '')[:100]}\n"
+        marketplace_summary = await _llm_brief_summary("Marketplace Additions", mkt_ctx)
 
     articles_summary = ""
     if recent_articles:
@@ -148,22 +134,27 @@ async def generate_learning_digest(days: int = 7, custom_content: Optional[str] 
             "link": f"{settings.PORTAL_URL}/ignite/{v['slug']}",
         })
 
-    # Page 2: Marketplace (Forge Components + Solutions)
+    # Page 2: Marketplace (Forge Components + Solutions) — only include if new additions exist
     marketplace_items = []
-    for fc in forge_components[:4]:
-        comp_type = fc['component_type'].replace('_', ' ').title()
-        marketplace_items.append({
-            "title": fc['name'][:50],
-            "category": comp_type,
-            "tag": fc.get('badge', 'New') or 'New',
-            "description": fc.get('description', '')[:120],
-            "link": f"{settings.PORTAL_URL}/marketplace/{fc['slug']}/howto",
-        })
-    for s in solutions[:4]:
+    # Group forge components by type: agents, skills, mcp_servers
+    type_order = ['agent', 'skill', 'mcp_server']
+    type_labels = {'agent': 'Agent', 'skill': 'Skill', 'mcp_server': 'MCP Server'}
+    for comp_type in type_order:
+        typed = [fc for fc in forge_components if fc['component_type'] == comp_type]
+        for fc in typed[:3]:  # max 3 per type
+            marketplace_items.append({
+                "title": fc['name'][:50],
+                "category": type_labels.get(comp_type, comp_type.replace('_', ' ').title()),
+                "tag": fc.get('badge', 'New') or 'New',
+                "description": fc.get('description', '')[:120],
+                "link": f"{settings.PORTAL_URL}/marketplace/{fc['slug']}/howto",
+            })
+    # Add new solutions (only if added within the window)
+    for s in solutions[:3]:
         marketplace_items.append({
             "title": s['title'][:50],
             "category": "Solution",
-            "tag": "Solution",
+            "tag": "New",
             "description": s.get('description', '')[:120],
             "link": f"{settings.PORTAL_URL}/solutions",
         })
@@ -187,12 +178,12 @@ async def generate_learning_digest(days: int = 7, custom_content: Optional[str] 
         "articles": str(len(recent_articles)),
     }
 
-    # Determine subject based on content
+    # Determine subject based on new content only
     parts = []
     if recent_videos:
         parts.append(f"{len(recent_videos)} Videos")
     if forge_components or solutions:
-        parts.append(f"{len(forge_components) + len(solutions)} Marketplace")
+        parts.append(f"{len(forge_components) + len(solutions)} Marketplace Additions")
     if recent_articles:
         parts.append(f"{len(recent_articles)} Articles")
     content_summary = " + ".join(parts) if parts else "Weekly Update"
