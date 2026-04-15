@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../api/client';
 
@@ -31,6 +31,12 @@ interface ApiVideo {
   created_at: string;
 }
 
+interface Course {
+  id: string;
+  slug: string;
+  title?: string;
+}
+
 const formatDuration = (s: number | null): string => {
   if (!s) return '10:00';
   const m = Math.floor(s / 60);
@@ -53,75 +59,178 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
   const [activeCategory, setActiveCategory] = useState('All');
   const [videos, setVideos] = useState<Video[]>(ALL_VIDEOS);
   const [loaded, setLoaded] = useState(false);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [courseNames, setCourseNames] = useState<Record<string, string>>({});
   const [videoCourseMap, setVideoCourseMap] = useState<Record<string, string>>({});
   const [collapsedCourses, setCollapsedCourses] = useState<Set<string>>(new Set());
+  // Track which courses have had their videos loaded
+  const [loadedCourses, setLoadedCourses] = useState<Set<string>>(new Set());
+  const [loadingCourses, setLoadingCourses] = useState<Set<string>>(new Set());
+  const allLoadedRef = useRef(false);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    api.get<Array<{ id: string; slug: string; title?: string }>>('/video/courses')
-      .then(async (courses) => {
-        const allVids: Video[] = [];
-        const names: Record<string, string> = {};
-        const vidCourse: Record<string, string> = {};
-        for (const course of courses) {
-          names[course.id] = course.title || course.slug;
-          try {
-            const data = await api.get<{ videos: ApiVideo[] }>(`/video/courses/${course.slug}`);
-            for (const v of data.videos) {
-              vidCourse[v.id] = course.id;
-            }
-            allVids.push(
-              ...data.videos.map((v) => ({
-                id: v.id,
-                slug: v.slug,
-                title: v.title,
-                category: v.category,
-                duration: formatDuration(v.duration_s),
-                duration_s: v.duration_s,
-                description: v.description,
-                hls_path: v.hls_path,
-                thumbnail: v.thumbnail,
-                course_id: course.id,
-                sort_order: v.sort_order,
-              }))
-            );
-          } catch { /* ignore */ }
-        }
-        setCourseNames(names);
-        setVideoCourseMap(vidCourse);
-        ALL_VIDEOS = allVids;
-        setVideos(allVids);
-        if (allVids.length > 0) {
-          if (urlSlug) {
-            // URL-based navigation: select the video matching the slug
-            const urlVideo = allVids.find((v) => v.slug === urlSlug);
-            if (urlVideo) onSelectVideo(urlVideo);
-            // If not found in course videos, Ignite.tsx has already fetched it from the API
-          } else if (!allVids.find((v) => v.id === activeVideoId)) {
-            // No URL slug and no active video yet: default to first
-            onSelectVideo(allVids[0]);
-          }
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoaded(true));
+  const loadCourseVideos = useCallback(async (course: Course): Promise<Video[]> => {
+    try {
+      const data = await api.get<{ videos: ApiVideo[] }>(`/video/courses/${course.slug}`);
+      return data.videos.map((v) => ({
+        id: v.id,
+        slug: v.slug,
+        title: v.title,
+        category: v.category,
+        duration: formatDuration(v.duration_s),
+        duration_s: v.duration_s,
+        description: v.description,
+        hls_path: v.hls_path,
+        thumbnail: v.thumbnail,
+        course_id: course.id,
+        sort_order: v.sort_order,
+      }));
+    } catch {
+      return [];
+    }
   }, []);
 
+  const mergeVideos = useCallback((newVids: Video[]) => {
+    setVideos((prev) => {
+      const existingIds = new Set(prev.map((v) => v.id));
+      const toAdd = newVids.filter((v) => !existingIds.has(v.id));
+      if (toAdd.length === 0) return prev;
+      const merged = [...prev, ...toAdd];
+      ALL_VIDEOS = merged;
+      return merged;
+    });
+    setVideoCourseMap((prev) => {
+      const updates: Record<string, string> = {};
+      newVids.forEach((v) => { if (v.course_id) updates[v.id] = v.course_id; });
+      return { ...prev, ...updates };
+    });
+  }, []);
+
+  const loadAllCourses = useCallback(async (courseList: Course[]) => {
+    if (allLoadedRef.current) return;
+    allLoadedRef.current = true;
+    for (const course of courseList) {
+      if (loadedCourses.has(course.id)) continue;
+      setLoadingCourses((s) => new Set(s).add(course.id));
+      const vids = await loadCourseVideos(course);
+      mergeVideos(vids);
+      setLoadedCourses((s) => new Set(s).add(course.id));
+      setLoadingCourses((s) => { const n = new Set(s); n.delete(course.id); return n; });
+    }
+  }, [loadCourseVideos, mergeVideos, loadedCourses]);
+
+  // Initial load: fetch courses, then load the active/URL course first
+  useEffect(() => {
+    api.get<Course[]>('/video/courses')
+      .then(async (courseList) => {
+        const names: Record<string, string> = {};
+        courseList.forEach((c) => { names[c.id] = c.title || c.slug; });
+        setCourses(courseList);
+        setCourseNames(names);
+
+        if (courseList.length === 0) { setLoaded(true); return; }
+
+        // Determine which course to load first
+        let firstCourse = courseList[0];
+        if (urlSlug) {
+          // We'll need to search all courses for the video - load all in bg
+          // But first load course[0] immediately so sidebar isn't empty
+        }
+
+        // Load first course immediately
+        setLoadingCourses((s) => new Set(s).add(firstCourse.id));
+        const firstVids = await loadCourseVideos(firstCourse);
+        const vidCourse: Record<string, string> = {};
+        firstVids.forEach((v) => { if (v.course_id) vidCourse[v.id] = v.course_id; });
+        ALL_VIDEOS = firstVids;
+        setVideos(firstVids);
+        setVideoCourseMap(vidCourse);
+        setLoadedCourses(new Set([firstCourse.id]));
+        setLoadingCourses((s) => { const n = new Set(s); n.delete(firstCourse.id); return n; });
+        setLoaded(true);
+
+        if (urlSlug) {
+          // Check if the slug is in first course
+          const found = firstVids.find((v) => v.slug === urlSlug);
+          if (found) {
+            onSelectVideo(found);
+          } else {
+            // Need to search other courses — load them all
+            allLoadedRef.current = false;
+            for (const course of courseList.slice(1)) {
+              setLoadingCourses((s) => new Set(s).add(course.id));
+              const vids = await loadCourseVideos(course);
+              mergeVideos(vids);
+              setLoadedCourses((s) => new Set(s).add(course.id));
+              setLoadingCourses((s) => { const n = new Set(s); n.delete(course.id); return n; });
+              const match = vids.find((v) => v.slug === urlSlug);
+              if (match) { onSelectVideo(match); break; }
+            }
+            allLoadedRef.current = true;
+          }
+        } else if (firstVids.length > 0) {
+          onSelectVideo(firstVids[0]);
+        }
+
+        // Lazy-load remaining courses in background (lowest priority)
+        if (!urlSlug) {
+          setTimeout(async () => {
+            for (const course of courseList.slice(1)) {
+              setLoadingCourses((s) => new Set(s).add(course.id));
+              const vids = await loadCourseVideos(course);
+              mergeVideos(vids);
+              setLoadedCourses((s) => new Set(s).add(course.id));
+              setLoadingCourses((s) => { const n = new Set(s); n.delete(course.id); return n; });
+            }
+            allLoadedRef.current = true;
+          }, 500);
+        }
+      })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  // When a collapsed course is expanded, load its videos if not loaded yet
+  const handleExpandCourse = useCallback(async (course: Course) => {
+    if (loadedCourses.has(course.id)) return;
+    setLoadingCourses((s) => new Set(s).add(course.id));
+    const vids = await loadCourseVideos(course);
+    mergeVideos(vids);
+    setLoadedCourses((s) => new Set(s).add(course.id));
+    setLoadingCourses((s) => { const n = new Set(s); n.delete(course.id); return n; });
+  }, [loadedCourses, loadCourseVideos, mergeVideos]);
+
+  const toggleCourseCollapse = useCallback((course: Course) => {
+    setCollapsedCourses((prev) => {
+      const next = new Set(prev);
+      if (next.has(course.id)) {
+        next.delete(course.id);
+        // Load videos for this course if expanding and not yet loaded
+        handleExpandCourse(course);
+      } else {
+        next.add(course.id);
+      }
+      return next;
+    });
+  }, [handleExpandCourse]);
+
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
+    const q = e.target.value;
+    setSearchQuery(q);
+    // When searching, ensure all courses are loaded
+    if (q && !allLoadedRef.current) {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = setTimeout(() => {
+        loadAllCourses(courses);
+      }, 300);
+    }
   };
 
   const handleCategoryFilter = (category: string) => {
     setActiveCategory(category);
-  };
-
-  const toggleCourseCollapse = (courseId: string) => {
-    setCollapsedCourses(prev => {
-      const next = new Set(prev);
-      if (next.has(courseId)) next.delete(courseId);
-      else next.add(courseId);
-      return next;
-    });
+    // If filtering, load all courses
+    if (category !== 'All' && !allLoadedRef.current) {
+      loadAllCourses(courses);
+    }
   };
 
   const filteredVideos = videos.filter((v) => {
@@ -132,7 +241,7 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
 
   // Group filtered videos by course
   const groupedVideos = (() => {
-    const groups: { courseId: string; courseName: string; videos: Video[] }[] = [];
+    const groups: { courseId: string; courseName: string; courseSlug: string; videos: Video[] }[] = [];
     const courseMap = new Map<string, Video[]>();
     const uncategorized: Video[] = [];
     for (const v of filteredVideos) {
@@ -144,11 +253,15 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
         uncategorized.push(v);
       }
     }
-    for (const [cId, vids] of courseMap.entries()) {
-      groups.push({ courseId: cId, courseName: courseNames[cId] || 'Course', videos: vids });
+    // Preserve course order from the courses list
+    for (const course of courses) {
+      const vids = courseMap.get(course.id);
+      if (vids && vids.length > 0) {
+        groups.push({ courseId: course.id, courseName: courseNames[course.id] || 'Course', courseSlug: course.slug, videos: vids });
+      }
     }
     if (uncategorized.length > 0) {
-      groups.push({ courseId: '__uncategorized__', courseName: 'Videos', videos: uncategorized });
+      groups.push({ courseId: '__uncategorized__', courseName: 'Videos', courseSlug: '', videos: uncategorized });
     }
     return groups;
   })();
@@ -188,12 +301,14 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
 
       <div className="flex-1 overflow-y-auto">
         {groupedVideos.map((group) => {
+          const course = courses.find((c) => c.id === group.courseId);
           const isCollapsed = collapsedCourses.has(group.courseId);
+          const isLoading = course ? loadingCourses.has(course.id) : false;
           return (
             <div key={group.courseId}>
               {/* Course header with expand/collapse */}
               <button
-                onClick={() => toggleCourseCollapse(group.courseId)}
+                onClick={() => course && toggleCourseCollapse(course)}
                 className="w-full flex items-center gap-2 px-4 py-2.5 bg-slate-50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors sticky top-0 z-10"
               >
                 <span className={`material-symbols-outlined text-sm text-primary transition-transform duration-200 ${isCollapsed ? '' : 'rotate-90'}`}>
@@ -202,9 +317,13 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
                 <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex-1 text-left truncate">
                   {group.courseName}
                 </span>
-                <span className="text-[10px] text-slate-400 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded-full">
-                  {group.videos.length}
-                </span>
+                {isLoading ? (
+                  <span className="material-symbols-outlined text-[14px] text-slate-400 animate-spin">progress_activity</span>
+                ) : (
+                  <span className="text-[10px] text-slate-400 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded-full">
+                    {group.videos.length}
+                  </span>
+                )}
               </button>
               {/* Videos in this course */}
               {!isCollapsed && (
