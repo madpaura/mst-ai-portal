@@ -16,6 +16,7 @@ interface AuthContextType {
   loading: boolean;
   isAdmin: boolean;
   login: (username: string, password: string) => Promise<void>;
+  loginWithSamlToken: (token: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -24,6 +25,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isAdmin: false,
   login: async () => {},
+  loginWithSamlToken: async () => {},
   logout: () => {},
 });
 
@@ -59,13 +61,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await fetchUser();
   };
 
+  const loginWithSamlToken = async (token: string) => {
+    setToken(token);
+    await fetchUser();
+  };
+
   const logout = () => {
     clearToken();
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin: user?.role === 'admin', login, logout }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin: user?.role === 'admin', login, loginWithSamlToken, logout }}>
       {children}
     </AuthContext.Provider>
   );

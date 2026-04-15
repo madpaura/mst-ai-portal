@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from config import settings
 from database import init_db, close_db
 from auth.router import router as auth_router
+from auth.saml_router import router as saml_router
 from auth.seed import seed_admin_user
 from solutions.router import router as solutions_router
 from solutions.admin_router import router as solutions_admin_router
@@ -77,6 +78,7 @@ else:
     )
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
+app.include_router(saml_router, prefix="/saml", tags=["saml"])
 app.include_router(solutions_router, prefix="/api", tags=["solutions"])
 app.include_router(solutions_admin_router, prefix="/admin/solutions", tags=["admin-solutions"])
 app.include_router(forge_router, prefix="/forge", tags=["forge"])

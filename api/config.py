@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://portal:portal123@localhost:5432/mst_portal"
 
     # Auth
-    AUTH_MODE: Literal["open", "ldap"] = "open"
+    AUTH_MODE: Literal["open", "ldap", "saml"] = "open"
     JWT_SECRET: str = "dev-secret-change-in-production"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_HOURS: int = 24  # 24h for dev, 8h for prod
@@ -16,6 +16,24 @@ class Settings(BaseSettings):
     # LDAP (only used when AUTH_MODE=ldap)
     LDAP_URL: str = ""
     LDAP_BASE_DN: str = ""
+
+    # SAML / ADFS (only used when AUTH_MODE=saml)
+    SAML_SETTINGS_PATH: str = os.path.join(os.path.dirname(__file__), "saml", "settings.json")
+    SAML_SP_ENTITY_ID: str = "https://mst-ai-portal.ai.x.net/saml/metadata"
+    SAML_SP_ACS_URL: str = "https://mst-ai-portal.ai.x.net/saml/acs"
+    SAML_SP_SLS_URL: str = "https://mst-ai-portal.ai.x.net/saml/sls"
+    SAML_IDP_ENTITY_ID: str = ""        # https://adfs.x.net/adfs/services/trust
+    SAML_IDP_SSO_URL: str = ""          # https://adfs.x.net/adfs/ls/
+    SAML_IDP_SLO_URL: str = ""          # https://adfs.x.net/adfs/ls/?wa=wsignout1.0
+    SAML_IDP_CERT: str = ""             # base64 ADFS token-signing cert (no headers)
+    SAML_SP_CERT: str = ""              # base64 SP public cert (no headers)
+    SAML_SP_KEY: str = ""               # base64 SP private key (no headers)
+    # AD group → portal role mapping  e.g. "AI-Ignite-Team=admin,Samsung-Developers=user"
+    SAML_GROUP_ROLE_MAP: str = ""
+    # If empty, any authenticated SAML user gets role "user"
+    SAML_DEFAULT_ROLE: str = "user"
+    # Strict mode — NEVER disable in production
+    SAML_STRICT: bool = True
 
     # Storage paths
     VIDEO_STORAGE_PATH: str = os.path.join(os.path.dirname(__file__), "storage", "videos")
