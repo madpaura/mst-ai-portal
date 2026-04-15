@@ -104,6 +104,29 @@ async def install_component(slug: str, user: Optional[dict] = Depends(get_option
     return {"message": "Install event recorded"}
 
 
+@router.get("/contributing-guide")
+async def get_contributing_guide():
+    """Return the video guide configured for marketplace contributors."""
+    db = await get_db()
+    import json
+    row = await db.fetchrow("SELECT value FROM app_settings WHERE key = 'marketplace_contributing_video'")
+    if not row:
+        return {"video_slug": None, "video_title": None, "video_link": None}
+    try:
+        slug = json.loads(row["value"])
+    except Exception:
+        slug = None
+    if not slug:
+        return {"video_slug": None, "video_title": None, "video_link": None}
+    # Fetch the video title
+    video = await db.fetchrow("SELECT title FROM videos WHERE slug = $1 AND is_published = true AND is_active = true", slug)
+    return {
+        "video_slug": slug,
+        "video_title": video["title"] if video else None,
+        "video_link": f"/ignite/{slug}" if video else None,
+    }
+
+
 @router.get("/categories", response_model=list[ForgeCategoryResponse])
 async def list_categories():
     db = await get_db()
