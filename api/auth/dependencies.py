@@ -57,3 +57,10 @@ async def require_admin(user: dict = Depends(get_current_user)) -> dict:
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
+
+
+async def require_content(user: dict = Depends(get_current_user)) -> dict:
+    """Allow admin and content roles."""
+    if user["role"] not in ("admin", "content"):
+        raise HTTPException(status_code=403, detail="Content creator access required")
+    return user

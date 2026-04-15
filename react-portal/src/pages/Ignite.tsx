@@ -68,6 +68,8 @@ export const Ignite: React.FC = () => {
   const playerRef = useRef<HlsPlayerHandle>(null);
   const [activeVideo, setActiveVideo] = useState<Video | null>(ALL_VIDEOS[0] || null);
   const [shareCopied, setShareCopied] = useState(false);
+  const [showContributeCTA, setShowContributeCTA] = useState(false);
+  const [contributeRequest, setContributeRequest] = useState<{ status: string } | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const [activeTab, setActiveTab] = useState<'notes' | 'howto'>('howto');
@@ -78,6 +80,19 @@ export const Ignite: React.FC = () => {
   const [likeData, setLikeData] = useState<VideoLikeData | null>(null);
   const [likePending, setLikePending] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+
+  // Check contribute request status for logged-in non-content users
+  useEffect(() => {
+    if (!isLoggedIn()) return;
+    api.get<{ role: string }>('/auth/me').then((me) => {
+      if (me.role === 'user') {
+        setShowContributeCTA(true);
+        api.get<{ status: string } | null>('/auth/contribute-request')
+          .then(setContributeRequest)
+          .catch(() => {});
+      }
+    }).catch(() => {});
+  }, []);
 
   const loadVideoData = useCallback(async (video: Video) => {
     // Load chapters
@@ -294,6 +309,38 @@ export const Ignite: React.FC = () => {
           <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
 
           <div className="max-w-7xl mx-auto flex flex-col gap-8 relative z-10">
+            {/* Interested in Contributing? CTA for regular users */}
+            {showContributeCTA && (
+              <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-xl border border-primary/20 bg-primary/5">
+                <div className="flex items-center gap-3">
+                  <span className="material-symbols-outlined text-primary text-xl">volunteer_activism</span>
+                  <div>
+                    <p className="text-sm font-bold text-slate-900 dark:text-white">Interested in contributing?</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {contributeRequest?.status === 'pending'
+                        ? 'Your contribution request is pending admin review.'
+                        : contributeRequest?.status === 'rejected'
+                        ? 'Your previous request was not approved. You may reapply.'
+                        : 'Become a content creator — share videos, articles, and marketplace components.'}
+                    </p>
+                  </div>
+                </div>
+                {(!contributeRequest || contributeRequest.status === 'rejected') && (
+                  <a
+                    href="/contribute"
+                    className="shrink-0 px-4 py-2 bg-primary hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors"
+                  >
+                    Apply Now
+                  </a>
+                )}
+                {contributeRequest?.status === 'pending' && (
+                  <span className="shrink-0 px-3 py-1.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 text-xs font-bold rounded-lg">
+                    Under Review
+                  </span>
+                )}
+              </div>
+            )}
+
             {/* No content message when no video is selected */}
             {!activeVideo && (
               <div className="flex flex-col items-center justify-center py-24">

@@ -21,6 +21,8 @@ import { Articles } from './pages/Articles';
 import { ArticleDetail } from './pages/ArticleDetail';
 import { ArticleEditor } from './pages/ArticleEditor';
 import { AdminArticles } from './pages/AdminArticles';
+import { ContributeRequest } from './pages/ContributeRequest';
+import { AdminContributions } from './pages/AdminContributions';
 
 function App() {
   return (
@@ -43,6 +45,7 @@ function App() {
           <Route path="/articles/edit/:articleId" element={<ArticleEditor />} />
           <Route path="/articles/:articleSlug" element={<ArticleDetail />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/contribute" element={<ContributeRequest />} />
 
           {/* Admin pages (protected by AdminLayout) */}
           <Route path="/admin" element={<AdminLayout />}>
@@ -54,6 +57,7 @@ function App() {
             <Route path="digest" element={<AdminDigest />} />
             <Route path="analytics" element={<AdminAnalytics />} />
             <Route path="settings" element={<AdminSettings />} />
+            <Route path="contributions" element={<AdminContributions />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

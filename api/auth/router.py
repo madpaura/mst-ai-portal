@@ -1,9 +1,29 @@
 from fastapi import APIRouter, HTTPException, Depends
 import os
+from typing import Optional
+from pydantic import BaseModel
 from auth.schemas import LoginRequest, TokenResponse, UserResponse, UserUpdateRequest
 from auth.service import verify_password, create_access_token
-from auth.dependencies import get_current_user
+from auth.dependencies import get_current_user, require_admin
 from database import get_db
+
+
+class ContributeRequestCreate(BaseModel):
+    reason: str
+
+
+class ContributeRequestResponse(BaseModel):
+    id: str
+    user_id: str
+    reason: str
+    status: str
+    admin_note: Optional[str] = None
+    created_at: str
+
+
+class ReviewContributeRequest(BaseModel):
+    status: str  # 'approved' or 'rejected'
+    admin_note: Optional[str] = None
 
 router = APIRouter()
 
@@ -70,3 +90,135 @@ async def update_me(req: UserUpdateRequest, user: dict = Depends(get_current_use
         role=updated["role"],
         created_at=updated["created_at"],
     )
+
+
+# ── Contribute Requests ────────────────────────────────────
+
+@router.post("/contribute-request", response_model=ContributeRequestResponse)
+async def submit_contribute_request(req: ContributeRequestCreate, user: dict = Depends(get_current_user)):
+    """Submit a request to become a content contributor."""
+    db = await get_db()
+    # Check if user already has an active/approved request
+    existing = await db.fetchrow(
+        "SELECT id, status FROM contribute_requests WHERE user_id = $1 AND status IN ('pending', 'approved')",
+        user["id"],
+    )
+    if existing:
+        if existing["status"] == "approved":
+            raise HTTPException(status_code=400, detail="You already have content creator access")
+        raise HTTPException(status_code=400, detail="You already have a pending request")
+    if not req.reason.strip():
+        raise HTTPException(status_code=400, detail="Reason cannot be empty")
+
+    row = await db.fetchrow(
+        "INSERT INTO contribute_requests (user_id, reason) VALUES ($1, $2) RETURNING *",
+        user["id"], req.reason.strip(),
+    )
+    return ContributeRequestResponse(
+        id=str(row["id"]), user_id=str(row["user_id"]),
+        reason=row["reason"], status=row["status"],
+        admin_note=row.get("admin_note"),
+        created_at=row["created_at"].isoformat(),
+    )
+
+
+@router.get("/contribute-request", response_model=Optional[ContributeRequestResponse])
+async def get_my_contribute_request(user: dict = Depends(get_current_user)):
+    """Get the current user's latest contribution request."""
+    db = await get_db()
+    row = await db.fetchrow(
+        "SELECT * FROM contribute_requests WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1",
+        user["id"],
+    )
+    if not row:
+        return None
+    return ContributeRequestResponse(
+        id=str(row["id"]), user_id=str(row["user_id"]),
+        reason=row["reason"], status=row["status"],
+        admin_note=row.get("admin_note"),
+        created_at=row["created_at"].isoformat(),
+    )
+
+
+# ── Admin: Manage Contribute Requests ─────────────────────
+
+@router.get("/admin/contribute-requests", response_model=list[ContributeRequestResponse])
+async def list_contribute_requests(admin: dict = Depends(require_admin)):
+    db = await get_db()
+    rows = await db.fetch(
+        """
+        SELECT cr.*, u.display_name, u.username
+        FROM contribute_requests cr
+        JOIN users u ON u.id = cr.user_id
+        ORDER BY cr.created_at DESC
+        """,
+    )
+    return [
+        ContributeRequestResponse(
+            id=str(r["id"]), user_id=str(r["user_id"]),
+            reason=r["reason"], status=r["status"],
+            admin_note=r.get("admin_note"),
+            created_at=r["created_at"].isoformat(),
+        )
+        for r in rows
+    ]
+
+
+@router.put("/admin/contribute-requests/{request_id}", response_model=ContributeRequestResponse)
+async def review_contribute_request(
+    request_id: str, req: ReviewContributeRequest, admin: dict = Depends(require_admin)
+):
+    """Approve or reject a contribution request. Approved → sets user role to 'content'."""
+    if req.status not in ("approved", "rejected"):
+        raise HTTPException(status_code=400, detail="Status must be 'approved' or 'rejected'")
+
+    db = await get_db()
+    row = await db.fetchrow("SELECT * FROM contribute_requests WHERE id = $1", request_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    await db.execute(
+        "UPDATE contribute_requests SET status = $1, admin_note = $2, reviewed_by = $3, reviewed_at = now() WHERE id = $4",
+        req.status, req.admin_note, admin["id"], request_id,
+    )
+
+    if req.status == "approved":
+        await db.execute(
+            "UPDATE users SET role = 'content' WHERE id = $1 AND role = 'user'",
+            row["user_id"],
+        )
+
+    updated = await db.fetchrow("SELECT * FROM contribute_requests WHERE id = $1", request_id)
+    return ContributeRequestResponse(
+        id=str(updated["id"]), user_id=str(updated["user_id"]),
+        reason=updated["reason"], status=updated["status"],
+        admin_note=updated.get("admin_note"),
+        created_at=updated["created_at"].isoformat(),
+    )
+
+
+# ── Admin: User Role Management ────────────────────────────
+
+@router.get("/admin/users", response_model=list[UserResponse])
+async def list_users(admin: dict = Depends(require_admin)):
+    db = await get_db()
+    rows = await db.fetch("SELECT * FROM users ORDER BY created_at DESC LIMIT 200")
+    return [
+        UserResponse(
+            id=str(r["id"]), username=r["username"], email=r.get("email"),
+            display_name=r["display_name"], initials=r.get("initials"),
+            role=r["role"], created_at=r["created_at"],
+        )
+        for r in rows
+    ]
+
+
+@router.put("/admin/users/{user_id}/role")
+async def update_user_role(user_id: str, role: str, admin: dict = Depends(require_admin)):
+    if role not in ("user", "content", "admin"):
+        raise HTTPException(status_code=400, detail="Role must be user, content, or admin")
+    db = await get_db()
+    result = await db.execute("UPDATE users SET role = $1 WHERE id = $2", role, user_id)
+    if result == "UPDATE 0":
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"message": f"Role updated to '{role}'"}
