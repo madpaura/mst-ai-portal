@@ -6,6 +6,7 @@ import shutil
 import mimetypes
 import subprocess
 from datetime import datetime, timezone
+from loguru import logger as log
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
 
 from video.schemas import (
@@ -395,19 +396,19 @@ async def _trim_video_task(
             trimmed_path,
         ]
 
-        print(f"[trim] Trimming video {video_id}: {start}s - {end}s")
+        log.info(f"Trimming video {video_id}: {start}s - {end}s")
         result = subprocess.run(trim_cmd, capture_output=True, text=True, timeout=600)
 
         if result.returncode != 0:
             error = f"Trim failed: {result.stderr[-500:]}"
-            print(f"[trim] ERROR: {error}")
+            log.error(f"Trim failed: {error}")
             await pool.execute(
                 "UPDATE videos SET status = 'error' WHERE id = $1", video_id,
             )
             return
 
         if not os.path.exists(trimmed_path) or os.path.getsize(trimmed_path) == 0:
-            print("[trim] ERROR: Trimmed file is empty or missing")
+            log.error("Trim: output file is empty or missing")
             await pool.execute(
                 "UPDATE videos SET status = 'error' WHERE id = $1", video_id,
             )
@@ -437,10 +438,10 @@ async def _trim_video_task(
 
         await pool.execute("UPDATE videos SET status = 'uploaded' WHERE id = $1", video_id)
         _write_ops_log(os.path.dirname(raw_path), "trim")
-        print(f"[trim] Video {video_id} trimmed successfully")
+        log.info(f"Video {video_id} trimmed successfully")
 
     except Exception as e:
-        print(f"[trim] Unexpected error: {e}")
+        log.error(f"Trim unexpected error: {e}")
         try:
             await pool.execute(
                 "UPDATE videos SET status = 'error' WHERE id = $1", video_id,
@@ -519,7 +520,7 @@ async def _cut_video_task(
                 *encode_opts,
                 part_before,
             ]
-            print(f"[cut] Extracting before segment: 0s - {start}s")
+            log.info(f"Cut: extracting before segment 0s - {start}s")
             r = subprocess.run(cmd_before, capture_output=True, text=True, timeout=600)
             if r.returncode != 0:
                 raise RuntimeError(f"Cut before-segment failed: {r.stderr[-500:]}")
@@ -533,7 +534,7 @@ async def _cut_video_task(
             *encode_opts,
             part_after,
         ]
-        print(f"[cut] Extracting after segment: {end}s - EOF")
+        log.info(f"Cut: extracting after segment {end}s - EOF")
         r = subprocess.run(cmd_after, capture_output=True, text=True, timeout=600)
         if r.returncode != 0:
             raise RuntimeError(f"Cut after-segment failed: {r.stderr[-500:]}")
@@ -560,7 +561,7 @@ async def _cut_video_task(
                 "-movflags", "+faststart",
                 cut_output,
             ]
-            print(f"[cut] Concatenating {len(parts)} segments")
+            log.info(f"Cut: concatenating {len(parts)} segments")
             r = subprocess.run(concat_cmd, capture_output=True, text=True, timeout=600)
             if r.returncode != 0:
                 raise RuntimeError(f"Cut concat failed: {r.stderr[-500:]}")
@@ -597,10 +598,10 @@ async def _cut_video_task(
 
         await pool.execute("UPDATE videos SET status = 'uploaded' WHERE id = $1", video_id)
         _write_ops_log(os.path.dirname(raw_path), "cut")
-        print(f"[cut] Video {video_id} cut successfully")
+        log.info(f"Video {video_id} cut successfully")
 
     except Exception as e:
-        print(f"[cut] Unexpected error: {e}")
+        log.error(f"Cut unexpected error: {e}")
         # Cleanup temp files on error
         for tmp in [part_before, part_after, concat_list, cut_output]:
             if os.path.exists(tmp):
@@ -1000,16 +1001,16 @@ async def _generate_banner_video(video_id: str, db_url: str):
             "--props", props_path,
             "--codec", "h264",
         ]
-        print(f"[banner] Rendering banner for video {video_id}...")
-        print(f"[banner] cmd: {' '.join(render_cmd)}")
+        log.info(f"Banner: rendering for video {video_id}")
+        log.debug(f"Banner cmd: {' '.join(render_cmd)}")
         result = subprocess.run(render_cmd, cwd=remotion_dir, capture_output=True, text=True, timeout=180)
 
-        print(f"[banner] Remotion stdout: {result.stdout[-500:]}")
-        print(f"[banner] Remotion stderr: {result.stderr[-500:]}")
+        log.debug(f"Banner Remotion stdout: {result.stdout[-500:]}")
+        log.debug(f"Banner Remotion stderr: {result.stderr[-500:]}")
 
         if result.returncode != 0:
             error = f"Remotion render failed: {result.stderr[-500:]}"
-            print(f"[banner] ERROR: {error}")
+            log.error(f"Banner render error: {error}")
             await pool.execute(
                 "UPDATE video_banners SET status='error', error=$1 WHERE video_id=$2",
                 error, video_id,
@@ -1023,7 +1024,7 @@ async def _generate_banner_video(video_id: str, db_url: str):
             )
             return
 
-        print(f"[banner] Banner rendered: {os.path.getsize(banner_output)} bytes")
+        log.info(f"Banner rendered: {os.path.getsize(banner_output)} bytes")
 
         # Prepend banner to the original video using ffmpeg concat
         raw_path = os.path.join(video_dir, "raw", "original.mp4")
@@ -1061,7 +1062,7 @@ async def _generate_banner_video(video_id: str, db_url: str):
                             has_audio = True
                             audio_sample_rate = int(stream.get("sample_rate", 44100))
                 except Exception as e:
-                    print(f"[banner] Probe parse error: {e}, using defaults")
+                    log.warning(f"Banner probe parse error: {e}, using defaults")
 
             # Ensure dimensions are even (required by libx264) and fps is sane
             orig_w = orig_w + (orig_w % 2)
@@ -1069,7 +1070,7 @@ async def _generate_banner_video(video_id: str, db_url: str):
             if orig_fps > 60 or orig_fps < 1:
                 orig_fps = 30
 
-            print(f"[banner] Original video: {orig_w}x{orig_h} @ {orig_fps}fps, has_audio={has_audio}")
+            log.info(f"Banner original video: {orig_w}x{orig_h} @ {orig_fps}fps, has_audio={has_audio}")
 
             # Use the larger dimensions between banner (1920x1080) and original
             target_w = max(orig_w, 1920)
@@ -1095,11 +1096,11 @@ async def _generate_banner_video(video_id: str, db_url: str):
                 reencode_cmd += ["-an"]
             reencode_cmd.append(banner_reenc)
 
-            print(f"[banner] Re-encoding banner to {target_w}x{target_h}...")
+            log.info(f"Banner: re-encoding to {target_w}x{target_h}")
             reenc_result = subprocess.run(reencode_cmd, capture_output=True, text=True, timeout=60)
             if reenc_result.returncode != 0:
                 err_msg = reenc_result.stderr[-500:]
-                print(f"[banner] Banner re-encode FAILED: {err_msg}")
+                log.error(f"Banner re-encode failed: {err_msg}")
                 await db.execute(
                     "UPDATE video_banners SET status='error', error=$1 WHERE video_id=$2",
                     f"Banner re-encode failed: {err_msg[-200:]}", video_id,
@@ -1107,7 +1108,7 @@ async def _generate_banner_video(video_id: str, db_url: str):
                 return
 
             if not os.path.exists(banner_reenc) or os.path.getsize(banner_reenc) == 0:
-                print(f"[banner] Banner re-encode produced empty file")
+                log.error("Banner re-encode produced empty file")
                 await db.execute(
                     "UPDATE video_banners SET status='error', error='Banner re-encode produced empty file' WHERE video_id=$1",
                     video_id,
@@ -1131,12 +1132,12 @@ async def _generate_banner_video(video_id: str, db_url: str):
                 orig_reencode_cmd += ["-an"]
             orig_reencode_cmd.append(orig_reenc)
 
-            print(f"[banner] Re-encoding original for concat compatibility...")
+            log.info("Banner: re-encoding original for concat compatibility")
             orig_reenc_result = subprocess.run(orig_reencode_cmd, capture_output=True, text=True, timeout=600)
 
             if orig_reenc_result.returncode != 0 or not os.path.exists(orig_reenc) or os.path.getsize(orig_reenc) == 0:
                 err_msg = orig_reenc_result.stderr[-500:] if orig_reenc_result.returncode != 0 else "empty output"
-                print(f"[banner] Original re-encode FAILED: {err_msg}")
+                log.error(f"Banner original re-encode failed: {err_msg}")
                 await db.execute(
                     "UPDATE video_banners SET status='error', error=$1 WHERE video_id=$2",
                     f"Original re-encode failed: {str(err_msg)[-200:]}", video_id,
@@ -1158,11 +1159,11 @@ async def _generate_banner_video(video_id: str, db_url: str):
                 "-c", "copy",
                 combined_path,
             ]
-            print(f"[banner] Concatenating banner + video...")
+            log.info("Banner: concatenating banner + video")
             concat_result = subprocess.run(concat_cmd, capture_output=True, text=True, timeout=300)
 
             if concat_result.returncode != 0:
-                print(f"[banner] Copy-concat failed, trying re-encode concat...")
+                log.warning("Banner: copy-concat failed, trying re-encode concat")
                 # Fallback: re-encode concat
                 fallback_cmd = [
                     settings.FFMPEG_PATH, "-y",
@@ -1195,10 +1196,10 @@ async def _generate_banner_video(video_id: str, db_url: str):
                 await pool.execute("UPDATE videos SET status='uploaded' WHERE id=$1", video_id)
                 raw_dir_banner = os.path.join(video_dir, "raw")
                 _write_ops_log(raw_dir_banner, "banner")
-                print(f"[banner] Banner prepended for {video_id}")
+                log.info(f"Banner prepended for {video_id}")
             else:
                 error = f"FFmpeg concat failed: {concat_result.stderr[-300:]}"
-                print(f"[banner] ERROR: {error}")
+                log.error(f"Banner concat error: {error}")
                 await pool.execute(
                     "UPDATE video_banners SET status='error', error=$1 WHERE video_id=$2",
                     error, video_id,
@@ -1210,10 +1211,10 @@ async def _generate_banner_video(video_id: str, db_url: str):
             "UPDATE video_banners SET status='ready', banner_video_path=$1 WHERE video_id=$2",
             banner_hls_path, video_id,
         )
-        print(f"[banner] Banner generation complete for {video_id}")
+        log.info(f"Banner generation complete for {video_id}")
 
     except Exception as e:
-        print(f"[banner] Unexpected error: {e}")
+        log.error(f"Banner unexpected error: {e}")
         try:
             await pool.execute(
                 "UPDATE video_banners SET status='error', error=$1 WHERE video_id=$2",

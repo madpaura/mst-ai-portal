@@ -10,6 +10,7 @@ import asyncio
 from datetime import datetime, timezone
 
 import asyncpg
+from loguru import logger as log
 
 
 async def run_scheduler(db_url: str):
@@ -17,7 +18,7 @@ async def run_scheduler(db_url: str):
     Long-running coroutine that checks every 60s whether any
     scheduled sync jobs need to be created based on update_frequency.
     """
-    print("[scheduler] Forge sync scheduler started")
+    log.info("Forge sync scheduler started")
 
     while True:
         try:
@@ -74,7 +75,7 @@ async def run_scheduler(db_url: str):
                                    VALUES ($1, 'scheduled') RETURNING id""",
                                 s["id"],
                             )
-                            print(f"[scheduler] Created sync job {row['id']} for {s['git_url']} ({freq})")
+                            log.info(f"Created sync job {row['id']} for {s['git_url']} ({freq})")
 
                             # Launch the sync worker
                             from forge.sync_worker import run_sync_job
@@ -84,8 +85,8 @@ async def run_scheduler(db_url: str):
                 await pool.close()
 
         except asyncio.CancelledError:
-            print("[scheduler] Forge sync scheduler stopped")
+            log.info("Forge sync scheduler stopped")
             return
         except Exception as e:
-            print(f"[scheduler] Error: {e}")
+            log.error(f"Scheduler error: {e}")
             await asyncio.sleep(30)

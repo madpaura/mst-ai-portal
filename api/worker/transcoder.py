@@ -11,6 +11,7 @@ import subprocess
 import sys
 
 import asyncpg
+from loguru import logger as log
 
 # Allow running as standalone module
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -78,12 +79,12 @@ def run_ffmpeg(input_path: str, output_dir: str, quality: str, crf: int) -> bool
     ]
 
     backend = "GPU" if gpu["gpu_available"] else "CPU"
-    print(f"  [ffmpeg] Transcoding {quality} (CRF={crf}) [{backend}]...")
+    log.info(f"Transcoding {quality} (CRF={crf}) [{backend}]")
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        print(f"  [ffmpeg] ERROR {quality}: {result.stderr[-500:]}")
+        log.error(f"FFmpeg error {quality}: {result.stderr[-500:]}")
         return False
-    print(f"  [ffmpeg] {quality} done [{backend}]")
+    log.info(f"Transcoding {quality} done [{backend}]")
     return True
 
 
@@ -113,7 +114,7 @@ def generate_master_manifest(hls_dir: str, qualities: list[dict]):
     manifest_path = os.path.join(hls_dir, "master.m3u8")
     with open(manifest_path, "w") as f:
         f.write("\n".join(lines) + "\n")
-    print(f"  [manifest] master.m3u8 written with {len(qualities)} quality tier(s)")
+    log.info(f"master.m3u8 written with {len(qualities)} quality tier(s)")
 
 
 def get_duration(input_path: str) -> int | None:
@@ -135,7 +136,7 @@ async def process_job(pool: asyncpg.Pool, job):
     """Process a single transcode job."""
     video_id = str(job["video_id"])
     job_id = job["id"]
-    print(f"\n[worker] Processing job #{job_id} for video {video_id}")
+    log.info(f"Processing job #{job_id} for video {video_id}")
 
     video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
     raw_dir = os.path.join(video_dir, "raw")
@@ -153,9 +154,9 @@ async def process_job(pool: asyncpg.Pool, job):
                     tracked_path = os.path.join(raw_dir, tracked_file)
                     if os.path.exists(tracked_path) and tracked_path != raw_path:
                         shutil.copy2(tracked_path, raw_path)
-                        print(f"  [worker] Recovered from ops.json: {tracked_file} → original.mp4")
+                        log.info(f"Recovered from ops.json: {tracked_file} → original.mp4")
             except Exception as e:
-                print(f"  [worker] ops.json read error: {e}")
+                log.warning(f"ops.json read error: {e}")
 
         # 2. Fall back to newest .mp4 in the raw directory
         if not os.path.exists(raw_path) and os.path.isdir(raw_dir):
@@ -168,11 +169,11 @@ async def process_job(pool: asyncpg.Pool, job):
                 candidates.sort(key=lambda f: os.path.getmtime(os.path.join(raw_dir, f)), reverse=True)
                 fallback_path = os.path.join(raw_dir, candidates[0])
                 shutil.copy2(fallback_path, raw_path)
-                print(f"  [worker] Recovered from newest file: {candidates[0]} → original.mp4")
+                log.info(f"Recovered from newest file: {candidates[0]} → original.mp4")
 
     if not os.path.exists(raw_path):
         error = f"Raw file not found: {raw_path}"
-        print(f"  [error] {error}")
+        log.error(f"{error}")
         await pool.execute(
             "UPDATE transcode_jobs SET status = 'failed', error = $1, completed_at = now() WHERE id = $2",
             error, job_id,
@@ -211,7 +212,7 @@ async def process_job(pool: asyncpg.Pool, job):
     # Check if job was cancelled while ffmpeg was running
     current_status = await pool.fetchval("SELECT status FROM transcode_jobs WHERE id = $1", job_id)
     if current_status == "cancelled":
-        print(f"[worker] Job #{job_id} was cancelled — discarding result")
+        log.info(f"Job #{job_id} was cancelled — discarding result")
         return
 
     # Generate master manifest
@@ -248,21 +249,21 @@ async def process_job(pool: asyncpg.Pool, job):
             _json.dump(ops, _f)
     except Exception:
         pass
-    print(f"[worker] Job #{job_id} completed successfully")
+    log.info(f"Job #{job_id} completed successfully")
 
 
 async def run_worker():
     """Main worker loop — polls for jobs."""
-    print("[worker] Starting transcode worker...")
-    print(f"[worker] Video storage: {settings.VIDEO_STORAGE_PATH}")
-    print(f"[worker] Poll interval: {settings.TRANSCODE_POLL_INTERVAL}s")
+    log.info("Starting transcode worker...")
+    log.info(f"Video storage: {settings.VIDEO_STORAGE_PATH}")
+    log.info(f"Poll interval: {settings.TRANSCODE_POLL_INTERVAL}s")
 
     # Probe GPU at startup
     gpu = get_gpu_info()
     if gpu["gpu_available"]:
-        print(f"[worker] GPU encoding: {gpu['gpu_name']} (h264_nvenc)")
+        log.info(f"GPU encoding: {gpu['gpu_name']} (h264_nvenc)")
     else:
-        print("[worker] GPU not available — using CPU encoding (libx264)")
+        log.info("GPU not available — using CPU encoding (libx264)")
 
     os.makedirs(settings.VIDEO_STORAGE_PATH, exist_ok=True)
 
@@ -278,11 +279,11 @@ async def run_worker():
         except KeyboardInterrupt:
             break
         except Exception as e:
-            print(f"[worker] Error: {e}")
+            log.error(f"Error: {e}")
             await asyncio.sleep(settings.TRANSCODE_POLL_INTERVAL)
 
     await pool.close()
-    print("[worker] Shutdown")
+    log.info("Shutdown")
 
 
 if __name__ == "__main__":

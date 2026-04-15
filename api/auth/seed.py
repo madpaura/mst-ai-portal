@@ -1,3 +1,4 @@
+from loguru import logger as log
 from database import get_db
 from auth.service import hash_password
 
@@ -20,4 +21,4 @@ async def seed_admin_user():
         hash_password("admin"),
         "admin",
     )
-    print("[seed] Admin user created (admin/admin)")
+    log.info("Admin user created (admin/admin)")
