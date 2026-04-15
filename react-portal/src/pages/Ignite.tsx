@@ -120,6 +120,24 @@ export const Ignite: React.FC = () => {
     if (activeVideo?.slug) loadVideoData(activeVideo);
   }, [activeVideo, loadVideoData]);
 
+  // Resume from local cached position when video changes
+  useEffect(() => {
+    if (!activeVideo?.slug) return;
+    // Clear any pending save timer from previous video
+    if (progressSaveRef.current) {
+      clearTimeout(progressSaveRef.current);
+      progressSaveRef.current = null;
+    }
+    const savedPos = getLocalPosition(activeVideo.slug);
+    if (savedPos > 5) {
+      // Delay seek until player is ready (HLS manifest parsed)
+      const timer = setTimeout(() => {
+        playerRef.current?.seekTo(savedPos);
+      }, 1200);
+      return () => clearTimeout(timer);
+    }
+  }, [activeVideo?.slug]);
+
   const handleSelectVideo = (video: Video) => {
     setActiveVideo(video);
     navigate(`/ignite/${video.slug}`, { replace: true });
@@ -137,9 +155,33 @@ export const Ignite: React.FC = () => {
     }
   };
 
+  // Local progress caching helpers
+  const getLocalPosition = (slug: string): number => {
+    try {
+      const val = localStorage.getItem(`mst_vpos_${slug}`);
+      return val ? parseFloat(val) : 0;
+    } catch { return 0; }
+  };
+
+  const saveLocalPosition = useCallback((slug: string, time: number) => {
+    try {
+      localStorage.setItem(`mst_vpos_${slug}`, String(Math.floor(time)));
+    } catch { /* ignore */ }
+  }, []);
+
+  const progressSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleTimeUpdate = (time: number, dur: number) => {
     setCurrentTime(time);
     setVideoDuration(dur);
+    // Throttled save to localStorage every 5 seconds
+    if (activeVideo?.slug && time > 5) {
+      if (progressSaveRef.current) return;
+      progressSaveRef.current = setTimeout(() => {
+        progressSaveRef.current = null;
+        if (activeVideo?.slug) saveLocalPosition(activeVideo.slug, time);
+      }, 5000);
+    }
   };
 
   const handleToggleLike = async () => {
