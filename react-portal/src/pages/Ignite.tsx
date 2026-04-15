@@ -123,10 +123,14 @@ export const Ignite: React.FC = () => {
   // Resume from local cached position when video changes
   useEffect(() => {
     if (!activeVideo?.slug) return;
-    // Clear any pending save timer from previous video
+    // Clear any pending save timers from previous video
     if (progressSaveRef.current) {
       clearTimeout(progressSaveRef.current);
       progressSaveRef.current = null;
+    }
+    if (serverProgressRef.current) {
+      clearTimeout(serverProgressRef.current);
+      serverProgressRef.current = null;
     }
     const savedPos = getLocalPosition(activeVideo.slug);
     if (savedPos > 5) {
@@ -170,17 +174,40 @@ export const Ignite: React.FC = () => {
   }, []);
 
   const progressSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const serverProgressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [progressVersion, setProgressVersion] = useState(0);
+
+  const syncServerProgress = useCallback((slug: string, time: number, duration: number) => {
+    if (!isLoggedIn() || !slug || time < 5) return;
+    const watched = Math.floor(time);
+    api.put(`/video/progress/${slug}`, { watched_seconds: watched, last_position: watched })
+      .then(() => {
+        // If video is near completion, bump progressVersion to trigger sidebar refresh
+        if (duration > 0 && time >= duration * 0.88) {
+          setProgressVersion((v) => v + 1);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleTimeUpdate = (time: number, dur: number) => {
     setCurrentTime(time);
     setVideoDuration(dur);
+    const slug = activeVideo?.slug;
+    if (!slug || time < 5) return;
     // Throttled save to localStorage every 5 seconds
-    if (activeVideo?.slug && time > 5) {
-      if (progressSaveRef.current) return;
+    if (!progressSaveRef.current) {
       progressSaveRef.current = setTimeout(() => {
         progressSaveRef.current = null;
-        if (activeVideo?.slug) saveLocalPosition(activeVideo.slug, time);
+        saveLocalPosition(slug, time);
       }, 5000);
+    }
+    // Throttled sync to server every 30 seconds
+    if (!serverProgressRef.current) {
+      serverProgressRef.current = setTimeout(() => {
+        serverProgressRef.current = null;
+        syncServerProgress(slug, time, dur);
+      }, 30000);
     }
   };
 
@@ -261,7 +288,7 @@ export const Ignite: React.FC = () => {
       <IgniteHeader notesTaken={0} />
 
       <div className="flex flex-1 overflow-hidden">
-        <IgniteSidebar activeVideoId={activeVideo?.id || ''} onSelectVideo={handleSelectVideo} />
+        <IgniteSidebar activeVideoId={activeVideo?.id || ''} onSelectVideo={handleSelectVideo} progressVersion={progressVersion} />
 
         <main className="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark relative p-6 lg:p-10">
           <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />

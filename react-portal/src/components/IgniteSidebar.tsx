@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { api } from '../api/client';
+import { api, isLoggedIn } from '../api/client';
 
 export interface Video {
   id: string;
@@ -37,6 +37,15 @@ interface Course {
   title?: string;
 }
 
+interface CourseProgress {
+  course_id: string;
+  course_slug: string;
+  total_videos: number;
+  completed_videos: number;
+  progress_pct: number;
+  is_enrolled: boolean;
+}
+
 const formatDuration = (s: number | null): string => {
   if (!s) return '10:00';
   const m = Math.floor(s / 60);
@@ -51,9 +60,10 @@ const CATEGORIES = ['All', 'Code-mate', 'RAG', 'Agents', 'Deep Dive'];
 interface IgniteSidebarProps {
   activeVideoId: string;
   onSelectVideo: (video: Video) => void;
+  progressVersion?: number;
 }
 
-export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onSelectVideo }) => {
+export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onSelectVideo, progressVersion = 0 }) => {
   const { videoSlug: urlSlug } = useParams<{ videoSlug?: string }>();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
@@ -68,6 +78,9 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
   const [loadingCourses, setLoadingCourses] = useState<Set<string>>(new Set());
   const allLoadedRef = useRef(false);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Course enrollment / progress
+  const [courseProgress, setCourseProgress] = useState<Record<string, CourseProgress>>({});
+  const [enrollingCourse, setEnrollingCourse] = useState<string | null>(null);
 
   const loadCourseVideos = useCallback(async (course: Course): Promise<Video[]> => {
     try {
@@ -213,6 +226,35 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
     });
   }, [handleExpandCourse]);
 
+  // Load course progress once courses are known, and whenever progressVersion bumps
+  useEffect(() => {
+    if (!isLoggedIn() || courses.length === 0) return;
+    api.get<CourseProgress[]>('/video/my-courses')
+      .then((data) => {
+        const map: Record<string, CourseProgress> = {};
+        data.forEach((cp) => { map[cp.course_id] = cp; });
+        setCourseProgress(map);
+      })
+      .catch(() => {});
+  }, [courses, progressVersion]);
+
+  const handleToggleEnroll = useCallback(async (course: Course, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isLoggedIn() || enrollingCourse) return;
+    setEnrollingCourse(course.id);
+    try {
+      const cp = courseProgress[course.id];
+      let updated: CourseProgress;
+      if (cp?.is_enrolled) {
+        updated = await api.delete<CourseProgress>(`/video/courses/${course.slug}/enroll`);
+      } else {
+        updated = await api.post<CourseProgress>(`/video/courses/${course.slug}/enroll`);
+      }
+      setCourseProgress((prev) => ({ ...prev, [course.id]: updated }));
+    } catch { /* ignore */ }
+    setEnrollingCourse(null);
+  }, [courseProgress, enrollingCourse]);
+
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const q = e.target.value;
     setSearchQuery(q);
@@ -307,24 +349,62 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
           return (
             <div key={group.courseId}>
               {/* Course header with expand/collapse */}
-              <button
-                onClick={() => course && toggleCourseCollapse(course)}
-                className="w-full flex items-center gap-2 px-4 py-2.5 bg-slate-50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors sticky top-0 z-10"
-              >
-                <span className={`material-symbols-outlined text-sm text-primary transition-transform duration-200 ${isCollapsed ? '' : 'rotate-90'}`}>
-                  chevron_right
-                </span>
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex-1 text-left truncate">
-                  {group.courseName}
-                </span>
-                {isLoading ? (
-                  <span className="material-symbols-outlined text-[14px] text-slate-400 animate-spin">progress_activity</span>
-                ) : (
-                  <span className="text-[10px] text-slate-400 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded-full">
-                    {group.videos.length}
+              <div className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-white/5">
+                <button
+                  onClick={() => course && toggleCourseCollapse(course)}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors"
+                >
+                  <span className={`material-symbols-outlined text-sm text-primary transition-transform duration-200 ${isCollapsed ? '' : 'rotate-90'}`}>
+                    chevron_right
                   </span>
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex-1 text-left truncate">
+                    {group.courseName}
+                  </span>
+                  {/* Subscribe button */}
+                  {course && isLoggedIn() && (
+                    <button
+                      onClick={(e) => handleToggleEnroll(course, e)}
+                      disabled={enrollingCourse === course.id}
+                      title={courseProgress[course.id]?.is_enrolled ? 'Unsubscribe' : 'Subscribe to course'}
+                      className={`shrink-0 p-0.5 rounded transition-colors ${
+                        courseProgress[course.id]?.is_enrolled
+                          ? 'text-primary hover:text-rose-400'
+                          : 'text-slate-400 hover:text-primary'
+                      } ${enrollingCourse === course.id ? 'opacity-50' : ''}`}
+                    >
+                      <span className="material-symbols-outlined text-[16px]"
+                        style={{ fontVariationSettings: courseProgress[course.id]?.is_enrolled ? "'FILL' 1" : "'FILL' 0" }}
+                      >
+                        {enrollingCourse === course.id ? 'progress_activity' : 'bookmark'}
+                      </span>
+                    </button>
+                  )}
+                  {isLoading ? (
+                    <span className="material-symbols-outlined text-[14px] text-slate-400 animate-spin">progress_activity</span>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded-full">
+                      {group.videos.length}
+                    </span>
+                  )}
+                </button>
+                {/* Progress bar for enrolled courses */}
+                {course && courseProgress[course.id]?.is_enrolled && courseProgress[course.id]?.total_videos > 0 && (
+                  <div className="px-4 pb-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] text-slate-400">
+                        {courseProgress[course.id].completed_videos}/{courseProgress[course.id].total_videos} completed
+                      </span>
+                      <span className="text-[10px] font-bold text-primary">{courseProgress[course.id].progress_pct}%</span>
+                    </div>
+                    <div className="w-full h-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary rounded-full transition-all duration-500"
+                        style={{ width: `${courseProgress[course.id].progress_pct}%` }}
+                      />
+                    </div>
+                  </div>
                 )}
-              </button>
+              </div>
               {/* Videos in this course */}
               {!isCollapsed && (
                 <div className="p-2 space-y-1.5">
