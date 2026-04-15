@@ -8,7 +8,9 @@ import 'highlight.js/styles/github-dark.css';
 import '../styles/howto-markdown.css';
 import { IgniteHeader } from '../components/IgniteHeader';
 import { IgniteSidebar, ALL_VIDEOS } from '../components/IgniteSidebar';
-import type { Video } from '../components/IgniteSidebar';
+import type { Video, Course, CourseProgress } from '../components/IgniteSidebar';
+import { CourseBrowser } from '../components/CourseBrowser';
+import type { CourseInfo } from '../components/CourseBrowser';
 import { HlsPlayer, type HlsPlayerHandle } from '../components/HlsPlayer';
 import { api } from '../api/client';
 import { isLoggedIn } from '../api/client';
@@ -191,6 +193,65 @@ export const Ignite: React.FC = () => {
   const progressSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const serverProgressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [progressVersion, setProgressVersion] = useState(0);
+  // Course browser state
+  const [showCourseBrowser, setShowCourseBrowser] = useState(false);
+  const [allCourses, setAllCourses] = useState<CourseInfo[]>([]);
+  const [courseBrowserProgress, setCourseBrowserProgress] = useState<Record<string, CourseProgress>>({});
+  const [enrollingCourseId, setEnrollingCourseId] = useState<string | null>(null);
+
+  const handleCoursesLoaded = useCallback((courses: Course[], progress: Record<string, CourseProgress>) => {
+    setAllCourses(courses.map((c) => ({
+      id: c.id,
+      slug: c.slug,
+      title: c.title || c.slug,
+      description: c.description ?? null,
+      video_count: c.video_count ?? 0,
+      thumbnail: c.thumbnail ?? null,
+    })));
+    setCourseBrowserProgress(progress);
+  }, []);
+
+  const handleBrowserEnroll = useCallback(async (course: CourseInfo) => {
+    if (!isLoggedIn() || enrollingCourseId) return;
+    setEnrollingCourseId(course.id);
+    try {
+      const cp = courseBrowserProgress[course.id];
+      let updated: CourseProgress;
+      if (cp?.is_enrolled) {
+        updated = await api.delete<CourseProgress>(`/video/courses/${course.slug}/enroll`);
+      } else {
+        updated = await api.post<CourseProgress>(`/video/courses/${course.slug}/enroll`);
+      }
+      setCourseBrowserProgress((prev) => ({ ...prev, [course.id]: updated }));
+      setProgressVersion((v) => v + 1);
+    } catch { /* ignore */ }
+    setEnrollingCourseId(null);
+  }, [courseBrowserProgress, enrollingCourseId]);
+
+  const handleEnrollAll = useCallback(async () => {
+    if (!isLoggedIn()) return;
+    try {
+      const data = await api.post<CourseProgress[]>('/video/courses/enroll-all', {});
+      const map: Record<string, CourseProgress> = {};
+      data.forEach((cp) => { map[cp.course_id] = cp; });
+      setCourseBrowserProgress(map);
+      setProgressVersion((v) => v + 1);
+    } catch { /* ignore */ }
+  }, []);
+
+  const handleStartCourse = useCallback((courseSlug: string) => {
+    // Find first video of this course and start playing it
+    const courseId = allCourses.find((c) => c.slug === courseSlug)?.id;
+    if (courseId) {
+      const firstVideo = ALL_VIDEOS.find((v) => v.course_id === courseId);
+      if (firstVideo) {
+        setShowCourseBrowser(false);
+        handleSelectVideo(firstVideo);
+        return;
+      }
+    }
+    setShowCourseBrowser(false);
+  }, [allCourses]);
 
   const syncServerProgress = useCallback((slug: string, time: number, duration: number) => {
     if (!isLoggedIn() || !slug || time < 5) return;
@@ -303,12 +364,43 @@ export const Ignite: React.FC = () => {
       <IgniteHeader notesTaken={0} />
 
       <div className="flex flex-1 overflow-hidden">
-        <IgniteSidebar activeVideoId={activeVideo?.id || ''} onSelectVideo={handleSelectVideo} progressVersion={progressVersion} />
+        <IgniteSidebar
+          activeVideoId={activeVideo?.id || ''}
+          onSelectVideo={(v) => { setShowCourseBrowser(false); handleSelectVideo(v); }}
+          progressVersion={progressVersion}
+          onBrowseCourses={() => setShowCourseBrowser(true)}
+          onCoursesLoaded={handleCoursesLoaded}
+        />
 
         <main className="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark relative p-6 lg:p-10">
           <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
 
-          <div className="max-w-7xl mx-auto flex flex-col gap-8 relative z-10">
+          {/* Course browser overlay */}
+          {showCourseBrowser && (
+            <div className="relative z-10">
+              <div className="flex items-center gap-3 mb-6">
+                {activeVideo && (
+                  <button
+                    onClick={() => setShowCourseBrowser(false)}
+                    className="flex items-center gap-2 text-sm text-slate-500 hover:text-primary transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                    Back to Video
+                  </button>
+                )}
+              </div>
+              <CourseBrowser
+                courses={allCourses}
+                courseProgress={courseBrowserProgress}
+                onEnroll={handleBrowserEnroll}
+                onEnrollAll={handleEnrollAll}
+                onStartCourse={handleStartCourse}
+                enrollingId={enrollingCourseId}
+              />
+            </div>
+          )}
+
+          <div className={`max-w-7xl mx-auto flex flex-col gap-8 relative z-10 ${showCourseBrowser ? 'hidden' : ''}`}>
             {/* Interested in Contributing? CTA for regular users */}
             {showContributeCTA && (
               <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-xl border border-primary/20 bg-primary/5">
@@ -661,6 +753,7 @@ export const Ignite: React.FC = () => {
             </div>
             )}
           </div>
+          {/* End of video content area (hidden when course browser is open) */}
         </main>
       </div>
     </div>

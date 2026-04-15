@@ -31,13 +31,16 @@ interface ApiVideo {
   created_at: string;
 }
 
-interface Course {
+export interface Course {
   id: string;
   slug: string;
   title?: string;
+  description?: string | null;
+  video_count?: number;
+  thumbnail?: string | null;
 }
 
-interface CourseProgress {
+export interface CourseProgress {
   course_id: string;
   course_slug: string;
   total_videos: number;
@@ -61,9 +64,17 @@ interface IgniteSidebarProps {
   activeVideoId: string;
   onSelectVideo: (video: Video) => void;
   progressVersion?: number;
+  onBrowseCourses?: () => void;
+  onCoursesLoaded?: (courses: Course[], progress: Record<string, CourseProgress>) => void;
 }
 
-export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onSelectVideo, progressVersion = 0 }) => {
+export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
+  activeVideoId,
+  onSelectVideo,
+  progressVersion = 0,
+  onBrowseCourses,
+  onCoursesLoaded,
+}) => {
   const { videoSlug: urlSlug } = useParams<{ videoSlug?: string }>();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
@@ -73,14 +84,14 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
   const [courseNames, setCourseNames] = useState<Record<string, string>>({});
   const [videoCourseMap, setVideoCourseMap] = useState<Record<string, string>>({});
   const [collapsedCourses, setCollapsedCourses] = useState<Set<string>>(new Set());
-  // Track which courses have had their videos loaded
   const [loadedCourses, setLoadedCourses] = useState<Set<string>>(new Set());
   const [loadingCourses, setLoadingCourses] = useState<Set<string>>(new Set());
   const allLoadedRef = useRef(false);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Course enrollment / progress
   const [courseProgress, setCourseProgress] = useState<Record<string, CourseProgress>>({});
   const [enrollingCourse, setEnrollingCourse] = useState<string | null>(null);
+  // "mine" = show only enrolled courses; "all" = show everything
+  const [viewMode, setViewMode] = useState<'mine' | 'all'>('all');
 
   const loadCourseVideos = useCallback(async (course: Course): Promise<Video[]> => {
     try {
@@ -132,7 +143,7 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
     }
   }, [loadCourseVideos, mergeVideos, loadedCourses]);
 
-  // Initial load: fetch courses, then load the active/URL course first
+  // Initial load
   useEffect(() => {
     api.get<Course[]>('/video/courses')
       .then(async (courseList) => {
@@ -143,14 +154,8 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
 
         if (courseList.length === 0) { setLoaded(true); return; }
 
-        // Determine which course to load first
         let firstCourse = courseList[0];
-        if (urlSlug) {
-          // We'll need to search all courses for the video - load all in bg
-          // But first load course[0] immediately so sidebar isn't empty
-        }
 
-        // Load first course immediately
         setLoadingCourses((s) => new Set(s).add(firstCourse.id));
         const firstVids = await loadCourseVideos(firstCourse);
         const vidCourse: Record<string, string> = {};
@@ -163,12 +168,10 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
         setLoaded(true);
 
         if (urlSlug) {
-          // Check if the slug is in first course
           const found = firstVids.find((v) => v.slug === urlSlug);
           if (found) {
             onSelectVideo(found);
           } else {
-            // Need to search other courses — load them all
             allLoadedRef.current = false;
             for (const course of courseList.slice(1)) {
               setLoadingCourses((s) => new Set(s).add(course.id));
@@ -185,7 +188,6 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
           onSelectVideo(firstVids[0]);
         }
 
-        // Lazy-load remaining courses in background (lowest priority)
         if (!urlSlug) {
           setTimeout(async () => {
             for (const course of courseList.slice(1)) {
@@ -202,7 +204,6 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
       .catch(() => setLoaded(true));
   }, []);
 
-  // When a collapsed course is expanded, load its videos if not loaded yet
   const handleExpandCourse = useCallback(async (course: Course) => {
     if (loadedCourses.has(course.id)) return;
     setLoadingCourses((s) => new Set(s).add(course.id));
@@ -217,7 +218,6 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
       const next = new Set(prev);
       if (next.has(course.id)) {
         next.delete(course.id);
-        // Load videos for this course if expanding and not yet loaded
         handleExpandCourse(course);
       } else {
         next.add(course.id);
@@ -226,7 +226,7 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
     });
   }, [handleExpandCourse]);
 
-  // Load course progress once courses are known, and whenever progressVersion bumps
+  // Load course progress whenever courses list or progressVersion changes
   useEffect(() => {
     if (!isLoggedIn() || courses.length === 0) return;
     api.get<CourseProgress[]>('/video/my-courses')
@@ -234,9 +234,21 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
         const map: Record<string, CourseProgress> = {};
         data.forEach((cp) => { map[cp.course_id] = cp; });
         setCourseProgress(map);
+        // Notify parent about courses+progress (for CourseBrowser)
+        if (onCoursesLoaded) onCoursesLoaded(courses, map);
+        // Auto-switch to "mine" view if user has enrollments
+        const hasEnrollments = data.some((cp) => cp.is_enrolled);
+        if (hasEnrollments) setViewMode('mine');
       })
       .catch(() => {});
   }, [courses, progressVersion]);
+
+  // Notify parent when courses load (non-logged-in)
+  useEffect(() => {
+    if (!isLoggedIn() && courses.length > 0 && onCoursesLoaded) {
+      onCoursesLoaded(courses, {});
+    }
+  }, [courses]);
 
   const handleToggleEnroll = useCallback(async (course: Course, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -250,15 +262,18 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
       } else {
         updated = await api.post<CourseProgress>(`/video/courses/${course.slug}/enroll`);
       }
-      setCourseProgress((prev) => ({ ...prev, [course.id]: updated }));
+      setCourseProgress((prev) => {
+        const next = { ...prev, [course.id]: updated };
+        if (onCoursesLoaded) onCoursesLoaded(courses, next);
+        return next;
+      });
     } catch { /* ignore */ }
     setEnrollingCourse(null);
-  }, [courseProgress, enrollingCourse]);
+  }, [courseProgress, enrollingCourse, courses]);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const q = e.target.value;
     setSearchQuery(q);
-    // When searching, ensure all courses are loaded
     if (q && !allLoadedRef.current) {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
       searchTimeoutRef.current = setTimeout(() => {
@@ -269,16 +284,21 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
 
   const handleCategoryFilter = (category: string) => {
     setActiveCategory(category);
-    // If filtering, load all courses
     if (category !== 'All' && !allLoadedRef.current) {
       loadAllCourses(courses);
     }
   };
 
+  const enrolledCourseIds = new Set(
+    Object.values(courseProgress).filter((cp) => cp.is_enrolled).map((cp) => cp.course_id)
+  );
+  const hasEnrollments = enrolledCourseIds.size > 0;
+
   const filteredVideos = videos.filter((v) => {
     const matchesCategory = activeCategory === 'All' || v.category === activeCategory;
     const matchesSearch = v.title.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+    const matchesMode = viewMode === 'all' || !v.course_id || enrolledCourseIds.has(v.course_id);
+    return matchesCategory && matchesSearch && matchesMode;
   });
 
   // Group filtered videos by course
@@ -295,7 +315,6 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
         uncategorized.push(v);
       }
     }
-    // Preserve course order from the courses list
     for (const course of courses) {
       const vids = courseMap.get(course.id);
       if (vids && vids.length > 0) {
@@ -308,12 +327,18 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
     return groups;
   })();
 
+  // Unenrolled courses (shown as stubs in "mine" mode)
+  const unenrolledCourses = viewMode === 'mine'
+    ? courses.filter((c) => !enrolledCourseIds.has(c.id))
+    : [];
+
   let globalIdx = 0;
 
   return (
     <aside className="w-80 bg-sidebar-light dark:bg-sidebar-dark border-r border-slate-200 dark:border-white/5 flex flex-col shrink-0 z-40 font-sans">
       <div className="p-4 border-b border-slate-200 dark:border-white/5">
-        <div className="relative">
+        {/* Search */}
+        <div className="relative mb-3">
           <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-500 text-lg">search</span>
           <input
             className="w-full bg-slate-100 dark:bg-slate-900/50 border border-slate-300 dark:border-slate-700 rounded-lg py-2 pl-10 pr-4 text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:ring-1 focus:ring-primary focus:border-primary transition-all"
@@ -323,8 +348,35 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
             onChange={handleSearch}
           />
         </div>
+
+        {/* View mode toggle */}
+        {hasEnrollments && isLoggedIn() && (
+          <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 text-xs font-bold">
+            <button
+              onClick={() => setViewMode('mine')}
+              className={`flex-1 py-1.5 transition-colors ${
+                viewMode === 'mine'
+                  ? 'bg-primary text-white'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              My Courses
+            </button>
+            <button
+              onClick={() => setViewMode('all')}
+              className={`flex-1 py-1.5 transition-colors ${
+                viewMode === 'all'
+                  ? 'bg-primary text-white'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              All
+            </button>
+          </div>
+        )}
       </div>
 
+      {/* Category filters */}
       <div className="px-4 py-3 flex flex-wrap gap-2 border-b border-slate-200 dark:border-white/5">
         {CATEGORIES.map((cat) => (
           <button
@@ -348,7 +400,6 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
           const isLoading = course ? loadingCourses.has(course.id) : false;
           return (
             <div key={group.courseId}>
-              {/* Course header with expand/collapse */}
               <div className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-white/5">
                 <button
                   onClick={() => course && toggleCourseCollapse(course)}
@@ -360,7 +411,6 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
                   <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex-1 text-left truncate">
                     {group.courseName}
                   </span>
-                  {/* Subscribe button */}
                   {course && isLoggedIn() && (
                     <button
                       onClick={(e) => handleToggleEnroll(course, e)}
@@ -387,7 +437,6 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
                     </span>
                   )}
                 </button>
-                {/* Progress bar for enrolled courses */}
                 {course && courseProgress[course.id]?.is_enrolled && courseProgress[course.id]?.total_videos > 0 && (
                   <div className="px-4 pb-2">
                     <div className="flex items-center justify-between mb-1">
@@ -405,7 +454,6 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
                   </div>
                 )}
               </div>
-              {/* Videos in this course */}
               {!isCollapsed && (
                 <div className="p-2 space-y-1.5">
                   {group.videos.map((video) => {
@@ -459,14 +507,59 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({ activeVideoId, onS
             </div>
           );
         })}
-        {filteredVideos.length === 0 && loaded && (
+
+        {/* Unenrolled course stubs in "mine" mode */}
+        {unenrolledCourses.length > 0 && (
+          <div className="mt-2">
+            <div className="px-4 py-2 border-b border-slate-200 dark:border-white/5">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">More Courses</p>
+            </div>
+            {unenrolledCourses.map((course) => (
+              <div
+                key={course.id}
+                className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
+              >
+                <span className="material-symbols-outlined text-[18px] text-slate-400">school</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{course.title || course.slug}</p>
+                  <p className="text-[10px] text-slate-400">{course.video_count ?? 0} videos</p>
+                </div>
+                <button
+                  onClick={(e) => handleToggleEnroll(course, e)}
+                  disabled={enrollingCourse === course.id}
+                  className="shrink-0 px-2 py-1 text-[10px] font-bold text-primary border border-primary/30 rounded-lg hover:bg-primary/10 transition-colors disabled:opacity-50"
+                >
+                  {enrollingCourse === course.id ? '...' : 'Subscribe'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Browse all courses button */}
+        {onBrowseCourses && (
+          <button
+            onClick={onBrowseCourses}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold text-slate-500 hover:text-primary hover:bg-primary/5 transition-colors border-t border-slate-200 dark:border-white/5 mt-2"
+          >
+            <span className="material-symbols-outlined text-[16px]">grid_view</span>
+            Browse All Courses
+          </button>
+        )}
+
+        {filteredVideos.length === 0 && loaded && groupedVideos.length === 0 && (
           <div className="text-center py-12">
             <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600 block mb-3">video_library</span>
             <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">
-              {searchQuery ? 'No videos match your search.' : 'No content available yet.'}
+              {searchQuery ? 'No videos match your search.' : viewMode === 'mine' ? 'No subscribed courses yet.' : 'No content available yet.'}
             </p>
-            {!searchQuery && (
-              <p className="text-xs text-slate-400 dark:text-slate-500">Videos will appear here once published by an admin.</p>
+            {!searchQuery && viewMode === 'mine' && (
+              <button
+                onClick={() => setViewMode('all')}
+                className="text-xs text-primary hover:underline mt-1"
+              >
+                Browse all courses
+              </button>
             )}
           </div>
         )}

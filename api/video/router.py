@@ -29,7 +29,15 @@ async def list_courses():
     db = await get_db()
     rows = await db.fetch(
         """
-        SELECT c.*, COUNT(v.id) FILTER (WHERE v.is_published = true AND v.is_active = true) as video_count
+        SELECT c.*,
+            COUNT(v.id) FILTER (WHERE v.is_published = true AND v.is_active = true) as video_count,
+            (
+                SELECT COALESCE(v2.custom_thumbnail, v2.thumbnail)
+                FROM videos v2
+                WHERE v2.course_id = c.id AND v2.is_published = true AND v2.is_active = true
+                ORDER BY v2.sort_order
+                LIMIT 1
+            ) as thumbnail
         FROM courses c
         LEFT JOIN videos v ON v.course_id = c.id
         WHERE c.is_active = true
@@ -41,7 +49,7 @@ async def list_courses():
         CourseResponse(
             id=str(r["id"]), title=r["title"], slug=r["slug"],
             description=r.get("description"), sort_order=r["sort_order"],
-            video_count=r["video_count"],
+            video_count=r["video_count"], thumbnail=r.get("thumbnail"),
         )
         for r in rows
     ]
@@ -519,3 +527,23 @@ async def unenroll_course(slug: str, user: dict = Depends(get_current_user)):
         user["id"], course["id"],
     )
     return await get_course_progress(slug, user)
+
+
+@router.post("/courses/enroll-all", response_model=list[CourseProgressResponse])
+async def enroll_all_courses(user: dict = Depends(get_current_user)):
+    """Subscribe the current user to all active courses at once."""
+    db = await get_db()
+    courses = await db.fetch("SELECT id, slug FROM courses WHERE is_active = true ORDER BY sort_order")
+    for course in courses:
+        await db.execute(
+            """
+            INSERT INTO user_course_enrollments (user_id, course_id)
+            VALUES ($1, $2) ON CONFLICT DO NOTHING
+            """,
+            user["id"], course["id"],
+        )
+        await db.execute(
+            "INSERT INTO course_analytics (user_id, course_id, event_type) VALUES ($1, $2, 'enroll')",
+            user["id"], course["id"],
+        )
+    return await get_my_courses(user)
