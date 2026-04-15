@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import Optional
+from pydantic import BaseModel
 
 from video.schemas import (
     CourseResponse, VideoResponse, ChapterResponse, ProgressResponse,
@@ -10,6 +11,17 @@ from auth.dependencies import get_current_user, get_optional_user
 from database import get_db
 
 router = APIRouter()
+
+
+class CourseProgressResponse(BaseModel):
+    course_id: str
+    course_slug: str
+    course_title: str
+    total_videos: int
+    completed_videos: int
+    progress_pct: float
+    is_enrolled: bool
+    enrolled_at: Optional[str] = None
 
 
 @router.get("/courses", response_model=list[CourseResponse])
@@ -385,3 +397,125 @@ async def unlike_video(slug: str, user: dict = Depends(get_current_user)):
         "SELECT COUNT(*) FROM video_likes WHERE video_id = $1", video["id"]
     )
     return VideoLikeResponse(video_id=str(video["id"]), like_count=count, user_liked=False)
+
+
+# ── Course Enrollment & Progress ──────────────────────────
+
+@router.get("/my-courses", response_model=list[CourseProgressResponse])
+async def get_my_courses(user: dict = Depends(get_current_user)):
+    """Return all courses with enrollment status and progress for the current user."""
+    db = await get_db()
+    rows = await db.fetch(
+        """
+        SELECT
+            c.id, c.slug, c.title,
+            COUNT(v.id) FILTER (WHERE v.is_published = true AND v.is_active = true) as total_videos,
+            COUNT(p.video_id) FILTER (WHERE p.completed = true) as completed_videos,
+            e.enrolled_at
+        FROM courses c
+        LEFT JOIN videos v ON v.course_id = c.id
+        LEFT JOIN user_video_progress p ON p.video_id = v.id AND p.user_id = $1
+        LEFT JOIN user_course_enrollments e ON e.course_id = c.id AND e.user_id = $1
+        WHERE c.is_active = true
+        GROUP BY c.id, c.slug, c.title, e.enrolled_at
+        ORDER BY c.sort_order
+        """,
+        user["id"],
+    )
+    result = []
+    for r in rows:
+        total = r["total_videos"] or 0
+        completed = r["completed_videos"] or 0
+        pct = round((completed / total * 100) if total > 0 else 0, 1)
+        result.append(CourseProgressResponse(
+            course_id=str(r["id"]),
+            course_slug=r["slug"],
+            course_title=r["title"],
+            total_videos=total,
+            completed_videos=completed,
+            progress_pct=pct,
+            is_enrolled=r["enrolled_at"] is not None,
+            enrolled_at=r["enrolled_at"].isoformat() if r["enrolled_at"] else None,
+        ))
+    return result
+
+
+@router.get("/courses/{slug}/progress", response_model=CourseProgressResponse)
+async def get_course_progress(slug: str, user: dict = Depends(get_current_user)):
+    """Return enrollment status and video progress for a specific course."""
+    db = await get_db()
+    row = await db.fetchrow(
+        """
+        SELECT
+            c.id, c.slug, c.title,
+            COUNT(v.id) FILTER (WHERE v.is_published = true AND v.is_active = true) as total_videos,
+            COUNT(p.video_id) FILTER (WHERE p.completed = true) as completed_videos,
+            e.enrolled_at
+        FROM courses c
+        LEFT JOIN videos v ON v.course_id = c.id
+        LEFT JOIN user_video_progress p ON p.video_id = v.id AND p.user_id = $1
+        LEFT JOIN user_course_enrollments e ON e.course_id = c.id AND e.user_id = $1
+        WHERE c.slug = $2 AND c.is_active = true
+        GROUP BY c.id, c.slug, c.title, e.enrolled_at
+        """,
+        user["id"], slug,
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Course not found")
+    total = row["total_videos"] or 0
+    completed = row["completed_videos"] or 0
+    pct = round((completed / total * 100) if total > 0 else 0, 1)
+    return CourseProgressResponse(
+        course_id=str(row["id"]),
+        course_slug=row["slug"],
+        course_title=row["title"],
+        total_videos=total,
+        completed_videos=completed,
+        progress_pct=pct,
+        is_enrolled=row["enrolled_at"] is not None,
+        enrolled_at=row["enrolled_at"].isoformat() if row["enrolled_at"] else None,
+    )
+
+
+@router.post("/courses/{slug}/enroll", response_model=CourseProgressResponse)
+async def enroll_course(slug: str, user: dict = Depends(get_current_user)):
+    """Subscribe (enroll) the current user to a course."""
+    db = await get_db()
+    course = await db.fetchrow("SELECT id FROM courses WHERE slug = $1 AND is_active = true", slug)
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    await db.execute(
+        """
+        INSERT INTO user_course_enrollments (user_id, course_id)
+        VALUES ($1, $2) ON CONFLICT DO NOTHING
+        """,
+        user["id"], course["id"],
+    )
+    # Log analytics event
+    await db.execute(
+        "INSERT INTO course_analytics (user_id, course_id, event_type) VALUES ($1, $2, 'enroll')",
+        user["id"], course["id"],
+    )
+    # Return progress
+    from fastapi import Request
+    return await get_course_progress(slug, user)
+
+
+@router.delete("/courses/{slug}/enroll", response_model=CourseProgressResponse)
+async def unenroll_course(slug: str, user: dict = Depends(get_current_user)):
+    """Unsubscribe the current user from a course."""
+    db = await get_db()
+    course = await db.fetchrow("SELECT id FROM courses WHERE slug = $1 AND is_active = true", slug)
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    await db.execute(
+        "DELETE FROM user_course_enrollments WHERE user_id = $1 AND course_id = $2",
+        user["id"], course["id"],
+    )
+    await db.execute(
+        "INSERT INTO course_analytics (user_id, course_id, event_type) VALUES ($1, $2, 'unenroll')",
+        user["id"], course["id"],
+    )
+    return await get_course_progress(slug, user)
