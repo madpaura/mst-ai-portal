@@ -10,6 +10,7 @@ class CourseResponse(BaseModel):
     description: Optional[str] = None
     sort_order: int
     video_count: int = 0
+    thumbnail: Optional[str] = None
 
 
 class CourseCreate(BaseModel):
