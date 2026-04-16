@@ -31,7 +31,6 @@ const SIDEBAR_CATEGORIES = [
   { icon: 'lightbulb', label: 'All', key: 'all', type: '' },
 ];
 
-
 const BADGE_STYLES: Record<string, { label: string; color: string; bg: string }> = {
   verified: { label: 'Verified', color: 'text-green-500', bg: 'bg-green-500/10' },
   community: { label: 'Community', color: 'text-slate-500', bg: 'bg-slate-500/10' },
@@ -59,7 +58,7 @@ export const Marketplace: React.FC = () => {
   const [communityBuilt, setCommunityBuilt] = useState(false);
   const [openSource, setOpenSource] = useState(false);
   const [components, setComponents] = useState<ForgeComponent[]>([]);
-  const [instructionsSlug, setInstructionsSlug] = useState<string | null>(null);
+  const [instructionsDialog, setInstructionsDialog] = useState<{ slug: string; name: string } | null>(null);
   const [instructions, setInstructions] = useState<Record<string, string>>({});
   const [downloading, setDownloading] = useState<Record<string, boolean>>({});
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
@@ -80,7 +79,6 @@ export const Marketplace: React.FC = () => {
     setActiveTab(cat?.type || '');
   };
 
-  
   const handleCopyCommand = (cmd: string) => {
     navigator.clipboard?.writeText(cmd).catch(() => {});
   };
@@ -114,12 +112,8 @@ export const Marketplace: React.FC = () => {
     }
   };
 
-  const handleShowInstructions = async (slug: string) => {
-    if (instructionsSlug === slug) {
-      setInstructionsSlug(null);
-      return;
-    }
-    setInstructionsSlug(slug);
+  const handleShowInstructions = async (slug: string, name: string) => {
+    setInstructionsDialog({ slug, name });
     if (!instructions[slug]) {
       try {
         const res = await api.get<{ instructions: string }>(`/forge/components/${slug}/instructions`);
@@ -209,7 +203,7 @@ export const Marketplace: React.FC = () => {
                   <label className="flex items-center gap-3 cursor-pointer group">
                     <input
                       checked={verifiedOnly}
-                      onChange={(e) => { setVerifiedOnly(e.target.checked); console.log('[Marketplace] Verified filter:', e.target.checked); }}
+                      onChange={(e) => setVerifiedOnly(e.target.checked)}
                       className="rounded border-slate-300 dark:border-slate-700 text-primary focus:ring-primary bg-transparent"
                       type="checkbox"
                     />
@@ -220,7 +214,7 @@ export const Marketplace: React.FC = () => {
                   <label className="flex items-center gap-3 cursor-pointer group">
                     <input
                       checked={communityBuilt}
-                      onChange={(e) => { setCommunityBuilt(e.target.checked); console.log('[Marketplace] Community filter:', e.target.checked); }}
+                      onChange={(e) => setCommunityBuilt(e.target.checked)}
                       className="rounded border-slate-300 dark:border-slate-700 text-primary focus:ring-primary bg-transparent"
                       type="checkbox"
                     />
@@ -231,7 +225,7 @@ export const Marketplace: React.FC = () => {
                   <label className="flex items-center gap-3 cursor-pointer group">
                     <input
                       checked={openSource}
-                      onChange={(e) => { setOpenSource(e.target.checked); console.log('[Marketplace] Open Source filter:', e.target.checked); }}
+                      onChange={(e) => setOpenSource(e.target.checked)}
                       className="rounded border-slate-300 dark:border-slate-700 text-primary focus:ring-primary bg-transparent"
                       type="checkbox"
                     />
@@ -246,8 +240,9 @@ export const Marketplace: React.FC = () => {
 
           {/* Main Marketplace Content */}
           <div className="flex-1 min-w-0 overflow-hidden p-6 lg:p-10">
-            <div className="mb-6">
-              <div className="flex items-end justify-between gap-4 mb-6">
+            {/* Heading row: title + search + view controls */}
+            <div className="mb-8">
+              <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-1">
                 <div>
                   <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Marketplace</h1>
                   <p className="text-sm text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
@@ -255,46 +250,45 @@ export const Marketplace: React.FC = () => {
                     directly to your development environment.
                   </p>
                 </div>
-              </div>
-
-              {/* Search bar */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-t border-slate-200 dark:border-white/10 pt-6">
-                <label className="relative block w-full sm:w-80">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                    <span className="material-symbols-outlined text-[20px]">search</span>
-                  </span>
-                  <input
-                    className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-lg py-2 pl-10 pr-3 text-sm placeholder:text-slate-500 focus:ring-2 focus:ring-primary outline-none transition-all"
-                    placeholder="Search registry..."
-                    type="text"
-                    value={searchQuery}
-                    onChange={handleSearch}
-                  />
-                </label>
-                <div className="flex items-center gap-2">
-                <div className="flex items-center bg-slate-200 dark:bg-slate-800 rounded-lg p-0.5">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {/* Search */}
+                  <label className="relative block">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                      <span className="material-symbols-outlined text-[18px]">search</span>
+                    </span>
+                    <input
+                      className="w-52 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-lg py-2 pl-9 pr-3 text-sm placeholder:text-slate-500 focus:ring-2 focus:ring-primary outline-none transition-all"
+                      placeholder="Search registry..."
+                      type="text"
+                      value={searchQuery}
+                      onChange={handleSearch}
+                    />
+                  </label>
+                  {/* Card / List toggle */}
+                  <div className="flex items-center bg-slate-200 dark:bg-slate-800 rounded-lg p-0.5">
+                    <button
+                      onClick={() => setViewMode('card')}
+                      className={`flex items-center justify-center p-1.5 rounded-md transition-colors ${viewMode === 'card' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                      title="Card view"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">grid_view</span>
+                    </button>
+                    <button
+                      onClick={() => setViewMode('list')}
+                      className={`flex items-center justify-center p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                      title="List view"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">view_list</span>
+                    </button>
+                  </div>
+                  {/* Sort */}
                   <button
-                    onClick={() => setViewMode('card')}
-                    className={`flex items-center justify-center p-1.5 rounded-md transition-colors ${viewMode === 'card' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                    title="Card view"
+                    onClick={handleSort}
+                    className="flex items-center gap-2 bg-slate-200 dark:bg-slate-800 px-4 py-2 rounded-lg text-sm font-medium"
                   >
-                    <span className="material-symbols-outlined text-[18px]">grid_view</span>
+                    <span className="material-symbols-outlined text-[18px]">sort</span>
+                    Popular
                   </button>
-                  <button
-                    onClick={() => setViewMode('list')}
-                    className={`flex items-center justify-center p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                    title="List view"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">view_list</span>
-                  </button>
-                </div>
-                <button
-                  onClick={handleSort}
-                  className="flex items-center gap-2 bg-slate-200 dark:bg-slate-800 px-4 py-2 rounded-lg text-sm font-medium"
-                >
-                  <span className="material-symbols-outlined text-[18px]">sort</span>
-                  Popular
-                </button>
                 </div>
               </div>
             </div>
@@ -311,7 +305,7 @@ export const Marketplace: React.FC = () => {
                     key={card.id}
                     className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col hover:border-primary/50 transition-all group min-h-[240px]"
                   >
-                    {/* Icon + title + badge on same line */}
+                    {/* Icon + title + badge */}
                     <div className="flex items-center gap-2.5 mb-3">
                       <div className={`size-9 shrink-0 ${typeStyle.bg} rounded-lg flex items-center justify-center ${card.icon_color || typeStyle.color}`}>
                         <span className="material-symbols-outlined text-[20px]">{card.icon || 'smart_toy'}</span>
@@ -356,7 +350,7 @@ export const Marketplace: React.FC = () => {
                         )}
                         {(card.component_type === 'skill' || card.component_type === 'mcp_server') && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleShowInstructions(card.slug); }}
+                            onClick={(e) => { e.stopPropagation(); handleShowInstructions(card.slug, card.name); }}
                             className="p-1 rounded text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
                             title="Setup instructions"
                           >
@@ -374,26 +368,6 @@ export const Marketplace: React.FC = () => {
                         )}
                       </div>
                     </div>
-
-                    {/* Install Instructions Panel */}
-                    {instructionsSlug === card.slug && (
-                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Install & Setup Instructions</h4>
-                          <button
-                            onClick={() => setInstructionsSlug(null)}
-                            className="text-slate-500 hover:text-white transition-colors"
-                          >
-                            <span className="material-symbols-outlined text-sm">close</span>
-                          </button>
-                        </div>
-                        <div className="prose prose-sm prose-slate dark:prose-invert max-w-none prose-headings:text-sm prose-p:text-xs prose-li:text-xs prose-code:text-xs prose-pre:text-xs prose-pre:bg-slate-100 dark:prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-200 dark:prose-pre:border-slate-800 overflow-auto max-h-80">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {instructions[card.slug] || 'Loading instructions...'}
-                          </ReactMarkdown>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -434,6 +408,15 @@ export const Marketplace: React.FC = () => {
                           <span className={`material-symbols-outlined text-[16px] ${downloading[card.slug] ? 'animate-spin' : ''}`}>
                             {downloading[card.slug] ? 'progress_activity' : 'download'}
                           </span>
+                        </button>
+                      )}
+                      {(card.component_type === 'skill' || card.component_type === 'mcp_server') && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleShowInstructions(card.slug, card.name); }}
+                          className="p-1 rounded text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                          title="Setup instructions"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">integration_instructions</span>
                         </button>
                       )}
                       {card.howto_guide && (
@@ -477,6 +460,58 @@ export const Marketplace: React.FC = () => {
           </div>
         </footer>
       </div>
+
+      {/* Setup Instructions Dialog */}
+      {instructionsDialog && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={() => setInstructionsDialog(null)}
+        >
+          <div
+            className="relative w-full max-w-2xl max-h-[80vh] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Dialog header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-amber-500 text-[22px]">integration_instructions</span>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white">Setup Instructions</h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{instructionsDialog.name}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setInstructionsDialog(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* Dialog body — scrollable markdown */}
+            <div className="overflow-y-auto px-6 py-5 flex-1">
+              {instructions[instructionsDialog.slug] ? (
+                <div className="prose prose-sm prose-slate dark:prose-invert max-w-none
+                  prose-headings:font-bold prose-headings:text-slate-900 dark:prose-headings:text-white
+                  prose-p:text-slate-600 dark:prose-p:text-slate-300
+                  prose-li:text-slate-600 dark:prose-li:text-slate-300
+                  prose-code:text-primary prose-code:bg-slate-100 dark:prose-code:bg-slate-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono
+                  prose-pre:bg-slate-100 dark:prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-200 dark:prose-pre:border-slate-800 prose-pre:rounded-lg prose-pre:text-xs
+                  prose-a:text-primary hover:prose-a:underline">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {instructions[instructionsDialog.slug]}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center py-12 text-slate-400">
+                  <span className="material-symbols-outlined text-2xl animate-spin mr-2">progress_activity</span>
+                  Loading instructions…
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
