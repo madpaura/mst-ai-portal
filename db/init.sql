@@ -14,11 +14,15 @@ CREATE TABLE users (
     display_name    TEXT NOT NULL,
     initials        TEXT,
     password_hash   TEXT,
-    role            TEXT DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+    role            TEXT DEFAULT 'user' CHECK (role IN ('user', 'content', 'admin')),
     employee_id     TEXT,
+    auth_provider   TEXT DEFAULT 'local' CHECK (auth_provider IN ('local', 'saml', 'ldap')),
+    saml_name_id    TEXT,
     last_login      TIMESTAMPTZ,
     created_at      TIMESTAMPTZ DEFAULT now()
 );
+
+CREATE INDEX idx_users_saml_name_id ON users (saml_name_id) WHERE saml_name_id IS NOT NULL;
 
 CREATE TABLE sessions (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -284,7 +288,7 @@ CREATE TABLE forge_sync_jobs (
     components_updated  INTEGER DEFAULT 0,
     components_created  INTEGER DEFAULT 0,
     error           TEXT,
-    log             TEXT,
+    log             TEXT DEFAULT '',
     started_at      TIMESTAMPTZ,
     completed_at    TIMESTAMPTZ,
     created_at      TIMESTAMPTZ DEFAULT now()
@@ -360,7 +364,7 @@ CREATE INDEX idx_video_likes_video ON video_likes(video_id);
 CREATE TABLE page_views (
     id          BIGSERIAL PRIMARY KEY,
     path        TEXT NOT NULL,
-    section     TEXT NOT NULL CHECK (section IN ('solutions', 'marketplace', 'ignite', 'news', 'other')),
+    section     TEXT NOT NULL CHECK (section IN ('solutions', 'marketplace', 'ignite', 'news', 'articles', 'other')),
     ip_address  TEXT,
     user_agent  TEXT,
     user_id     UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -478,3 +482,46 @@ CREATE TABLE IF NOT EXISTS digest_issues (
 
 CREATE INDEX IF NOT EXISTS idx_digest_issues_issue_number ON digest_issues(issue_number);
 CREATE INDEX IF NOT EXISTS idx_digest_issues_created_at ON digest_issues(created_at DESC);
+
+CREATE SEQUENCE IF NOT EXISTS digest_issue_number_seq START WITH 1;
+
+---------------------------------------------------
+-- COURSE ENROLLMENT & ANALYTICS (Migration 008)
+---------------------------------------------------
+CREATE TABLE user_course_enrollments (
+    user_id          UUID REFERENCES users(id) ON DELETE CASCADE,
+    course_id        UUID REFERENCES courses(id) ON DELETE CASCADE,
+    enrolled_at      TIMESTAMPTZ DEFAULT now(),
+    last_accessed_at TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (user_id, course_id)
+);
+
+CREATE TABLE course_analytics (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
+    course_id       UUID REFERENCES courses(id) ON DELETE CASCADE,
+    event_type      TEXT NOT NULL,
+    video_id        UUID REFERENCES videos(id) ON DELETE SET NULL,
+    session_seconds INTEGER DEFAULT 0,
+    created_at      TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_course_analytics_course_id ON course_analytics(course_id);
+CREATE INDEX idx_course_analytics_user_id ON course_analytics(user_id);
+
+---------------------------------------------------
+-- CONTRIBUTION REQUESTS (Migration 009)
+---------------------------------------------------
+CREATE TABLE contribute_requests (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
+    reason      TEXT NOT NULL,
+    status      TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    admin_note  TEXT,
+    reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    reviewed_at TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_contribute_requests_user_id ON contribute_requests(user_id);
+CREATE INDEX idx_contribute_requests_status ON contribute_requests(status);
