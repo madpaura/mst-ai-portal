@@ -16,19 +16,24 @@ export const AdminLayout: React.FC = () => {
     );
   }
 
-  if (!user || !isAdmin) {
+  const isContent = user?.role === 'content';
+
+  if (!user || (!isAdmin && !isContent)) {
     return <Navigate to="/login" replace />;
   }
 
+  // Content creators see only the pages they can manage
   const navItems = [
     { path: '/admin/videos', label: 'Videos', icon: 'videocam' },
     { path: '/admin/marketplace', label: 'Marketplace', icon: 'storefront' },
     { path: '/admin/articles', label: 'Articles', icon: 'article' },
-    { path: '/admin/digest', label: 'Digest', icon: 'mail' },
-    { path: '/admin/solutions', label: 'Solutions', icon: 'dashboard' },
-    { path: '/admin/analytics', label: 'Analytics', icon: 'analytics' },
-    { path: '/admin/contributions', label: 'Contributors', icon: 'volunteer_activism' },
-    { path: '/admin/settings', label: 'Settings', icon: 'settings' },
+    ...(isAdmin ? [
+      { path: '/admin/digest', label: 'Digest', icon: 'mail' },
+      { path: '/admin/solutions', label: 'Solutions', icon: 'dashboard' },
+      { path: '/admin/analytics', label: 'Analytics', icon: 'analytics' },
+      { path: '/admin/contributions', label: 'Contributors', icon: 'volunteer_activism' },
+      { path: '/admin/settings', label: 'Settings', icon: 'settings' },
+    ] : []),
   ];
 
   return (
@@ -45,7 +50,7 @@ export const AdminLayout: React.FC = () => {
 
           <div className="h-6 w-px bg-white/10" />
 
-          <span className="text-xs font-bold uppercase tracking-widest text-primary/70">Admin</span>
+          <span className="text-xs font-bold uppercase tracking-widest text-primary/70">{isContent ? 'Creator' : 'Admin'}</span>
 
           <nav className="flex items-center gap-1 ml-4">
             {navItems.map((item) => (

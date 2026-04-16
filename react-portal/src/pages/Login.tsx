@@ -39,8 +39,8 @@ export const Login: React.FC = () => {
     setError('');
     setLoading(true);
     try {
-      await login(username, password);
-      navigate('/admin/videos');
+      const user = await login(username, password);
+      navigate(user.role === 'admin' || user.role === 'content' ? '/admin/videos' : '/');
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {

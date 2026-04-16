@@ -17,7 +17,7 @@ from video.schemas import (
     TrimRequest, CutRequest, AttachmentResponse, AttachmentUpdate,
 )
 from pydantic import BaseModel
-from auth.dependencies import require_admin
+from auth.dependencies import require_content as require_admin
 from database import get_db
 from config import settings
 from worker.gpu_detect import get_encode_args, get_hwaccel_args, get_gpu_info
