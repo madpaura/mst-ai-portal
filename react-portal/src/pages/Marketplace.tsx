@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Navbar } from '../components/Navbar';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api/client';
@@ -131,7 +131,6 @@ export const Marketplace: React.FC = () => {
   };
 
   const handleSort = () => {};
-  const handleProfileClick = () => {};
   const handleFooterLink = (_label: string) => {};
 
   const filteredCards = components.filter((c) => {
@@ -147,65 +146,9 @@ export const Marketplace: React.FC = () => {
 
   return (
     <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-sans">
-      <div className="relative flex flex-col min-h-screen w-full">
-        {/* Header */}
-        <header className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 lg:px-12 py-4 bg-background-light dark:bg-background-dark sticky top-0 z-50 font-sans">
-          <div className="flex items-center gap-8">
-            <Link to="/marketplace" className="flex items-center gap-3">
-              <div className="size-8 bg-primary rounded-lg flex items-center justify-center text-white">
-                <span className="material-symbols-outlined">memory</span>
-              </div>
-              <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white uppercase tracking-widest">
-                Marketplace
-              </h2>
-            </Link>
+      <Navbar variant="solutions" />
 
-            <nav className="hidden md:flex items-center gap-8">
-              <Link
-                to="/"
-                className="text-slate-600 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors"
-              >
-                Solutions
-              </Link>
-              <Link
-                to="/ignite"
-                className="text-slate-600 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors"
-              >
-                Learn
-              </Link>
-              <Link
-                to="/articles"
-                className="text-slate-600 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors"
-              >
-                Articles
-              </Link>
-            </nav>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="hidden sm:block">
-              <label className="relative block">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                  <span className="material-symbols-outlined text-[20px]">search</span>
-                </span>
-                <input
-                  className="w-64 bg-slate-100 dark:bg-slate-800 border-none rounded-lg py-2 pl-10 pr-3 text-sm placeholder:text-slate-500 focus:ring-2 focus:ring-primary outline-none transition-all"
-                  placeholder="Search registry..."
-                  type="text"
-                  value={searchQuery}
-                  onChange={handleSearch}
-                />
-              </label>
-            </div>
-            <button
-              onClick={handleProfileClick}
-              className="size-10 rounded-full border border-slate-200 dark:border-slate-700 overflow-hidden bg-gradient-to-r from-primary to-purple-500 flex items-center justify-center text-white font-bold text-xs"
-            >
-              JD
-            </button>
-          </div>
-        </header>
-
+      <div className="relative flex flex-col min-h-screen w-full pt-16">
         <main className="flex-1 flex flex-col lg:flex-row">
           {/* Sidebar Filters */}
           <aside className="w-full lg:w-64 p-6 border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-background-dark/50">
@@ -303,15 +246,32 @@ export const Marketplace: React.FC = () => {
 
           {/* Main Marketplace Content */}
           <div className="flex-1 min-w-0 overflow-hidden p-6 lg:p-10">
-            <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
-              <div>
-                <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Marketplace</h1>
-                <p className="text-sm text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
-                  Deploy pre-trained design agents, specialized skills, and model-context protocol servers
-                  directly to your development environment.
-                </p>
+            <div className="mb-6">
+              <div className="flex items-end justify-between gap-4 mb-6">
+                <div>
+                  <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Marketplace</h1>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
+                    Deploy pre-trained design agents, specialized skills, and model-context protocol servers
+                    directly to your development environment.
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+
+              {/* Search bar */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-t border-slate-200 dark:border-white/10 pt-6">
+                <label className="relative block w-full sm:w-80">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                    <span className="material-symbols-outlined text-[20px]">search</span>
+                  </span>
+                  <input
+                    className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-lg py-2 pl-10 pr-3 text-sm placeholder:text-slate-500 focus:ring-2 focus:ring-primary outline-none transition-all"
+                    placeholder="Search registry..."
+                    type="text"
+                    value={searchQuery}
+                    onChange={handleSearch}
+                  />
+                </label>
+                <div className="flex items-center gap-2">
                 <div className="flex items-center bg-slate-200 dark:bg-slate-800 rounded-lg p-0.5">
                   <button
                     onClick={() => setViewMode('card')}
@@ -335,6 +295,7 @@ export const Marketplace: React.FC = () => {
                   <span className="material-symbols-outlined text-[18px]">sort</span>
                   Popular
                 </button>
+                </div>
               </div>
             </div>
 

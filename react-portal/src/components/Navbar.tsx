@@ -67,12 +67,12 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
             </button>
             {user ? (
               <>
-                {isAdmin && (
+                {(isAdmin || user?.role === 'content') && (
                   <button
                     onClick={handleAdmin}
                     className="bg-primary hover:bg-primary/90 text-white text-sm font-bold px-5 py-2 rounded-lg transition-all shadow-[0_0_15px_rgba(37,140,244,0.3)]"
                   >
-                    Admin Panel
+                    {isAdmin ? 'Admin Panel' : 'Creator Panel'}
                   </button>
                 )}
                 <span className="text-sm text-slate-600 dark:text-slate-300">{user.display_name}</span>

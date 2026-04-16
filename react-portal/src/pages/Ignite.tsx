@@ -6,7 +6,7 @@ import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
 import 'highlight.js/styles/github-dark.css';
 import '../styles/howto-markdown.css';
-import { IgniteHeader } from '../components/IgniteHeader';
+import { Navbar } from '../components/Navbar';
 import { IgniteSidebar, ALL_VIDEOS } from '../components/IgniteSidebar';
 import type { Video, Course, CourseProgress } from '../components/IgniteSidebar';
 import { CourseBrowser } from '../components/CourseBrowser';
@@ -361,9 +361,9 @@ export const Ignite: React.FC = () => {
 
   return (
     <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col font-sans">
-      <IgniteHeader notesTaken={0} />
+      <Navbar variant="solutions" />
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden pt-16">
         <IgniteSidebar
           activeVideoId={activeVideo?.id || ''}
           onSelectVideo={(v) => { setShowCourseBrowser(false); handleSelectVideo(v); }}
