@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 
 from video.schemas import CourseResponse, CourseCreate, CourseUpdate
-from auth.dependencies import require_admin
+from auth.dependencies import require_content as require_admin
 from database import get_db
 
 router = APIRouter()

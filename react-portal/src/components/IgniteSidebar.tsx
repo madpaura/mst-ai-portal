@@ -88,11 +88,6 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
   const [loadingCourses, setLoadingCourses] = useState<Set<string>>(new Set());
   const allLoadedRef = useRef(false);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [courseProgress, setCourseProgress] = useState<Record<string, CourseProgress>>({});
-  const [enrollingCourse, setEnrollingCourse] = useState<string | null>(null);
-  // "mine" = show only enrolled courses; "all" = show everything
-  const [viewMode, setViewMode] = useState<'mine' | 'all'>('all');
-
   const loadCourseVideos = useCallback(async (course: Course): Promise<Video[]> => {
     try {
       const data = await api.get<{ videos: ApiVideo[] }>(`/video/courses/${course.slug}`);
@@ -226,19 +221,14 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
     });
   }, [handleExpandCourse]);
 
-  // Load course progress whenever courses list or progressVersion changes
+  // Load course progress for passing to CourseBrowser parent
   useEffect(() => {
     if (!isLoggedIn() || courses.length === 0) return;
     api.get<CourseProgress[]>('/video/my-courses')
       .then((data) => {
         const map: Record<string, CourseProgress> = {};
         data.forEach((cp) => { map[cp.course_id] = cp; });
-        setCourseProgress(map);
-        // Notify parent about courses+progress (for CourseBrowser)
         if (onCoursesLoaded) onCoursesLoaded(courses, map);
-        // Auto-switch to "mine" view if user has enrollments
-        const hasEnrollments = data.some((cp) => cp.is_enrolled);
-        if (hasEnrollments) setViewMode('mine');
       })
       .catch(() => {});
   }, [courses, progressVersion]);
@@ -249,27 +239,6 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
       onCoursesLoaded(courses, {});
     }
   }, [courses]);
-
-  const handleToggleEnroll = useCallback(async (course: Course, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!isLoggedIn() || enrollingCourse) return;
-    setEnrollingCourse(course.id);
-    try {
-      const cp = courseProgress[course.id];
-      let updated: CourseProgress;
-      if (cp?.is_enrolled) {
-        updated = await api.delete<CourseProgress>(`/video/courses/${course.slug}/enroll`);
-      } else {
-        updated = await api.post<CourseProgress>(`/video/courses/${course.slug}/enroll`);
-      }
-      setCourseProgress((prev) => {
-        const next = { ...prev, [course.id]: updated };
-        if (onCoursesLoaded) onCoursesLoaded(courses, next);
-        return next;
-      });
-    } catch { /* ignore */ }
-    setEnrollingCourse(null);
-  }, [courseProgress, enrollingCourse, courses]);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const q = e.target.value;
@@ -289,16 +258,10 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
     }
   };
 
-  const enrolledCourseIds = new Set(
-    Object.values(courseProgress).filter((cp) => cp.is_enrolled).map((cp) => cp.course_id)
-  );
-  const hasEnrollments = enrolledCourseIds.size > 0;
-
   const filteredVideos = videos.filter((v) => {
     const matchesCategory = activeCategory === 'All' || v.category === activeCategory;
     const matchesSearch = v.title.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesMode = viewMode === 'all' || !v.course_id || enrolledCourseIds.has(v.course_id);
-    return matchesCategory && matchesSearch && matchesMode;
+    return matchesCategory && matchesSearch;
   });
 
   // Group filtered videos by course
@@ -327,18 +290,23 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
     return groups;
   })();
 
-  // Unenrolled courses (shown as stubs in "mine" mode)
-  const unenrolledCourses = viewMode === 'mine'
-    ? courses.filter((c) => !enrolledCourseIds.has(c.id))
-    : [];
-
   let globalIdx = 0;
 
   return (
     <aside className="w-80 bg-sidebar-light dark:bg-sidebar-dark border-r border-slate-200 dark:border-white/5 flex flex-col shrink-0 z-40 font-sans">
       <div className="p-4 border-b border-slate-200 dark:border-white/5">
+        {/* Browse Courses button — prominent at top */}
+        {onBrowseCourses && (
+          <button
+            onClick={onBrowseCourses}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 mb-3 text-xs font-bold text-primary border border-primary/30 bg-primary/5 hover:bg-primary/10 rounded-lg transition-colors"
+          >
+            <span className="material-symbols-outlined text-[16px]">grid_view</span>
+            Browse Courses
+          </button>
+        )}
         {/* Search */}
-        <div className="relative mb-3">
+        <div className="relative">
           <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-500 text-lg">search</span>
           <input
             className="w-full bg-slate-100 dark:bg-slate-900/50 border border-slate-300 dark:border-slate-700 rounded-lg py-2 pl-10 pr-4 text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:ring-1 focus:ring-primary focus:border-primary transition-all"
@@ -348,32 +316,6 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
             onChange={handleSearch}
           />
         </div>
-
-        {/* View mode toggle */}
-        {hasEnrollments && isLoggedIn() && (
-          <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 text-xs font-bold">
-            <button
-              onClick={() => setViewMode('mine')}
-              className={`flex-1 py-1.5 transition-colors ${
-                viewMode === 'mine'
-                  ? 'bg-primary text-white'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              My Courses
-            </button>
-            <button
-              onClick={() => setViewMode('all')}
-              className={`flex-1 py-1.5 transition-colors ${
-                viewMode === 'all'
-                  ? 'bg-primary text-white'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              All
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Category filters */}
@@ -411,24 +353,6 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
                   <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex-1 text-left truncate">
                     {group.courseName}
                   </span>
-                  {course && isLoggedIn() && (
-                    <button
-                      onClick={(e) => handleToggleEnroll(course, e)}
-                      disabled={enrollingCourse === course.id}
-                      title={courseProgress[course.id]?.is_enrolled ? 'Unsubscribe' : 'Subscribe to course'}
-                      className={`shrink-0 p-0.5 rounded transition-colors ${
-                        courseProgress[course.id]?.is_enrolled
-                          ? 'text-primary hover:text-rose-400'
-                          : 'text-slate-400 hover:text-primary'
-                      } ${enrollingCourse === course.id ? 'opacity-50' : ''}`}
-                    >
-                      <span className="material-symbols-outlined text-[16px]"
-                        style={{ fontVariationSettings: courseProgress[course.id]?.is_enrolled ? "'FILL' 1" : "'FILL' 0" }}
-                      >
-                        {enrollingCourse === course.id ? 'progress_activity' : 'bookmark'}
-                      </span>
-                    </button>
-                  )}
                   {isLoading ? (
                     <span className="material-symbols-outlined text-[14px] text-slate-400 animate-spin">progress_activity</span>
                   ) : (
@@ -437,22 +361,6 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
                     </span>
                   )}
                 </button>
-                {course && courseProgress[course.id]?.is_enrolled && courseProgress[course.id]?.total_videos > 0 && (
-                  <div className="px-4 pb-2">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] text-slate-400">
-                        {courseProgress[course.id].completed_videos}/{courseProgress[course.id].total_videos} completed
-                      </span>
-                      <span className="text-[10px] font-bold text-primary">{courseProgress[course.id].progress_pct}%</span>
-                    </div>
-                    <div className="w-full h-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-primary rounded-full transition-all duration-500"
-                        style={{ width: `${courseProgress[course.id].progress_pct}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
               {!isCollapsed && (
                 <div className="p-2 space-y-1.5">
@@ -508,59 +416,12 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
           );
         })}
 
-        {/* Unenrolled course stubs in "mine" mode */}
-        {unenrolledCourses.length > 0 && (
-          <div className="mt-2">
-            <div className="px-4 py-2 border-b border-slate-200 dark:border-white/5">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">More Courses</p>
-            </div>
-            {unenrolledCourses.map((course) => (
-              <div
-                key={course.id}
-                className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
-              >
-                <span className="material-symbols-outlined text-[18px] text-slate-400">school</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{course.title || course.slug}</p>
-                  <p className="text-[10px] text-slate-400">{course.video_count ?? 0} videos</p>
-                </div>
-                <button
-                  onClick={(e) => handleToggleEnroll(course, e)}
-                  disabled={enrollingCourse === course.id}
-                  className="shrink-0 px-2 py-1 text-[10px] font-bold text-primary border border-primary/30 rounded-lg hover:bg-primary/10 transition-colors disabled:opacity-50"
-                >
-                  {enrollingCourse === course.id ? '...' : 'Subscribe'}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Browse all courses button */}
-        {onBrowseCourses && (
-          <button
-            onClick={onBrowseCourses}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold text-slate-500 hover:text-primary hover:bg-primary/5 transition-colors border-t border-slate-200 dark:border-white/5 mt-2"
-          >
-            <span className="material-symbols-outlined text-[16px]">grid_view</span>
-            Browse All Courses
-          </button>
-        )}
-
         {filteredVideos.length === 0 && loaded && groupedVideos.length === 0 && (
           <div className="text-center py-12">
             <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600 block mb-3">video_library</span>
             <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">
-              {searchQuery ? 'No videos match your search.' : viewMode === 'mine' ? 'No subscribed courses yet.' : 'No content available yet.'}
+              {searchQuery ? 'No videos match your search.' : 'No content available yet.'}
             </p>
-            {!searchQuery && viewMode === 'mine' && (
-              <button
-                onClick={() => setViewMode('all')}
-                className="text-xs text-primary hover:underline mt-1"
-              >
-                Browse all courses
-              </button>
-            )}
           </div>
         )}
         {!loaded && (

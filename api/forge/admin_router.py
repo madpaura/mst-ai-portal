@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 
 from forge.schemas import ForgeComponentResponse, ForgeComponentCreate, ForgeComponentUpdate
-from auth.dependencies import require_admin
+from auth.dependencies import require_content as require_admin
 from database import get_db
 
 router = APIRouter()

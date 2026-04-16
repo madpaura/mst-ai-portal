@@ -213,6 +213,48 @@ async def list_users(admin: dict = Depends(require_admin)):
     ]
 
 
+class AdminCreateUser(BaseModel):
+    username: str
+    display_name: str
+    password: str
+    role: str = "user"
+    email: Optional[str] = None
+
+
+@router.post("/admin/users", response_model=UserResponse)
+async def create_user(body: AdminCreateUser, admin: dict = Depends(require_admin)):
+    import asyncpg
+    if body.role not in ("user", "content", "admin"):
+        raise HTTPException(status_code=400, detail="Role must be user, content, or admin")
+    db = await get_db()
+    existing = await db.fetchrow(
+        "SELECT id FROM users WHERE username = $1 OR (email = $2 AND $2 IS NOT NULL)",
+        body.username, body.email or None,
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="Username or email already in use")
+    from auth.service import hash_password
+    pw_hash = hash_password(body.password)
+    initials = "".join(w[0].upper() for w in body.display_name.split()[:2]) or body.display_name[0].upper()
+    try:
+        row = await db.fetchrow(
+            """
+            INSERT INTO users (username, email, display_name, initials, password_hash, role)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING *
+            """,
+            body.username, body.email or None, body.display_name, initials, pw_hash, body.role,
+        )
+    except asyncpg.UniqueViolationError as e:
+        detail = "Email already in use" if "users_email_key" in str(e) else "Username already taken"
+        raise HTTPException(status_code=409, detail=detail)
+    return UserResponse(
+        id=str(row["id"]), username=row["username"], email=row.get("email"),
+        display_name=row["display_name"], initials=row.get("initials"),
+        role=row["role"], created_at=row["created_at"],
+    )
+
+
 @router.put("/admin/users/{user_id}/role")
 async def update_user_role(user_id: str, role: str, admin: dict = Depends(require_admin)):
     if role not in ("user", "content", "admin"):
@@ -222,3 +264,33 @@ async def update_user_role(user_id: str, role: str, admin: dict = Depends(requir
     if result == "UPDATE 0":
         raise HTTPException(status_code=404, detail="User not found")
     return {"message": f"Role updated to '{role}'"}
+
+
+class ResetPasswordRequest(BaseModel):
+    new_password: str
+
+
+@router.put("/admin/users/{user_id}/password")
+async def reset_user_password(user_id: str, body: ResetPasswordRequest, admin: dict = Depends(require_admin)):
+    if len(body.new_password) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
+    from auth.service import hash_password
+    pw_hash = hash_password(body.new_password)
+    db = await get_db()
+    result = await db.execute(
+        "UPDATE users SET password_hash = $1 WHERE id = $2", pw_hash, user_id
+    )
+    if result == "UPDATE 0":
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"message": "Password updated"}
+
+
+@router.delete("/admin/users/{user_id}")
+async def delete_user(user_id: str, admin: dict = Depends(require_admin)):
+    if str(admin["id"]) == user_id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    db = await get_db()
+    result = await db.execute("DELETE FROM users WHERE id = $1", user_id)
+    if result == "DELETE 0":
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"message": "User deleted"}

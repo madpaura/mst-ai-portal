@@ -6,7 +6,7 @@ from articles.schemas import (
     BeautifyRequest, BeautifyResponse,
 )
 from articles.llm import call_llm
-from auth.dependencies import require_admin
+from auth.dependencies import require_content as require_admin
 from database import get_db
 
 router = APIRouter()
