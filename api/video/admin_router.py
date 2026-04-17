@@ -18,7 +18,7 @@ from video.schemas import (
 )
 from pydantic import BaseModel
 from auth.dependencies import require_content as require_admin
-from database import get_db
+from database import get_db, get_read_db
 from config import settings
 from worker.gpu_detect import get_encode_args, get_hwaccel_args, get_gpu_info
 from video.email import generate_email_preview
@@ -63,7 +63,7 @@ def _video_row_to_admin(r, job=None) -> VideoAdminResponse:
 
 @router.get("/videos", response_model=list[VideoAdminResponse])
 async def admin_list_videos(admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch("SELECT * FROM videos ORDER BY sort_order, created_at DESC")
     result = []
     for r in rows:
@@ -115,7 +115,7 @@ async def admin_create_video(req: VideoCreate, admin: dict = Depends(require_adm
 
 @router.get("/videos/{video_id}", response_model=VideoAdminResponse)
 async def admin_get_video(video_id: str, admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow("SELECT * FROM videos WHERE id = $1", video_id)
     if not row:
         raise HTTPException(status_code=404, detail="Video not found")
@@ -199,7 +199,7 @@ async def admin_unpublish_video(video_id: str, admin: dict = Depends(require_adm
 
 @router.get("/videos/{video_id}/preview")
 async def admin_preview_video(video_id: str, admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow("SELECT hls_path, status FROM videos WHERE id = $1", video_id)
     if not row:
         raise HTTPException(status_code=404, detail="Video not found")
@@ -618,7 +618,7 @@ async def _cut_video_task(
 
 @router.get("/videos/{video_id}/job-status", response_model=list[JobStatusResponse])
 async def admin_job_status(video_id: str, admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         "SELECT * FROM transcode_jobs WHERE video_id = $1 ORDER BY created_at DESC LIMIT 5",
         video_id,
@@ -650,7 +650,7 @@ async def admin_ops_log(video_id: str, admin: dict = Depends(require_admin)):
 
 @router.get("/videos/{video_id}/chapters", response_model=list[ChapterResponse])
 async def admin_list_chapters(video_id: str, admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         "SELECT * FROM video_chapters WHERE video_id = $1 ORDER BY sort_order, start_time",
         video_id,
@@ -732,7 +732,7 @@ async def admin_reorder_chapters(
 
 @router.get("/videos/{video_id}/howto", response_model=HowtoResponse | None)
 async def admin_get_howto(video_id: str, admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow("SELECT * FROM howto_guides WHERE video_id = $1", video_id)
     if not row:
         return None
@@ -770,7 +770,7 @@ async def admin_upsert_howto(
 
 @router.get("/videos/{video_id}/quality", response_model=list[QualitySettingResponse])
 async def admin_get_quality(video_id: str, admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         "SELECT * FROM video_quality_settings WHERE video_id = $1 ORDER BY quality",
         video_id,
@@ -828,7 +828,7 @@ async def admin_upload_thumbnail(
 
 @router.get("/videos/{video_id}/seed-notes", response_model=list[SeedNoteResponse])
 async def admin_list_seed_notes(video_id: str, admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         "SELECT * FROM seed_notes WHERE video_id = $1 ORDER BY timestamp_s", video_id
     )
@@ -906,7 +906,7 @@ def _banner_row_to_response(r) -> BannerConfigResponse:
 
 @router.get("/videos/{video_id}/banner", response_model=BannerConfigResponse | None)
 async def admin_get_banner(video_id: str, admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow("SELECT * FROM video_banners WHERE video_id = $1", video_id)
     if not row:
         return None
@@ -1270,7 +1270,7 @@ def _attachment_row_to_response(r) -> AttachmentResponse:
 
 @router.get("/videos/{video_id}/attachments", response_model=list[AttachmentResponse])
 async def admin_list_attachments(video_id: str, admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         "SELECT * FROM video_attachments WHERE video_id = $1 ORDER BY sort_order, created_at",
         video_id,

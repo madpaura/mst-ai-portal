@@ -1,4 +1,4 @@
-from database import get_db
+from database import get_read_db as get_db
 from articles.llm import call_llm
 from email_utils.template import generate_digest_email
 from config import settings

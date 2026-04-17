@@ -12,7 +12,7 @@ from auth.dependencies import require_admin
 from email_utils.digest import generate_learning_digest
 from email_utils.utils import send_email
 from config import settings
-from database import get_db
+from database import get_db, get_read_db
 
 router = APIRouter()
 
@@ -55,7 +55,7 @@ class DigestIssue(BaseModel):
 @router.get("/digest-issues", response_model=List[DigestIssue])
 async def get_digest_issues(admin: dict = Depends(require_admin)):
     """Get list of all digest issues"""
-    pool = await get_db()
+    pool = await get_read_db()
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
             SELECT id, issue_number, title, subject, created_at, sent_at, 
@@ -85,7 +85,7 @@ class DigestIssueFull(BaseModel):
 async def get_digest_issue(issue_id: int, admin: dict = Depends(require_admin)):
     """Get a single digest issue with full content"""
     import json
-    pool = await get_db()
+    pool = await get_read_db()
     async with pool.acquire() as conn:
         row = await conn.fetchrow("""
             SELECT id, issue_number, title, subject, html_content, plain_text,

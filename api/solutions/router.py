@@ -4,14 +4,14 @@ from fastapi import APIRouter
 from solutions.schemas import CapabilityResponse, AnnouncementResponse, ContactRequest
 from solutions.admin_schemas import SolutionCardResponse, NewsFeedResponse
 from video.schemas import VideoResponse
-from database import get_db
+from database import get_db, get_read_db
 
 router = APIRouter()
 
 
 @router.get("/solutions/landing_page")
 async def get_landing_page():
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow("SELECT value FROM app_settings WHERE key = 'landing_page'")
     config = json.loads(row["value"]) if row else {"video_id": None, "highlights": []}
     
@@ -38,7 +38,7 @@ async def get_landing_page():
 
 @router.get("/solutions/capabilities", response_model=list[CapabilityResponse])
 async def list_capabilities():
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         "SELECT * FROM capabilities WHERE is_active = true ORDER BY sort_order"
     )
@@ -53,7 +53,7 @@ async def list_capabilities():
 
 @router.get("/solutions/announcements", response_model=list[AnnouncementResponse])
 async def list_announcements():
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         "SELECT * FROM announcements WHERE is_active = true ORDER BY created_at DESC LIMIT 10"
     )
@@ -68,7 +68,7 @@ async def list_announcements():
 
 @router.get("/solutions/cards", response_model=list[SolutionCardResponse])
 async def list_solution_cards():
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         "SELECT * FROM solution_cards WHERE is_active = true ORDER BY sort_order LIMIT 8"
     )
@@ -87,7 +87,7 @@ async def list_solution_cards():
 
 @router.get("/solutions/cards/{card_id}", response_model=SolutionCardResponse)
 async def get_solution_card(card_id: str):
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow(
         "SELECT * FROM solution_cards WHERE id = $1 AND is_active = true", card_id
     )
@@ -106,7 +106,7 @@ async def get_solution_card(card_id: str):
 
 @router.get("/solutions/news", response_model=list[NewsFeedResponse])
 async def list_news_feed():
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         "SELECT * FROM news_feed WHERE is_active = true ORDER BY published_at DESC LIMIT 20"
     )
@@ -124,7 +124,7 @@ async def list_news_feed():
 
 @router.get("/solutions/news/{news_id}", response_model=NewsFeedResponse)
 async def get_news_item(news_id: str):
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow(
         "SELECT * FROM news_feed WHERE id = $1 AND is_active = true", news_id
     )

@@ -4,7 +4,7 @@ from typing import Optional
 
 from config import settings
 from auth.service import decode_access_token
-from database import get_db
+from database import get_db, get_read_db
 
 security = HTTPBearer(auto_error=False)
 
@@ -13,7 +13,7 @@ async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> dict:
     if settings.AUTH_MODE == "open" and credentials is None:
-        db = await get_db()
+        db = await get_read_db()
         row = await db.fetchrow("SELECT * FROM users WHERE username = 'admin' LIMIT 1")
         if row:
             return dict(row)
@@ -26,7 +26,7 @@ async def get_current_user(
     if payload is None:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-    db = await get_db()
+    db = await get_read_db()
     user = await db.fetchrow("SELECT * FROM users WHERE id = $1", payload["sub"])
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
@@ -39,7 +39,7 @@ async def get_optional_user(
 ) -> Optional[dict]:
     if credentials is None:
         if settings.AUTH_MODE == "open":
-            db = await get_db()
+            db = await get_read_db()
             row = await db.fetchrow("SELECT * FROM users WHERE username = 'admin' LIMIT 1")
             return dict(row) if row else None
         return None
@@ -48,7 +48,7 @@ async def get_optional_user(
     if payload is None:
         return None
 
-    db = await get_db()
+    db = await get_read_db()
     user = await db.fetchrow("SELECT * FROM users WHERE id = $1", payload["sub"])
     return dict(user) if user else None
 

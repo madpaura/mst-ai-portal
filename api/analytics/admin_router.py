@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from typing import Optional
 
 from auth.dependencies import require_admin
-from database import get_db
+from database import get_read_db as get_db
 
 router = APIRouter()
 

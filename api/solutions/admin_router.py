@@ -6,7 +6,7 @@ from solutions.admin_schemas import (
     RssFeedResponse, RssFeedCreate, RssFeedUpdate,
 )
 from auth.dependencies import require_admin
-from database import get_db
+from database import get_db, get_read_db
 
 router = APIRouter()
 
@@ -26,7 +26,7 @@ def _row_to_card(r) -> SolutionCardResponse:
 
 @router.get("/solution-cards", response_model=list[SolutionCardResponse])
 async def list_solution_cards(admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch("SELECT * FROM solution_cards ORDER BY sort_order, created_at")
     return [_row_to_card(r) for r in rows]
 
@@ -54,7 +54,7 @@ async def create_solution_card(req: SolutionCardCreate, admin: dict = Depends(re
 
 @router.get("/solution-cards/{card_id}", response_model=SolutionCardResponse)
 async def get_solution_card(card_id: str, admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow("SELECT * FROM solution_cards WHERE id = $1", card_id)
     if not row:
         raise HTTPException(status_code=404, detail="Solution card not found")
@@ -118,7 +118,7 @@ def _row_to_news(r) -> NewsFeedResponse:
 
 @router.get("/news", response_model=list[NewsFeedResponse])
 async def list_news(admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch("SELECT * FROM news_feed ORDER BY published_at DESC")
     return [_row_to_news(r) for r in rows]
 
@@ -190,7 +190,7 @@ def _row_to_rss(r) -> RssFeedResponse:
 
 @router.get("/rss-feeds", response_model=list[RssFeedResponse])
 async def list_rss_feeds(admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch("SELECT * FROM news_rss_feeds ORDER BY created_at DESC")
     return [_row_to_rss(r) for r in rows]
 

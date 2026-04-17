@@ -5,7 +5,7 @@ from forge.settings_schemas import (
     ForgeSyncJobResponse,
 )
 from auth.dependencies import require_admin
-from database import get_db
+from database import get_db, get_read_db
 from config import settings as app_settings
 
 router = APIRouter()
@@ -41,7 +41,7 @@ def _row_to_setting(r) -> ForgeSettingResponse:
 
 @router.get("/settings", response_model=list[ForgeSettingResponse])
 async def list_settings(admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch("SELECT * FROM forge_settings ORDER BY created_at DESC")
     return [_row_to_setting(r) for r in rows]
 
@@ -66,7 +66,7 @@ async def create_setting(req: ForgeSettingCreate, admin: dict = Depends(require_
 
 @router.get("/settings/{setting_id}", response_model=ForgeSettingResponse)
 async def get_setting(setting_id: str, admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow("SELECT * FROM forge_settings WHERE id = $1", setting_id)
     if not row:
         raise HTTPException(status_code=404, detail="Setting not found")
@@ -120,7 +120,7 @@ async def delete_setting(setting_id: str, admin: dict = Depends(require_admin)):
 
 @router.get("/settings/{setting_id}/jobs", response_model=list[ForgeSyncJobResponse])
 async def list_sync_jobs(setting_id: str, admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         "SELECT * FROM forge_sync_jobs WHERE settings_id = $1 ORDER BY created_at DESC LIMIT 20",
         setting_id,

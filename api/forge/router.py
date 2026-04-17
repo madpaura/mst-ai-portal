@@ -12,7 +12,7 @@ from typing import Optional
 
 from forge.schemas import ForgeComponentResponse, ForgeCategoryResponse
 from auth.dependencies import get_optional_user
-from database import get_db
+from database import get_db, get_read_db
 
 router = APIRouter()
 
@@ -42,7 +42,7 @@ async def list_components(
     badge: Optional[str] = None,
     q: Optional[str] = None,
 ):
-    db = await get_db()
+    db = await get_read_db()
     conditions = ["is_active = true"]
     params = []
     idx = 1
@@ -74,7 +74,7 @@ async def list_components(
 
 @router.get("/components/{slug}", response_model=ForgeComponentResponse)
 async def get_component(slug: str):
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow(
         "SELECT * FROM forge_components WHERE slug = $1 AND is_active = true", slug
     )
@@ -107,7 +107,7 @@ async def install_component(slug: str, user: Optional[dict] = Depends(get_option
 @router.get("/contributing-guide")
 async def get_contributing_guide():
     """Return the video guide configured for marketplace contributors."""
-    db = await get_db()
+    db = await get_read_db()
     import json
     row = await db.fetchrow("SELECT value FROM app_settings WHERE key = 'marketplace_contributing_video'")
     if not row:
@@ -129,7 +129,7 @@ async def get_contributing_guide():
 
 @router.get("/categories", response_model=list[ForgeCategoryResponse])
 async def list_categories():
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         "SELECT component_type, COUNT(*) as count FROM forge_components WHERE is_active = true GROUP BY component_type ORDER BY component_type"
     )
@@ -139,7 +139,7 @@ async def list_categories():
 @router.get("/components/{slug}/download")
 async def download_component(slug: str, user: Optional[dict] = Depends(get_optional_user)):
     """Download a component as a zip file by cloning its directory from the git repo."""
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow(
         "SELECT * FROM forge_components WHERE slug = $1 AND is_active = true", slug
     )
@@ -239,7 +239,7 @@ async def download_component(slug: str, user: Optional[dict] = Depends(get_optio
 @router.get("/components/{slug}/instructions")
 async def get_install_instructions(slug: str):
     """Return install/usage instructions for a component."""
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow(
         "SELECT slug, name, component_type, long_description, howto_guide, install_command FROM forge_components WHERE slug = $1 AND is_active = true",
         slug,

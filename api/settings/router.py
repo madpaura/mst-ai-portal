@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Any
 
-from database import get_db
+from database import get_db, get_read_db
 from auth.dependencies import require_admin
 
 router = APIRouter()
@@ -13,7 +13,7 @@ class UpdateSettingRequest(BaseModel):
 
 @router.get("/{key}")
 async def get_setting(key: str):
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow("SELECT value FROM app_settings WHERE key = $1", key)
     if row:
         return json.loads(row["value"])
