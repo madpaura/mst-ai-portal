@@ -8,7 +8,7 @@ from video.schemas import (
     NoteUpdate, HowtoResponse, VideoLikeResponse, AttachmentResponse,
 )
 from auth.dependencies import get_current_user, get_optional_user
-from database import get_db
+from database import get_db, get_read_db
 
 router = APIRouter()
 
@@ -26,7 +26,7 @@ class CourseProgressResponse(BaseModel):
 
 @router.get("/courses", response_model=list[CourseResponse])
 async def list_courses():
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         """
         SELECT c.*,
@@ -57,7 +57,7 @@ async def list_courses():
 
 @router.get("/courses/{slug}")
 async def get_course(slug: str):
-    db = await get_db()
+    db = await get_read_db()
     course = await db.fetchrow("SELECT * FROM courses WHERE slug = $1 AND is_active = true", slug)
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
@@ -88,7 +88,7 @@ async def get_course(slug: str):
 
 @router.get("/videos/{slug}", response_model=VideoResponse)
 async def get_video(slug: str):
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow(
         "SELECT * FROM videos WHERE slug = $1 AND is_published = true AND is_active = true",
         slug,
@@ -107,7 +107,7 @@ async def get_video(slug: str):
 
 @router.get("/videos/{slug}/attachments", response_model=list[AttachmentResponse])
 async def get_video_attachments(slug: str):
-    db = await get_db()
+    db = await get_read_db()
     video = await db.fetchrow(
         "SELECT id FROM videos WHERE slug = $1 AND is_published = true AND is_active = true", slug
     )
@@ -136,7 +136,7 @@ async def get_video_attachments(slug: str):
 
 @router.get("/videos/{slug}/chapters", response_model=list[ChapterResponse])
 async def get_chapters(slug: str):
-    db = await get_db()
+    db = await get_read_db()
     video = await db.fetchrow(
         "SELECT id FROM videos WHERE slug = $1 AND is_published = true AND is_active = true", slug
     )
@@ -158,7 +158,7 @@ async def get_chapters(slug: str):
 
 @router.get("/progress", response_model=OverallProgressResponse)
 async def get_overall_progress(user: dict = Depends(get_current_user)):
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         """
         SELECT
@@ -185,7 +185,7 @@ async def get_overall_progress(user: dict = Depends(get_current_user)):
 
 @router.get("/progress/{video_slug}", response_model=ProgressResponse)
 async def get_video_progress(video_slug: str, user: dict = Depends(get_current_user)):
-    db = await get_db()
+    db = await get_read_db()
     video = await db.fetchrow("SELECT id FROM videos WHERE slug = $1", video_slug)
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
@@ -243,7 +243,7 @@ async def update_video_progress(
 
 @router.get("/videos/{slug}/notes", response_model=list[NoteResponse])
 async def get_notes(slug: str, user: dict = Depends(get_current_user)):
-    db = await get_db()
+    db = await get_read_db()
     video = await db.fetchrow("SELECT id FROM videos WHERE slug = $1", slug)
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
@@ -330,7 +330,7 @@ async def delete_note(note_id: str, user: dict = Depends(get_current_user)):
 
 @router.get("/videos/{slug}/howto", response_model=Optional[HowtoResponse])
 async def get_howto(slug: str):
-    db = await get_db()
+    db = await get_read_db()
     video = await db.fetchrow("SELECT id FROM videos WHERE slug = $1", slug)
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
@@ -348,7 +348,7 @@ async def get_howto(slug: str):
 
 @router.get("/videos/{slug}/likes", response_model=VideoLikeResponse)
 async def get_video_likes(slug: str, user: Optional[dict] = Depends(get_optional_user)):
-    db = await get_db()
+    db = await get_read_db()
     video = await db.fetchrow(
         "SELECT id FROM videos WHERE slug = $1 AND is_published = true AND is_active = true", slug
     )
@@ -412,7 +412,7 @@ async def unlike_video(slug: str, user: dict = Depends(get_current_user)):
 @router.get("/my-courses", response_model=list[CourseProgressResponse])
 async def get_my_courses(user: dict = Depends(get_current_user)):
     """Return all courses with enrollment status and progress for the current user."""
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         """
         SELECT
@@ -451,7 +451,7 @@ async def get_my_courses(user: dict = Depends(get_current_user)):
 @router.get("/courses/{slug}/progress", response_model=CourseProgressResponse)
 async def get_course_progress(slug: str, user: dict = Depends(get_current_user)):
     """Return enrollment status and video progress for a specific course."""
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow(
         """
         SELECT

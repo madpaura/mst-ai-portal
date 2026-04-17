@@ -7,7 +7,7 @@ from articles.schemas import (
 )
 from articles.llm import call_llm
 from auth.dependencies import require_content as require_admin
-from database import get_db
+from database import get_db, get_read_db
 
 router = APIRouter()
 
@@ -33,7 +33,7 @@ def _row_to_list(r) -> ArticleListResponse:
 
 @router.get("/articles", response_model=list[ArticleListResponse])
 async def admin_list_articles(admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         "SELECT * FROM articles WHERE is_active = true ORDER BY created_at DESC"
     )
@@ -84,7 +84,7 @@ async def beautify_text(req: BeautifyRequest, admin: dict = Depends(require_admi
 
 @router.get("/articles/{article_id}", response_model=ArticleResponse)
 async def admin_get_article(article_id: str, admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow(
         "SELECT * FROM articles WHERE id = $1 AND is_active = true", article_id
     )

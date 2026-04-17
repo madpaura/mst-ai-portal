@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 
 from forge.schemas import ForgeComponentResponse, ForgeComponentCreate, ForgeComponentUpdate
 from auth.dependencies import require_content as require_admin
-from database import get_db
+from database import get_db, get_read_db
 
 router = APIRouter()
 
@@ -23,7 +23,7 @@ def _row_to_component(r) -> ForgeComponentResponse:
 
 @router.get("/components", response_model=list[ForgeComponentResponse])
 async def admin_list_components(admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch("SELECT * FROM forge_components ORDER BY name ASC")
     return [_row_to_component(r) for r in rows]
 
@@ -52,7 +52,7 @@ async def admin_create_component(req: ForgeComponentCreate, admin: dict = Depend
 
 @router.get("/components/{component_id}", response_model=ForgeComponentResponse)
 async def admin_get_component(component_id: str, admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow("SELECT * FROM forge_components WHERE id = $1", component_id)
     if not row:
         raise HTTPException(status_code=404, detail="Component not found")

@@ -5,7 +5,18 @@ import os
 
 class Settings(BaseSettings):
     # Database
+    # Single URL for simple / single-server setups (backwards-compatible default)
     DATABASE_URL: str = "postgresql://portal:portal123@localhost:5432/mst_portal"
+
+    # PgBouncer read/write split (Part 3 of issue #27)
+    # Set DATABASE_WRITE_URL → PgBouncer write pool → Primary  (port 6432)
+    # Set DATABASE_READ_URL  → PgBouncer read  pool → Replica  (port 6433)
+    # Leave unset to fall back to DATABASE_URL for both pools (single-server mode)
+    DATABASE_WRITE_URL: str = ""
+    DATABASE_READ_URL: str = ""
+
+    # Direct connection to primary, bypassing PgBouncer (for admin / seed tasks)
+    DATABASE_DIRECT_URL: str = ""
 
     # Auth
     AUTH_MODE: Literal["open", "ldap", "saml"] = "open"

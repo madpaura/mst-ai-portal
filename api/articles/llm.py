@@ -1,6 +1,6 @@
 import httpx
 from fastapi import HTTPException
-from database import get_db
+from database import get_read_db as get_db
 from config import settings
 
 

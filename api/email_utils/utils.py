@@ -4,7 +4,7 @@ from email.mime.multipart import MIMEMultipart
 from typing import Optional
 from loguru import logger as log
 from config import settings
-from database import get_db
+from database import get_read_db as get_db
 from email_utils.template import generate_editorial_email
 
 

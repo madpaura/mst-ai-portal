@@ -2,14 +2,14 @@ from fastapi import APIRouter, HTTPException, Depends
 
 from video.schemas import CourseResponse, CourseCreate, CourseUpdate
 from auth.dependencies import require_content as require_admin
-from database import get_db
+from database import get_db, get_read_db
 
 router = APIRouter()
 
 
 @router.get("/courses", response_model=list[CourseResponse])
 async def admin_list_courses(admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         """
         SELECT c.*, COUNT(v.id) as video_count

@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from auth.schemas import LoginRequest, TokenResponse, UserResponse, UserUpdateRequest
 from auth.service import verify_password, create_access_token
 from auth.dependencies import get_current_user, require_admin
-from database import get_db
+from database import get_db, get_read_db
 
 
 class ContributeRequestCreate(BaseModel):
@@ -125,7 +125,7 @@ async def submit_contribute_request(req: ContributeRequestCreate, user: dict = D
 @router.get("/contribute-request", response_model=Optional[ContributeRequestResponse])
 async def get_my_contribute_request(user: dict = Depends(get_current_user)):
     """Get the current user's latest contribution request."""
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow(
         "SELECT * FROM contribute_requests WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1",
         user["id"],
@@ -144,7 +144,7 @@ async def get_my_contribute_request(user: dict = Depends(get_current_user)):
 
 @router.get("/admin/contribute-requests", response_model=list[ContributeRequestResponse])
 async def list_contribute_requests(admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         """
         SELECT cr.*, u.display_name, u.username
@@ -201,7 +201,7 @@ async def review_contribute_request(
 
 @router.get("/admin/users", response_model=list[UserResponse])
 async def list_users(admin: dict = Depends(require_admin)):
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch("SELECT * FROM users ORDER BY created_at DESC LIMIT 200")
     return [
         UserResponse(

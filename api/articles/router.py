@@ -8,7 +8,7 @@ from articles.schemas import (
 )
 from articles.llm import call_llm
 from auth.dependencies import get_current_user
-from database import get_db
+from database import get_db, get_read_db
 
 router = APIRouter()
 
@@ -34,7 +34,7 @@ def _row_to_list(r) -> ArticleListResponse:
 
 @router.get("/categories", response_model=list[str])
 async def list_categories():
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         "SELECT DISTINCT category FROM articles WHERE is_published = true AND is_active = true ORDER BY category"
     )
@@ -46,7 +46,7 @@ async def list_articles(
     search: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
 ):
-    db = await get_db()
+    db = await get_read_db()
     conditions = ["is_published = true", "is_active = true"]
     params: list = []
     idx = 1
@@ -75,7 +75,7 @@ async def list_articles(
 
 @router.get("/my", response_model=list[ArticleListResponse])
 async def list_my_articles(user: dict = Depends(get_current_user)):
-    db = await get_db()
+    db = await get_read_db()
     rows = await db.fetch(
         "SELECT * FROM articles WHERE author_id = $1 AND is_active = true ORDER BY created_at DESC",
         user["id"],
@@ -108,7 +108,7 @@ async def create_article(req: ArticleCreate, user: dict = Depends(get_current_us
 
 @router.get("/my/{article_id}", response_model=ArticleResponse)
 async def get_my_article(article_id: str, user: dict = Depends(get_current_user)):
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow(
         "SELECT * FROM articles WHERE id = $1 AND author_id = $2 AND is_active = true",
         article_id, user["id"],
@@ -187,7 +187,7 @@ async def beautify_text(req: BeautifyRequest, user: dict = Depends(get_current_u
 
 @router.get("/{slug}", response_model=ArticleResponse)
 async def get_article(slug: str):
-    db = await get_db()
+    db = await get_read_db()
     row = await db.fetchrow(
         "SELECT * FROM articles WHERE slug = $1 AND is_published = true AND is_active = true",
         slug,
