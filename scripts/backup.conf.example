@@ -1,0 +1,42 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# MST AI Portal — Backup Configuration
+# Copy to scripts/backup.conf and customise.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Local storage ─────────────────────────────────────────────────────────────
+# Where backups are kept on this machine.
+BACKUP_LOCAL_DIR="./backups"
+
+# How many days to keep local backups (0 = keep forever).
+BACKUP_RETENTION_DAYS=14
+
+# ── Remote storage ─────────────────────────────────────────────────────────────
+# Transfer method: rsync | scp | rclone | local (local = no transfer, keep only local)
+BACKUP_TRANSFER_METHOD="local"
+
+# rsync / scp target  →  user@host:/path/to/backups
+# rclone target       →  remote:bucket/path   (remote name must be configured in rclone)
+# Leave empty for local-only mode.
+BACKUP_REMOTE_URL=""
+
+# SSH key to use for rsync/scp (leave empty to use the default key / ssh-agent).
+BACKUP_SSH_KEY=""
+
+# ── Frequency (cron) ──────────────────────────────────────────────────────────
+# Run  ./scripts/backup.sh --schedule  to install this as a cron job.
+# Standard cron format: minute hour day-of-month month day-of-week
+BACKUP_CRON_SCHEDULE="0 2 * * *"   # daily at 02:00
+
+# ── Components to include ─────────────────────────────────────────────────────
+BACKUP_DB=true          # PostgreSQL dump
+BACKUP_VIDEOS=true      # ./volumes/storage/videos
+BACKUP_MEDIA=true       # ./volumes/storage/media
+BACKUP_CONFIG=true      # .env + docker-compose.yml
+
+# ── Compression ───────────────────────────────────────────────────────────────
+# Compression level for tar (1=fastest, 9=best). Set to 0 to disable.
+BACKUP_COMPRESS_LEVEL=6
+
+# ── Notifications (optional) ──────────────────────────────────────────────────
+# Send a webhook ping when a backup finishes (leave empty to skip).
+BACKUP_WEBHOOK_URL=""

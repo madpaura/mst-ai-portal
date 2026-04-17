@@ -43,3 +43,6 @@ Thumbs.db
 
 *.pid
 volumes/*
+# Backup files
+backups/
+logs/
