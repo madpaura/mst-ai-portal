@@ -77,6 +77,13 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = "noreply@mst-ai-portal.local"
     SMTP_FROM_NAME: str = "MST AI Portal"
 
+    # Telegram Admin Bot
+    TELEGRAM_BOT_TOKEN: str = ""
+    # Comma-separated Telegram user IDs allowed to use the admin bot (empty = nobody)
+    TELEGRAM_ADMIN_USER_IDS: str = ""
+    # Random secret to verify webhook requests from Telegram (recommended)
+    TELEGRAM_WEBHOOK_SECRET: str = ""
+
     # CORS — CORS_ORIGINS defaults to wildcard (safe with Bearer tokens, no cookies)
     # Set CORS_ALLOW_ORIGIN_REGEX for fine-grained control (e.g. restrict to your domain)
     CORS_ORIGINS: list[str] = ["*"]
