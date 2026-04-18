@@ -97,6 +97,28 @@ async def pipeline_status(admin: dict = Depends(require_admin)):
     }
 
 
+@router.post("/content-pipeline/videos/{video_id}/regenerate-howto")
+async def regenerate_howto(video_id: str, admin: dict = Depends(require_admin)):
+    """Re-generate how-to guide and chapters from existing transcript."""
+    from .pipeline import generate_howto, generate_chapters
+
+    db = await get_read_db()
+    row = await db.fetchrow(
+        "SELECT v.id, v.title, v.duration_s, vt.transcript FROM videos v "
+        "LEFT JOIN video_transcripts vt ON vt.video_id = v.id WHERE v.id = $1",
+        video_id,
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Video not found")
+    if not row["transcript"]:
+        raise HTTPException(status_code=422, detail="No transcript available — upload video file first")
+
+    import asyncio
+    asyncio.create_task(generate_howto(video_id, row["title"], row["transcript"]))
+    asyncio.create_task(generate_chapters(video_id, row["title"], row["transcript"], row["duration_s"]))
+    return {"message": "Howto + chapters regeneration started", "video_id": video_id}
+
+
 @router.post("/content-pipeline/reprocess-all-pending")
 async def reprocess_all_pending(admin: dict = Depends(require_admin)):
     """Enqueue pipeline for all videos and articles with ai_status='pending' or 'error'."""

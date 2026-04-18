@@ -344,6 +344,30 @@ async def get_howto(slug: str):
     )
 
 
+# ── Video Transcript ──────────────────────────────────────
+
+@router.get("/videos/{slug}/transcript")
+async def get_video_transcript(slug: str):
+    db = await get_read_db()
+    video = await db.fetchrow(
+        "SELECT id FROM videos WHERE slug = $1 AND is_published = true AND is_active = true", slug
+    )
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    row = await db.fetchrow(
+        "SELECT transcript, language, provider, created_at FROM video_transcripts WHERE video_id = $1",
+        video["id"],
+    )
+    if not row:
+        return None
+    return {
+        "transcript": row["transcript"],
+        "language": row["language"],
+        "provider": row["provider"],
+        "created_at": str(row["created_at"]),
+    }
+
+
 # ── Video Likes ───────────────────────────────────────────
 
 @router.get("/videos/{slug}/likes", response_model=VideoLikeResponse)

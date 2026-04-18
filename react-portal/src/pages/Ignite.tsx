@@ -74,7 +74,8 @@ export const Ignite: React.FC = () => {
   const [contributeRequest, setContributeRequest] = useState<{ status: string } | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
-  const [activeTab, setActiveTab] = useState<'notes' | 'howto'>('howto');
+  const [activeTab, setActiveTab] = useState<'notes' | 'howto' | 'transcript'>('howto');
+  const [transcript, setTranscript] = useState<{ transcript: string; language: string } | null>(null);
   const [noteText, setNoteText] = useState('');
   const [notes, setNotes] = useState<Note[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -97,12 +98,17 @@ export const Ignite: React.FC = () => {
   }, []);
 
   const loadVideoData = useCallback(async (video: Video) => {
+    // Reset transcript when switching videos
+    setTranscript(null);
     // Load chapters
     api.get<Chapter[]>(`/video/videos/${video.slug}/chapters`)
       .then(setChapters).catch(() => setChapters([]));
     // Load howto
     api.get<HowtoGuide | null>(`/video/videos/${video.slug}/howto`)
       .then(setHowto).catch(() => setHowto(null));
+    // Load transcript (lazy — only fetch if transcript tab is active or preload)
+    api.get<{ transcript: string; language: string } | null>(`/video/videos/${video.slug}/transcript`)
+      .then(setTranscript).catch(() => setTranscript(null));
     // Load likes
     api.get<VideoLikeData>(`/video/videos/${video.slug}/likes`)
       .then(setLikeData).catch(() => setLikeData(null));
@@ -346,7 +352,7 @@ export const Ignite: React.FC = () => {
     } catch { /* ignore */ }
   };
 
-  const handleTabClick = (tab: 'notes' | 'howto') => setActiveTab(tab);
+  const handleTabClick = (tab: 'notes' | 'howto' | 'transcript') => setActiveTab(tab);
 
   // Prev/next video within the same course
   const courseVideos = activeVideo?.course_id
@@ -639,6 +645,20 @@ export const Ignite: React.FC = () => {
                   <span className="material-symbols-outlined text-base">description</span>
                   How to
                 </button>
+                <button
+                  onClick={() => handleTabClick('transcript')}
+                  className={`px-6 py-3 text-sm font-medium border-b-2 rounded-t-lg transition-all flex items-center gap-2 ${
+                    activeTab === 'transcript'
+                      ? 'text-primary border-primary bg-primary/5 font-bold'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border-transparent hover:bg-slate-100 dark:hover:bg-slate-800/30'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-base">subtitles</span>
+                  Transcript
+                  {transcript && (
+                    <span className="ml-1 w-1.5 h-1.5 rounded-full bg-green-400 inline-block" title="Transcript available" />
+                  )}
+                </button>
               </div>
 
               {/* Tab Content */}
@@ -747,6 +767,37 @@ export const Ignite: React.FC = () => {
                       <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">How-To Guide</h3>
                       <p className="text-slate-500 text-sm">No how-to guide available for this video yet.</p>
                     </>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'transcript' && (
+                <div className="bg-card-light dark:bg-card-dark border border-slate-400 dark:border-white/5 rounded-xl overflow-hidden">
+                  {transcript ? (
+                    <>
+                      <div className="px-6 py-4 border-b border-slate-300 dark:border-white/10 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-primary text-base">subtitles</span>
+                          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Video Transcript</h3>
+                        </div>
+                        <span className="text-xs text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                          {transcript.language?.toUpperCase() || 'EN'}
+                        </span>
+                      </div>
+                      <div className="p-6 max-h-[500px] overflow-y-auto">
+                        <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+                          {transcript.transcript}
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="p-6 text-center">
+                      <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600 block mb-3">subtitles_off</span>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-1">No Transcript Available</h3>
+                      <p className="text-slate-500 text-xs">
+                        Transcript is generated automatically after the video file is uploaded and processed.
+                      </p>
+                    </div>
                   )}
                 </div>
               )}
