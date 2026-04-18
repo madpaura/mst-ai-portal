@@ -8,6 +8,7 @@ from articles.schemas import (
 from articles.llm import call_llm
 from auth.dependencies import require_content as require_admin
 from database import get_db, get_read_db
+from content_pipeline.pipeline import process_article
 
 router = APIRouter()
 
@@ -62,6 +63,11 @@ async def admin_create_article(req: ArticleCreate, admin: dict = Depends(require
         req.title, slug, req.summary, req.content, req.category,
         admin["id"], admin.get("display_name", "Admin"),
     )
+
+    # Kick off AI summarisation in the background (non-blocking)
+    import asyncio
+    asyncio.create_task(process_article(str(row["id"])))
+
     return _row_to_response(row)
 
 

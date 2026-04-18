@@ -29,6 +29,7 @@ from settings.digest_admin_router import router as digest_admin_router
 from articles.router import router as articles_router
 from articles.admin_router import router as articles_admin_router
 from telegram_bot.router import router as telegram_bot_router
+from content_pipeline.admin_router import router as content_pipeline_router
 
 
 @asynccontextmanager
@@ -95,6 +96,7 @@ app.include_router(digest_admin_router, prefix="/admin", tags=["admin-digest"])
 app.include_router(articles_router, prefix="/articles", tags=["articles"])
 app.include_router(articles_admin_router, prefix="/admin", tags=["admin-articles"])
 app.include_router(telegram_bot_router, tags=["telegram-bot"])
+app.include_router(content_pipeline_router, prefix="/admin", tags=["admin-content-pipeline"])
 
 
 # Middleware to prevent caching of HLS manifests and segments

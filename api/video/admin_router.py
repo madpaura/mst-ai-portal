@@ -18,6 +18,7 @@ from video.schemas import (
 )
 from pydantic import BaseModel
 from auth.dependencies import require_content as require_admin
+from content_pipeline.pipeline import process_video, transcribe_and_update
 from database import get_db, get_read_db
 from config import settings
 from worker.gpu_detect import get_encode_args, get_hwaccel_args, get_gpu_info
@@ -109,6 +110,10 @@ async def admin_create_video(req: VideoCreate, admin: dict = Depends(require_adm
     video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, str(row["id"]))
     os.makedirs(os.path.join(video_dir, "raw"), exist_ok=True)
     os.makedirs(os.path.join(video_dir, "hls"), exist_ok=True)
+
+    # Kick off AI summarisation in the background (non-blocking)
+    import asyncio
+    asyncio.create_task(process_video(str(row["id"])))
 
     return _video_row_to_admin(row)
 
@@ -232,6 +237,10 @@ async def admin_upload_video_file(
     # Update video status to uploaded (no auto-transcode)
     await db.execute("UPDATE videos SET status = 'uploaded' WHERE id = $1", video_id)
     _write_ops_log(raw_dir, "upload")
+
+    # Re-run pipeline with transcription now that the raw file is available
+    import asyncio
+    asyncio.create_task(transcribe_and_update(video_id))
 
     return {"message": "Video uploaded"}
 

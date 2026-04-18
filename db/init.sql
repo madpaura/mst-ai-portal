@@ -61,7 +61,14 @@ CREATE TABLE videos (
     is_published    BOOLEAN DEFAULT false,
     is_active       BOOLEAN DEFAULT true,
     sort_order      INTEGER DEFAULT 0,
-    created_at      TIMESTAMPTZ DEFAULT now()
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    -- AI content pipeline fields (migration 010)
+    ai_summary      TEXT,
+    ai_topics       TEXT[],
+    ai_tags         TEXT[],
+    ai_status       TEXT DEFAULT 'pending'
+                    CHECK (ai_status IN ('pending','processing','done','error')),
+    ai_processed_at TIMESTAMPTZ
 );
 
 CREATE TABLE video_chapters (
@@ -140,6 +147,18 @@ CREATE TABLE video_banners (
     created_at      TIMESTAMPTZ DEFAULT now(),
     updated_at      TIMESTAMPTZ DEFAULT now()
 );
+
+-- AI video transcripts (migration 010)
+CREATE TABLE video_transcripts (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    video_id     UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+    transcript   TEXT NOT NULL,
+    language     TEXT DEFAULT 'en',
+    provider     TEXT DEFAULT 'whisper',
+    created_at   TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (video_id)
+);
+CREATE INDEX idx_video_transcripts_video ON video_transcripts(video_id);
 
 CREATE TABLE transcode_jobs (
     id              BIGSERIAL PRIMARY KEY,
@@ -444,7 +463,14 @@ CREATE TABLE articles (
     is_active       BOOLEAN DEFAULT true,
     published_at    TIMESTAMPTZ,
     created_at      TIMESTAMPTZ DEFAULT now(),
-    updated_at      TIMESTAMPTZ DEFAULT now()
+    updated_at      TIMESTAMPTZ DEFAULT now(),
+    -- AI content pipeline fields (migration 010)
+    ai_summary      TEXT,
+    ai_topics       TEXT[],
+    ai_tags         TEXT[],
+    ai_status       TEXT DEFAULT 'pending'
+                    CHECK (ai_status IN ('pending','processing','done','error')),
+    ai_processed_at TIMESTAMPTZ
 );
 
 CREATE INDEX idx_articles_slug ON articles(slug);
