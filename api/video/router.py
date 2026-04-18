@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi.responses import Response
 from typing import Optional
 from pydantic import BaseModel
 
@@ -355,17 +356,50 @@ async def get_video_transcript(slug: str):
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
     row = await db.fetchrow(
-        "SELECT transcript, language, provider, created_at FROM video_transcripts WHERE video_id = $1",
+        "SELECT transcript, vtt_content, language, provider, created_at FROM video_transcripts WHERE video_id = $1",
         video["id"],
     )
     if not row:
         return None
     return {
         "transcript": row["transcript"],
+        "has_vtt": bool(row["vtt_content"]),
         "language": row["language"],
         "provider": row["provider"],
         "created_at": str(row["created_at"]),
     }
+
+
+@router.get("/videos/{slug}/transcript.vtt")
+async def get_video_transcript_vtt(slug: str):
+    """Serve the WebVTT caption file for the video."""
+    db = await get_read_db()
+    video = await db.fetchrow(
+        "SELECT id, duration_s FROM videos WHERE slug = $1 AND is_published = true AND is_active = true", slug
+    )
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    row = await db.fetchrow(
+        "SELECT transcript, vtt_content FROM video_transcripts WHERE video_id = $1",
+        video["id"],
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="No transcript available")
+
+    vtt = row["vtt_content"]
+    if not vtt:
+        # Fallback: generate approximate VTT from plain text
+        from content_pipeline.vtt_utils import generate_vtt_from_text
+        vtt = generate_vtt_from_text(row["transcript"], video["duration_s"])
+
+    return Response(
+        content=vtt,
+        media_type="text/vtt",
+        headers={
+            "Cache-Control": "no-cache",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
 
 
 # ── Video Likes ───────────────────────────────────────────

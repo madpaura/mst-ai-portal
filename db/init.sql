@@ -153,6 +153,7 @@ CREATE TABLE video_transcripts (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     video_id     UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
     transcript   TEXT NOT NULL,
+    vtt_content  TEXT,
     language     TEXT DEFAULT 'en',
     provider     TEXT DEFAULT 'whisper',
     created_at   TIMESTAMPTZ DEFAULT now(),

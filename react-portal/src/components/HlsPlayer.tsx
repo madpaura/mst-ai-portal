@@ -28,9 +28,52 @@ export interface HlsPlayerHandle {
   getDuration: () => number;
 }
 
+interface VttCue {
+  startTime: number;
+  endTime: number;
+  text: string;
+}
+
+function parseVttTime(str: string): number {
+  const parts = str.trim().split(':');
+  if (parts.length === 3) return +parts[0] * 3600 + +parts[1] * 60 + parseFloat(parts[2]);
+  if (parts.length === 2) return +parts[0] * 60 + parseFloat(parts[1]);
+  return parseFloat(str);
+}
+
+function parseVtt(vttText: string): VttCue[] {
+  const cues: VttCue[] = [];
+  const lines = vttText.replace(/\r\n/g, '\n').split('\n');
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (line.includes('-->')) {
+      const arrowIdx = line.indexOf('-->');
+      const startStr = line.slice(0, arrowIdx).trim();
+      // strip any positioning info after end time
+      const endStr = line.slice(arrowIdx + 3).trim().split(' ')[0];
+      const startTime = parseVttTime(startStr);
+      const endTime = parseVttTime(endStr);
+      const textLines: string[] = [];
+      i++;
+      while (i < lines.length && lines[i].trim() !== '') {
+        textLines.push(lines[i].trim());
+        i++;
+      }
+      if (textLines.length) {
+        cues.push({ startTime, endTime, text: textLines.join(' ') });
+      }
+    } else {
+      i++;
+    }
+  }
+  return cues;
+}
+
 interface HlsPlayerProps {
   hlsPath: string | null;
   chapters?: Chapter[];
+  subtitleUrl?: string | null;
   onTimeUpdate?: (currentTime: number, duration: number) => void;
   className?: string;
   autoPlay?: boolean;
@@ -39,6 +82,7 @@ interface HlsPlayerProps {
 export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
   hlsPath,
   chapters = [],
+  subtitleUrl = null,
   onTimeUpdate,
   className = '',
   autoPlay = false,
@@ -66,6 +110,11 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
   const [qualityLevels, setQualityLevels] = useState<QualityLevel[]>([]);
   const [currentQuality, setCurrentQuality] = useState(-1); // -1 = auto
   const [showQualityMenu, setShowQualityMenu] = useState(false);
+
+  // Captions / CC
+  const [showCaptions, setShowCaptions] = useState(false);
+  const [vttCues, setVttCues] = useState<VttCue[]>([]);
+  const [activeCue, setActiveCue] = useState<string | null>(null);
 
   useImperativeHandle(ref, () => ({
     getCurrentTime: () => videoRef.current?.currentTime || 0,
@@ -202,6 +251,24 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
     }
     setCurrentChapter(active);
   }, [currentTime, chapters]);
+
+  // Load VTT when subtitleUrl changes
+  useEffect(() => {
+    setVttCues([]);
+    setActiveCue(null);
+    if (!subtitleUrl) return;
+    fetch(subtitleUrl)
+      .then((r) => r.text())
+      .then((text) => setVttCues(parseVtt(text)))
+      .catch(() => setVttCues([]));
+  }, [subtitleUrl]);
+
+  // Track active caption cue
+  useEffect(() => {
+    if (!showCaptions || vttCues.length === 0) { setActiveCue(null); return; }
+    const cue = vttCues.find((c) => currentTime >= c.startTime && currentTime < c.endTime);
+    setActiveCue(cue?.text ?? null);
+  }, [currentTime, vttCues, showCaptions]);
 
   // Auto-hide controls
   const resetControlsTimer = useCallback(() => {
@@ -351,6 +418,15 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
         </div>
       )}
 
+      {/* Caption overlay */}
+      {showCaptions && activeCue && (
+        <div className="absolute bottom-20 left-0 right-0 flex justify-center px-8 pointer-events-none z-25">
+          <span className="bg-black/80 text-white text-sm px-3 py-1.5 rounded-lg text-center max-w-[80%] leading-snug">
+            {activeCue}
+          </span>
+        </div>
+      )}
+
       {/* Controls bar */}
       <div
         className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent px-4 pb-3 pt-10 transition-opacity duration-300 z-20 ${showControls || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
@@ -434,6 +510,21 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
           </div>
 
           <div className="flex items-center gap-3">
+            {/* CC toggle */}
+            {vttCues.length > 0 && (
+              <button
+                onClick={() => setShowCaptions(!showCaptions)}
+                className={`transition-colors text-sm font-bold px-1.5 py-0.5 rounded border ${
+                  showCaptions
+                    ? 'text-primary border-primary bg-primary/10'
+                    : 'text-white/80 hover:text-white border-white/20'
+                }`}
+                title="Toggle captions"
+              >
+                CC
+              </button>
+            )}
+
             {/* Quality selector */}
             {qualityLevels.length > 1 && (
               <div className="relative" data-quality-menu>

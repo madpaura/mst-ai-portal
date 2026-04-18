@@ -75,7 +75,7 @@ export const Ignite: React.FC = () => {
   const [currentTime, setCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const [activeTab, setActiveTab] = useState<'notes' | 'howto' | 'transcript'>('howto');
-  const [transcript, setTranscript] = useState<{ transcript: string; language: string } | null>(null);
+  const [transcript, setTranscript] = useState<{ transcript: string; language: string; has_vtt: boolean } | null>(null);
   const [noteText, setNoteText] = useState('');
   const [notes, setNotes] = useState<Note[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -107,7 +107,7 @@ export const Ignite: React.FC = () => {
     api.get<HowtoGuide | null>(`/video/videos/${video.slug}/howto`)
       .then(setHowto).catch(() => setHowto(null));
     // Load transcript (lazy — only fetch if transcript tab is active or preload)
-    api.get<{ transcript: string; language: string } | null>(`/video/videos/${video.slug}/transcript`)
+    api.get<{ transcript: string; language: string; has_vtt: boolean } | null>(`/video/videos/${video.slug}/transcript`)
       .then(setTranscript).catch(() => setTranscript(null));
     // Load likes
     api.get<VideoLikeData>(`/video/videos/${video.slug}/likes`)
@@ -456,6 +456,7 @@ export const Ignite: React.FC = () => {
                   ref={playerRef}
                   hlsPath={activeVideo.hls_path}
                   chapters={chapters}
+                  subtitleUrl={transcript?.has_vtt ? `${import.meta.env.VITE_API_URL || ''}/video/videos/${activeVideo.slug}/transcript.vtt` : null}
                   onTimeUpdate={handleTimeUpdate}
                   className="shadow-2xl border border-slate-300 dark:border-slate-800"
                 />

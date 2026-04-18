@@ -17,6 +17,7 @@ from articles.llm import call_llm
 from database import get_write_db, get_read_db
 from .summarizer import summarize_video, summarize_article
 from .transcriber import transcribe_video
+from .vtt_utils import generate_vtt_from_text
 
 
 # ── How-to guide generation ───────────────────────────────────────────────────
@@ -163,22 +164,27 @@ async def process_video(video_id: str, include_transcript: bool = False) -> None
 
         if include_transcript:
             log.info(f"content_pipeline: transcribing video {video_id}")
-            transcript = await transcribe_video(video_id)
-            if transcript:
+            result = await transcribe_video(video_id)
+            if result:
+                transcript = result.text
+                # Use Whisper VTT if available; otherwise generate approximate VTT from plain text
+                vtt = result.vtt or generate_vtt_from_text(transcript, row["duration_s"])
                 await db_w.execute(
                     """
-                    INSERT INTO video_transcripts (video_id, transcript, provider)
-                    VALUES ($1, $2, $3)
+                    INSERT INTO video_transcripts (video_id, transcript, vtt_content, provider)
+                    VALUES ($1, $2, $3, $4)
                     ON CONFLICT (video_id) DO UPDATE
-                        SET transcript = EXCLUDED.transcript,
-                            provider   = EXCLUDED.provider,
-                            created_at = now()
+                        SET transcript   = EXCLUDED.transcript,
+                            vtt_content  = EXCLUDED.vtt_content,
+                            provider     = EXCLUDED.provider,
+                            created_at   = now()
                     """,
                     video_id,
                     transcript,
-                    "openai-whisper" if len(transcript) > 100 else "whisper",
+                    vtt,
+                    result.provider,
                 )
-                log.info(f"content_pipeline: transcript saved for {video_id} ({len(transcript)} chars)")
+                log.info(f"content_pipeline: transcript saved for {video_id} ({len(transcript)} chars, vtt={'yes' if vtt else 'no'})")
 
                 # Generate how-to guide and chapters from transcript (concurrent)
                 await asyncio.gather(
