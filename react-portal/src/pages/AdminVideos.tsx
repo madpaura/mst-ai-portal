@@ -161,8 +161,14 @@ export const AdminVideos: React.FC = () => {
   const [emailSubject, setEmailSubject] = useState('');
   const [emailGenerating, setEmailGenerating] = useState(false);
   const [emailCustomContent, setEmailCustomContent] = useState('');
-  const [emailRecipient, setEmailRecipient] = useState('');
+  const [emailRecipients, setEmailRecipients] = useState('');
   const [emailSending, setEmailSending] = useState(false);
+  const [emailSendingProgress, setEmailSendingProgress] = useState('');
+  const [emailSavedAddresses, setEmailSavedAddresses] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('mst_video_email_saved') || '[]'); } catch { return []; }
+  });
+  const [emailShowSaved, setEmailShowSaved] = useState(false);
+  const emailCsvRef = useRef<HTMLInputElement>(null);
 
   // Trim / Cut
   const [trimStart, setTrimStart] = useState(0);
@@ -2260,31 +2266,156 @@ export const AdminVideos: React.FC = () => {
                         dangerouslySetInnerHTML={{ __html: emailPreview.html_content }}
                       />
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Send To</label>
-                      <input
-                        type="email"
-                        value={emailRecipient}
-                        onChange={(e) => setEmailRecipient(e.target.value)}
-                        placeholder="Enter recipient email address"
-                        className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                    <div className="space-y-2">
+                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Send To</label>
+                      {/* Toolbar */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          onClick={() => emailCsvRef.current?.click()}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition-colors border border-white/10"
+                          title="Import emails from CSV"
+                        >
+                          <span className="material-symbols-outlined text-sm">upload_file</span>
+                          CSV
+                        </button>
+                        <input
+                          ref={emailCsvRef}
+                          type="file"
+                          accept=".csv,.txt"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              const text = ev.target?.result as string;
+                              const emailRegex = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+                              const found = Array.from(new Set(text.match(emailRegex) || []));
+                              if (found.length === 0) { showMsg('error', 'No valid emails found in CSV'); return; }
+                              const current = emailRecipients.split('\n').map(x => x.trim()).filter(Boolean);
+                              setEmailRecipients([...new Set([...current, ...found])].join('\n'));
+                              const updated = [...new Set([...emailSavedAddresses, ...found])];
+                              setEmailSavedAddresses(updated);
+                              localStorage.setItem('mst_video_email_saved', JSON.stringify(updated));
+                              showMsg('success', `Loaded ${found.length} email(s) from CSV`);
+                            };
+                            reader.readAsText(file);
+                            e.target.value = '';
+                          }}
+                        />
+                        {emailSavedAddresses.length > 0 && (
+                          <button
+                            onClick={() => setEmailShowSaved(v => !v)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-medium rounded-lg transition-colors border border-primary/20"
+                          >
+                            <span className="material-symbols-outlined text-sm">bookmarks</span>
+                            Saved ({emailSavedAddresses.length})
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Saved addresses quick-select */}
+                      {emailShowSaved && emailSavedAddresses.length > 0 && (
+                        <div className="p-3 bg-slate-900/60 rounded-lg border border-white/5 space-y-1.5 max-h-40 overflow-y-auto">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Saved</span>
+                            <button
+                              onClick={() => {
+                                const current = emailRecipients.split('\n').map(x => x.trim()).filter(Boolean);
+                                setEmailRecipients([...new Set([...current, ...emailSavedAddresses])].join('\n'));
+                              }}
+                              className="text-xs text-primary hover:text-white transition-colors"
+                            >Add all</button>
+                          </div>
+                          {emailSavedAddresses.map(addr => {
+                            const active = emailRecipients.split('\n').map(x => x.trim()).includes(addr);
+                            return (
+                              <div key={addr} className="flex items-center gap-2">
+                                <button
+                                  onClick={() => {
+                                    const current = emailRecipients.split('\n').map(x => x.trim()).filter(Boolean);
+                                    if (current.includes(addr)) {
+                                      setEmailRecipients(current.filter(x => x !== addr).join('\n'));
+                                    } else {
+                                      setEmailRecipients([...current, addr].join('\n'));
+                                    }
+                                  }}
+                                  className={`flex-1 text-left text-xs px-2 py-1.5 rounded transition-colors font-mono truncate ${active ? 'bg-primary/15 text-primary border border-primary/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                                >
+                                  {active && <span className="mr-1">✓</span>}{addr}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const updated = emailSavedAddresses.filter(x => x !== addr);
+                                    setEmailSavedAddresses(updated);
+                                    localStorage.setItem('mst_video_email_saved', JSON.stringify(updated));
+                                  }}
+                                  className="text-red-400/50 hover:text-red-400 transition-colors"
+                                >
+                                  <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>close</span>
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Recipient textarea */}
+                      <textarea
+                        value={emailRecipients}
+                        onChange={(e) => setEmailRecipients(e.target.value)}
+                        placeholder={"user1@example.com\nuser2@example.com\nteam@example.com"}
+                        className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none font-mono"
+                        rows={4}
                       />
+                      {(() => {
+                        const list = emailRecipients.split('\n').map(x => x.trim()).filter(x => x.includes('@'));
+                        return (
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-slate-500">{list.length} recipient{list.length !== 1 ? 's' : ''}</p>
+                            {list.length > 0 && (
+                              <button
+                                onClick={() => {
+                                  const updated = [...new Set([...emailSavedAddresses, ...list])];
+                                  setEmailSavedAddresses(updated);
+                                  localStorage.setItem('mst_video_email_saved', JSON.stringify(updated));
+                                  showMsg('success', 'Saved to quick-access');
+                                }}
+                                className="text-xs text-slate-500 hover:text-primary transition-colors"
+                              >Save to quick-access</button>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                     <button
                       onClick={async () => {
-                        if (!selected || !emailRecipient) {
-                          showMsg('error', 'Please enter recipient email');
+                        if (!selected) return;
+                        const emails = emailRecipients.split('\n').map(x => x.trim()).filter(x => x.includes('@'));
+                        if (emails.length === 0) {
+                          showMsg('error', 'Please enter at least one valid email address');
                           return;
                         }
                         setEmailSending(true);
                         try {
-                          await api.post(`/admin/videos/${selected.id}/send-email`, {
-                            recipient_email: emailRecipient,
-                            subject: emailSubject || emailPreview.subject,
-                            html_content: emailPreview.html_content,
-                          });
-                          showMsg('success', 'Email sent successfully!');
-                          setEmailRecipient('');
+                          const batchSize = 50;
+                          const batches: string[][] = [];
+                          for (let i = 0; i < emails.length; i += batchSize) batches.push(emails.slice(i, i + batchSize));
+                          let totalSent = 0;
+                          for (let b = 0; b < batches.length; b++) {
+                            setEmailSendingProgress(batches.length > 1 ? `Batch ${b + 1}/${batches.length}…` : '');
+                            const result = await api.post<{ success: boolean; message: string; sent_count: number }>(
+                              `/admin/videos/${selected.id}/send-email`,
+                              { recipient_emails: batches[b], subject: emailSubject || emailPreview.subject, html_content: emailPreview.html_content },
+                            );
+                            totalSent += result.sent_count;
+                            const updated = [...new Set([...emailSavedAddresses, ...batches[b]])];
+                            setEmailSavedAddresses(updated);
+                            localStorage.setItem('mst_video_email_saved', JSON.stringify(updated));
+                            if (b < batches.length - 1) await new Promise(r => setTimeout(r, 600));
+                          }
+                          showMsg('success', `Sent to ${totalSent}/${emails.length} recipient(s)`);
+                          setEmailRecipients('');
                           setEmailPreview(null);
                           setEmailSubject('');
                           setEmailCustomContent('');
@@ -2292,13 +2423,14 @@ export const AdminVideos: React.FC = () => {
                           showMsg('error', err.message);
                         } finally {
                           setEmailSending(false);
+                          setEmailSendingProgress('');
                         }
                       }}
-                      disabled={emailSending || !emailRecipient}
+                      disabled={emailSending || !emailRecipients.trim()}
                       className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-500/10 hover:bg-green-500/20 text-green-400 font-bold text-sm rounded-lg transition-colors border border-green-500/20 disabled:opacity-50"
                     >
-                      <span className="material-symbols-outlined text-sm">send</span>
-                      {emailSending ? 'Sending...' : 'Send Email'}
+                      <span className="material-symbols-outlined text-sm">{emailSending ? 'hourglass_empty' : 'send'}</span>
+                      {emailSending ? (emailSendingProgress || 'Sending…') : 'Send Email'}
                     </button>
                   </div>
                 )}

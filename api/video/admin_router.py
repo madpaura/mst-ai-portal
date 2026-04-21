@@ -1385,7 +1385,7 @@ class EmailPreviewResponse(BaseModel):
 
 
 class SendEmailRequest(BaseModel):
-    recipient_email: str
+    recipient_emails: List[str]
     subject: str
     html_content: str
 
@@ -1393,6 +1393,7 @@ class SendEmailRequest(BaseModel):
 class SendEmailResponse(BaseModel):
     success: bool
     message: str
+    sent_count: int = 0
 
 
 @router.post("/videos/{video_id}/email-preview", response_model=EmailPreviewResponse)
@@ -1413,15 +1414,25 @@ async def admin_send_email(
     video_id: str, req: SendEmailRequest, admin: dict = Depends(require_admin)
 ):
     try:
-        success = await send_email(
-            to_email=req.recipient_email,
-            subject=req.subject,
-            html_content=req.html_content,
-        )
+        sent_count = 0
+        failed = []
+        for recipient in req.recipient_emails:
+            success = await send_email(
+                to_email=recipient,
+                subject=req.subject,
+                html_content=req.html_content,
+            )
+            if success:
+                sent_count += 1
+            else:
+                failed.append(recipient)
 
-        if success:
-            return SendEmailResponse(success=True, message="Email sent successfully")
+        total = len(req.recipient_emails)
+        if sent_count == total:
+            return SendEmailResponse(success=True, message=f"Email sent to all {sent_count} recipient(s)", sent_count=sent_count)
+        elif sent_count > 0:
+            return SendEmailResponse(success=False, message=f"Sent to {sent_count}/{total}. Failed: {', '.join(failed)}", sent_count=sent_count)
         else:
-            return SendEmailResponse(success=False, message="Failed to send email")
+            return SendEmailResponse(success=False, message="Failed to send email", sent_count=0)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Email send error: {str(e)}")
