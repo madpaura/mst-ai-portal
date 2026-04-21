@@ -92,8 +92,8 @@ async def admin_create_video(req: VideoCreate, admin: dict = Depends(require_adm
 
     row = await db.fetchrow(
         """
-        INSERT INTO videos (title, slug, description, category, course_id, sort_order)
-        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *
+        INSERT INTO videos (title, slug, description, category, course_id, sort_order, status)
+        VALUES ($1, $2, $3, $4, $5, $6, 'draft') RETURNING *
         """,
         req.title, req.slug, req.description, req.category, course_id, req.sort_order,
     )
