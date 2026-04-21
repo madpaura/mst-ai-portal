@@ -766,7 +766,8 @@ async def _speed_section_task(
         # note: no -t here — read to EOF
         log.info(f"Speed-section {video_id}: extracting after {end}s-EOF")
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-        if r.returncode != 0:
+        # Non-zero exit is OK here if the file is simply empty (end == video duration)
+        if r.returncode != 0 and "Output file is empty" not in r.stderr:
             raise RuntimeError(f"After-segment failed: {r.stderr[-800:]}")
         if os.path.exists(part_after) and os.path.getsize(part_after) > 0:
             parts.append(part_after)
