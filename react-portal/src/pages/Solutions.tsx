@@ -18,6 +18,7 @@ interface SolutionCard {
   icon_color: string;
   badge: string | null;
   link_url: string | null;
+  launch_url: string | null;
   sort_order: number;
 }
 
@@ -175,9 +176,23 @@ export const Solutions: React.FC = () => {
                     )}
                     <p className="text-slate-500 dark:text-slate-400 text-[15px] leading-relaxed">{card.description}</p>
                   </div>
-                  <div className="mt-auto flex items-center gap-1 text-primary text-sm font-medium group-hover:gap-2 transition-all">
-                    Learn more
-                    <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                  <div className="mt-auto flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-1 text-primary text-sm font-medium group-hover:gap-2 transition-all">
+                      Learn more
+                      <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                    </div>
+                    {card.launch_url && (
+                      <a
+                        href={card.launch_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-white border border-primary/20 hover:border-primary text-xs font-bold rounded-lg transition-all"
+                      >
+                        <span className="material-symbols-outlined text-sm">open_in_new</span>
+                        Launch
+                      </a>
+                    )}
                   </div>
                 </div>
               ))}

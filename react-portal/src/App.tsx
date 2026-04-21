@@ -1,4 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
+
+const BETA_TAG = import.meta.env.VITE_BETA_TAG as string | undefined;
 import { AuthProvider } from './api/auth';
 import { ThemeProvider } from './context/theme';
 import { Solutions } from './pages/Solutions';
@@ -25,6 +28,10 @@ import { ContributeRequest } from './pages/ContributeRequest';
 import { AdminContributions } from './pages/AdminContributions';
 
 function App() {
+  useEffect(() => {
+    if (BETA_TAG) document.title = `MST AI Portal [${BETA_TAG.toUpperCase()}]`;
+  }, []);
+
   return (
     <ThemeProvider>
     <BrowserRouter>

@@ -32,11 +32,11 @@ interface VideoPreview {
 
 interface CourseBrowserProps {
   courses: CourseInfo[];
-  courseProgress: Record<string, CourseProgress>;
-  onEnroll: (course: CourseInfo) => Promise<void>;
-  onEnrollAll: () => Promise<void>;
+  courseProgress?: Record<string, CourseProgress>;
+  onEnroll?: (course: CourseInfo) => Promise<void>;
+  onEnrollAll?: () => Promise<void>;
   onStartCourse: (courseSlug: string) => void;
-  enrollingId: string | null;
+  enrollingId?: string | null;
 }
 
 const formatDuration = (s: number | null): string => {
@@ -48,11 +48,11 @@ const formatDuration = (s: number | null): string => {
 
 export const CourseBrowser: React.FC<CourseBrowserProps> = ({
   courses,
-  courseProgress,
+  courseProgress = {},
   onEnroll,
   onEnrollAll,
   onStartCourse,
-  enrollingId,
+  enrollingId = null,
 }) => {
   const [selectedCourse, setSelectedCourse] = useState<CourseInfo | null>(null);
   const [previewVideos, setPreviewVideos] = useState<VideoPreview[]>([]);
@@ -77,7 +77,7 @@ export const CourseBrowser: React.FC<CourseBrowserProps> = ({
   };
 
   const handleEnrollAll = async () => {
-    if (!isLoggedIn() || enrollingAll) return;
+    if (!isLoggedIn() || enrollingAll || !onEnrollAll) return;
     setEnrollingAll(true);
     await onEnrollAll();
     setEnrollingAll(false);
@@ -142,7 +142,7 @@ export const CourseBrowser: React.FC<CourseBrowserProps> = ({
             )}
 
             <div className="flex gap-3">
-              {isLoggedIn() && (
+              {isLoggedIn() && onEnroll && (
                 <button
                   onClick={() => onEnroll(selectedCourse)}
                   disabled={enrollingId === selectedCourse.id}
@@ -160,7 +160,7 @@ export const CourseBrowser: React.FC<CourseBrowserProps> = ({
                   {enrollingId === selectedCourse.id ? 'Saving...' : isEnrolled ? 'Subscribed' : 'Subscribe'}
                 </button>
               )}
-              {isEnrolled && previewVideos.length > 0 && (
+              {previewVideos.length > 0 && (
                 <button
                   onClick={() => onStartCourse(selectedCourse.slug)}
                   className="flex items-center gap-2 px-5 py-2.5 bg-primary/10 hover:bg-primary/20 border border-primary/20 text-primary rounded-xl text-sm font-bold transition-all"

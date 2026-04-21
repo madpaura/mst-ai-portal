@@ -13,6 +13,7 @@ class SolutionCardResponse(BaseModel):
     icon_color: str = "text-primary"
     badge: Optional[str] = None
     link_url: Optional[str] = None
+    launch_url: Optional[str] = None
     sort_order: int = 0
     is_active: bool = True
     created_at: datetime
@@ -28,6 +29,7 @@ class SolutionCardCreate(BaseModel):
     icon_color: str = "text-primary"
     badge: Optional[str] = None
     link_url: Optional[str] = None
+    launch_url: Optional[str] = None
     sort_order: int = 0
 
 
@@ -40,6 +42,7 @@ class SolutionCardUpdate(BaseModel):
     icon_color: Optional[str] = None
     badge: Optional[str] = None
     link_url: Optional[str] = None
+    launch_url: Optional[str] = None
     sort_order: Optional[int] = None
     is_active: Optional[bool] = None
 

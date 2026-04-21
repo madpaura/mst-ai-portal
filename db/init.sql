@@ -307,10 +307,18 @@ CREATE TABLE solution_cards (
     icon_color      TEXT DEFAULT 'text-primary',
     badge           TEXT,
     link_url        TEXT,
+    launch_url      TEXT,
     sort_order      INTEGER DEFAULT 0,
     is_active       BOOLEAN DEFAULT true,
     created_at      TIMESTAMPTZ DEFAULT now(),
     updated_at      TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS guest_interests (
+    id          BIGSERIAL PRIMARY KEY,
+    email       TEXT NOT NULL,
+    source      TEXT DEFAULT 'contribute',
+    created_at  TIMESTAMPTZ DEFAULT now()
 );
 
 ---------------------------------------------------

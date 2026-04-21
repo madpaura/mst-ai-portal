@@ -83,9 +83,18 @@ export const Ignite: React.FC = () => {
   const [likePending, setLikePending] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
 
-  // Check contribute request status for logged-in non-content users
+  // Guest email capture state
+  const [showGuestEmailForm, setShowGuestEmailForm] = useState(false);
+  const [guestEmail, setGuestEmail] = useState('');
+  const [guestEmailSent, setGuestEmailSent] = useState(false);
+  const [guestEmailSubmitting, setGuestEmailSubmitting] = useState(false);
+
+  // Check contribute request status — show CTA for all; for logged-in 'user' role fetch request status
   useEffect(() => {
-    if (!isLoggedIn()) return;
+    if (!isLoggedIn()) {
+      setShowContributeCTA(true);
+      return;
+    }
     api.get<{ role: string }>('/auth/me').then((me) => {
       if (me.role === 'user') {
         setShowContributeCTA(true);
@@ -95,6 +104,17 @@ export const Ignite: React.FC = () => {
       }
     }).catch(() => {});
   }, []);
+
+  const handleGuestInterest = async () => {
+    if (!guestEmail.trim() || guestEmailSubmitting) return;
+    setGuestEmailSubmitting(true);
+    try {
+      await api.post('/auth/guest-interest', { email: guestEmail.trim(), source: 'contribute' });
+      setGuestEmailSent(true);
+      setShowGuestEmailForm(false);
+    } catch { /* ignore */ }
+    setGuestEmailSubmitting(false);
+  };
 
   const loadVideoData = useCallback(async (video: Video) => {
     // Load chapters
@@ -145,10 +165,6 @@ export const Ignite: React.FC = () => {
       clearTimeout(progressSaveRef.current);
       progressSaveRef.current = null;
     }
-    if (serverProgressRef.current) {
-      clearTimeout(serverProgressRef.current);
-      serverProgressRef.current = null;
-    }
     const savedPos = getLocalPosition(activeVideo.slug);
     if (savedPos > 5) {
       // Delay seek until player is ready (HLS manifest parsed)
@@ -191,15 +207,11 @@ export const Ignite: React.FC = () => {
   }, []);
 
   const progressSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const serverProgressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [progressVersion, setProgressVersion] = useState(0);
   // Course browser state
   const [showCourseBrowser, setShowCourseBrowser] = useState(false);
   const [allCourses, setAllCourses] = useState<CourseInfo[]>([]);
-  const [courseBrowserProgress, setCourseBrowserProgress] = useState<Record<string, CourseProgress>>({});
-  const [enrollingCourseId, setEnrollingCourseId] = useState<string | null>(null);
 
-  const handleCoursesLoaded = useCallback((courses: Course[], progress: Record<string, CourseProgress>) => {
+  const handleCoursesLoaded = useCallback((courses: Course[], _progress: Record<string, CourseProgress>) => {
     setAllCourses(courses.map((c) => ({
       id: c.id,
       slug: c.slug,
@@ -208,35 +220,6 @@ export const Ignite: React.FC = () => {
       video_count: c.video_count ?? 0,
       thumbnail: c.thumbnail ?? null,
     })));
-    setCourseBrowserProgress(progress);
-  }, []);
-
-  const handleBrowserEnroll = useCallback(async (course: CourseInfo) => {
-    if (!isLoggedIn() || enrollingCourseId) return;
-    setEnrollingCourseId(course.id);
-    try {
-      const cp = courseBrowserProgress[course.id];
-      let updated: CourseProgress;
-      if (cp?.is_enrolled) {
-        updated = await api.delete<CourseProgress>(`/video/courses/${course.slug}/enroll`);
-      } else {
-        updated = await api.post<CourseProgress>(`/video/courses/${course.slug}/enroll`);
-      }
-      setCourseBrowserProgress((prev) => ({ ...prev, [course.id]: updated }));
-      setProgressVersion((v) => v + 1);
-    } catch { /* ignore */ }
-    setEnrollingCourseId(null);
-  }, [courseBrowserProgress, enrollingCourseId]);
-
-  const handleEnrollAll = useCallback(async () => {
-    if (!isLoggedIn()) return;
-    try {
-      const data = await api.post<CourseProgress[]>('/video/courses/enroll-all', {});
-      const map: Record<string, CourseProgress> = {};
-      data.forEach((cp) => { map[cp.course_id] = cp; });
-      setCourseBrowserProgress(map);
-      setProgressVersion((v) => v + 1);
-    } catch { /* ignore */ }
   }, []);
 
   const handleStartCourse = useCallback((courseSlug: string) => {
@@ -253,37 +236,17 @@ export const Ignite: React.FC = () => {
     setShowCourseBrowser(false);
   }, [allCourses]);
 
-  const syncServerProgress = useCallback((slug: string, time: number, duration: number) => {
-    if (!isLoggedIn() || !slug || time < 5) return;
-    const watched = Math.floor(time);
-    api.put(`/video/progress/${slug}`, { watched_seconds: watched, last_position: watched })
-      .then(() => {
-        // If video is near completion, bump progressVersion to trigger sidebar refresh
-        if (duration > 0 && time >= duration * 0.88) {
-          setProgressVersion((v) => v + 1);
-        }
-      })
-      .catch(() => {});
-  }, []);
-
   const handleTimeUpdate = (time: number, dur: number) => {
     setCurrentTime(time);
     setVideoDuration(dur);
     const slug = activeVideo?.slug;
     if (!slug || time < 5) return;
-    // Throttled save to localStorage every 5 seconds
+    // Throttled save to localStorage every 5 seconds (works for all users)
     if (!progressSaveRef.current) {
       progressSaveRef.current = setTimeout(() => {
         progressSaveRef.current = null;
         saveLocalPosition(slug, time);
       }, 5000);
-    }
-    // Throttled sync to server every 30 seconds
-    if (!serverProgressRef.current) {
-      serverProgressRef.current = setTimeout(() => {
-        serverProgressRef.current = null;
-        syncServerProgress(slug, time, dur);
-      }, 30000);
     }
   };
 
@@ -367,7 +330,6 @@ export const Ignite: React.FC = () => {
         <IgniteSidebar
           activeVideoId={activeVideo?.id || ''}
           onSelectVideo={(v) => { setShowCourseBrowser(false); handleSelectVideo(v); }}
-          progressVersion={progressVersion}
           onBrowseCourses={() => setShowCourseBrowser(true)}
           onCoursesLoaded={handleCoursesLoaded}
         />
@@ -391,44 +353,82 @@ export const Ignite: React.FC = () => {
               </div>
               <CourseBrowser
                 courses={allCourses}
-                courseProgress={courseBrowserProgress}
-                onEnroll={handleBrowserEnroll}
-                onEnrollAll={handleEnrollAll}
                 onStartCourse={handleStartCourse}
-                enrollingId={enrollingCourseId}
               />
             </div>
           )}
 
           <div className={`max-w-7xl mx-auto flex flex-col gap-8 relative z-10 ${showCourseBrowser ? 'hidden' : ''}`}>
-            {/* Interested in Contributing? CTA for regular users */}
+            {/* Interested in Contributing? CTA — shown to all users */}
             {showContributeCTA && (
-              <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-xl border border-primary/20 bg-primary/5">
-                <div className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-primary text-xl">volunteer_activism</span>
-                  <div>
-                    <p className="text-sm font-bold text-slate-900 dark:text-white">Interested in contributing?</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {contributeRequest?.status === 'pending'
-                        ? 'Your contribution request is pending admin review.'
-                        : contributeRequest?.status === 'rejected'
-                        ? 'Your previous request was not approved. You may reapply.'
-                        : 'Become a content creator — share videos, articles, and marketplace components.'}
-                    </p>
+              <div className="flex flex-col gap-2 px-4 py-3 rounded-xl border border-primary/20 bg-primary/5">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-primary text-xl">volunteer_activism</span>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">Interested in contributing?</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {!isLoggedIn()
+                          ? guestEmailSent
+                            ? 'Thanks! We\'ll be in touch soon.'
+                            : 'Share your email and we\'ll reach out about becoming a content creator.'
+                          : contributeRequest?.status === 'pending'
+                          ? 'Your contribution request is pending admin review.'
+                          : contributeRequest?.status === 'rejected'
+                          ? 'Your previous request was not approved. You may reapply.'
+                          : 'Become a content creator — share videos, articles, and marketplace components.'}
+                      </p>
+                    </div>
                   </div>
+                  {/* Logged-in user actions */}
+                  {isLoggedIn() && (!contributeRequest || contributeRequest.status === 'rejected') && (
+                    <a
+                      href="/contribute"
+                      className="shrink-0 px-4 py-2 bg-primary hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors"
+                    >
+                      Apply Now
+                    </a>
+                  )}
+                  {isLoggedIn() && contributeRequest?.status === 'pending' && (
+                    <span className="shrink-0 px-3 py-1.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 text-xs font-bold rounded-lg">
+                      Under Review
+                    </span>
+                  )}
+                  {/* Non-logged-in actions */}
+                  {!isLoggedIn() && !guestEmailSent && (
+                    <button
+                      onClick={() => setShowGuestEmailForm(!showGuestEmailForm)}
+                      className="shrink-0 px-4 py-2 bg-primary hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors"
+                    >
+                      Apply Now
+                    </button>
+                  )}
                 </div>
-                {(!contributeRequest || contributeRequest.status === 'rejected') && (
-                  <a
-                    href="/contribute"
-                    className="shrink-0 px-4 py-2 bg-primary hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors"
-                  >
-                    Apply Now
-                  </a>
-                )}
-                {contributeRequest?.status === 'pending' && (
-                  <span className="shrink-0 px-3 py-1.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 text-xs font-bold rounded-lg">
-                    Under Review
-                  </span>
+                {/* Inline email form for guests */}
+                {!isLoggedIn() && showGuestEmailForm && !guestEmailSent && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <input
+                      type="email"
+                      value={guestEmail}
+                      onChange={(e) => setGuestEmail(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleGuestInterest()}
+                      placeholder="your@email.com"
+                      className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                    />
+                    <button
+                      onClick={handleGuestInterest}
+                      disabled={guestEmailSubmitting || !guestEmail.trim()}
+                      className="shrink-0 px-4 py-1.5 bg-primary hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {guestEmailSubmitting ? 'Sending...' : 'Submit'}
+                    </button>
+                    <button
+                      onClick={() => setShowGuestEmailForm(false)}
+                      className="shrink-0 text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-base">close</span>
+                    </button>
+                  </div>
                 )}
               </div>
             )}

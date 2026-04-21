@@ -11,6 +11,7 @@ interface SolutionCard {
   icon_color: string;
   badge: string | null;
   link_url: string | null;
+  launch_url: string | null;
   sort_order: number;
   is_active: boolean;
   created_at: string;
@@ -39,6 +40,7 @@ interface CardForm {
   icon_color: string;
   badge: string;
   link_url: string;
+  launch_url: string;
   sort_order: number;
 }
 
@@ -69,7 +71,7 @@ interface Video {
 
 const EMPTY_CARD: CardForm = {
   title: '', subtitle: '', description: '', long_description: '',
-  icon: 'smart_toy', icon_color: 'text-primary', badge: '', link_url: '', sort_order: 0,
+  icon: 'smart_toy', icon_color: 'text-primary', badge: '', link_url: '', launch_url: '', sort_order: 0,
 };
 
 const EMPTY_NEWS: NewsForm = {
@@ -195,6 +197,7 @@ export const AdminSolutions: React.FC = () => {
       icon_color: card.icon_color,
       badge: card.badge || '',
       link_url: card.link_url || '',
+      launch_url: card.launch_url || '',
       sort_order: card.sort_order,
     });
   };
@@ -212,6 +215,7 @@ export const AdminSolutions: React.FC = () => {
       long_description: cardForm.long_description || null,
       badge: cardForm.badge || null,
       link_url: cardForm.link_url || null,
+      launch_url: cardForm.launch_url || null,
     };
     try {
       if (creatingCard) {
@@ -656,11 +660,20 @@ export const AdminSolutions: React.FC = () => {
                     className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Link URL</label>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Link URL <span className="text-slate-600 normal-case font-normal">(detail page)</span></label>
                   <input value={cardForm.link_url} onChange={(e) => setCardForm((f) => ({ ...f, link_url: e.target.value }))}
                     placeholder="/marketplace"
                     className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Launch URL <span className="text-slate-600 normal-case font-normal">(direct link — shows Launch button on card)</span>
+                </label>
+                <input value={cardForm.launch_url} onChange={(e) => setCardForm((f) => ({ ...f, launch_url: e.target.value }))}
+                  placeholder="https://tool.company.internal"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <div className="flex gap-3 pt-4 border-t border-white/10">

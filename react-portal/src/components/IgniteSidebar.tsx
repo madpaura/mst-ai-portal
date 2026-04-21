@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { api, isLoggedIn } from '../api/client';
+import { api } from '../api/client';
 
 export interface Video {
   id: string;
@@ -63,7 +63,6 @@ const CATEGORIES = ['All', 'Code-mate', 'RAG', 'Agents', 'Deep Dive'];
 interface IgniteSidebarProps {
   activeVideoId: string;
   onSelectVideo: (video: Video) => void;
-  progressVersion?: number;
   onBrowseCourses?: () => void;
   onCoursesLoaded?: (courses: Course[], progress: Record<string, CourseProgress>) => void;
 }
@@ -71,7 +70,6 @@ interface IgniteSidebarProps {
 export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
   activeVideoId,
   onSelectVideo,
-  progressVersion = 0,
   onBrowseCourses,
   onCoursesLoaded,
 }) => {
@@ -221,21 +219,9 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
     });
   }, [handleExpandCourse]);
 
-  // Load course progress for passing to CourseBrowser parent
+  // Notify parent when courses load
   useEffect(() => {
-    if (!isLoggedIn() || courses.length === 0) return;
-    api.get<CourseProgress[]>('/video/my-courses')
-      .then((data) => {
-        const map: Record<string, CourseProgress> = {};
-        data.forEach((cp) => { map[cp.course_id] = cp; });
-        if (onCoursesLoaded) onCoursesLoaded(courses, map);
-      })
-      .catch(() => {});
-  }, [courses, progressVersion]);
-
-  // Notify parent when courses load (non-logged-in)
-  useEffect(() => {
-    if (!isLoggedIn() && courses.length > 0 && onCoursesLoaded) {
+    if (courses.length > 0 && onCoursesLoaded) {
       onCoursesLoaded(courses, {});
     }
   }, [courses]);
@@ -385,9 +371,9 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
                                 : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700'
                             }`}
                           >
-                            {globalIdx}
+                            {isActive ? <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: "'FILL' 1" }}>play_arrow</span> : globalIdx}
                           </div>
-                          <div className="flex-1">
+                          <div className="flex-1 min-w-0">
                             <h3
                               className={`text-sm mb-1 group-hover:text-primary transition-colors ${
                                 isActive ? 'font-bold text-slate-900 dark:text-white' : 'font-medium text-slate-600 dark:text-slate-300'
@@ -403,9 +389,17 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
                               <span>{video.duration}</span>
                             </div>
                           </div>
-                          {isActive && (
-                            <span className="material-symbols-outlined text-primary text-lg animate-pulse">play_circle</span>
-                          )}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onSelectVideo(video); }}
+                            className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+                              isActive
+                                ? 'bg-primary text-white'
+                                : 'bg-slate-200 dark:bg-slate-700 text-slate-500 opacity-0 group-hover:opacity-100 hover:bg-primary hover:text-white'
+                            }`}
+                            title={`Play ${video.title}`}
+                          >
+                            <span className="material-symbols-outlined text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>play_arrow</span>
+                          </button>
                         </div>
                       </div>
                     );

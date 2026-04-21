@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../api/auth';
 import { useTheme } from '../context/theme';
 
+const BETA_TAG = import.meta.env.VITE_BETA_TAG as string | undefined;
+
 interface NavbarProps {
   variant?: 'solutions' | 'marketplace' | 'ignite';
 }
@@ -28,6 +30,11 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
               <span className="material-symbols-outlined text-3xl font-bold">memory</span>
             </div>
             <Link to="/" className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">MST AI</Link>
+            {BETA_TAG && (
+              <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded bg-amber-400/15 text-amber-500 border border-amber-400/30">
+                {BETA_TAG}
+              </span>
+            )}
           </div>
           <div className="hidden md:flex items-center gap-10">
             <Link

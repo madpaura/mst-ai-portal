@@ -18,7 +18,7 @@ def _row_to_card(r) -> SolutionCardResponse:
         id=str(r["id"]), title=r["title"], subtitle=r.get("subtitle"),
         description=r["description"], long_description=r.get("long_description"),
         icon=r.get("icon", "smart_toy"), icon_color=r.get("icon_color", "text-primary"),
-        badge=r.get("badge"), link_url=r.get("link_url"),
+        badge=r.get("badge"), link_url=r.get("link_url"), launch_url=r.get("launch_url"),
         sort_order=r["sort_order"], is_active=r["is_active"],
         created_at=r["created_at"], updated_at=r["updated_at"],
     )
@@ -42,12 +42,12 @@ async def create_solution_card(req: SolutionCardCreate, admin: dict = Depends(re
     row = await db.fetchrow(
         """
         INSERT INTO solution_cards
-            (title, subtitle, description, long_description, icon, icon_color, badge, link_url, sort_order)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+            (title, subtitle, description, long_description, icon, icon_color, badge, link_url, launch_url, sort_order)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
         RETURNING *
         """,
         req.title, req.subtitle, req.description, req.long_description,
-        req.icon, req.icon_color, req.badge, req.link_url, req.sort_order,
+        req.icon, req.icon_color, req.badge, req.link_url, req.launch_url, req.sort_order,
     )
     return _row_to_card(row)
 
@@ -73,7 +73,7 @@ async def update_solution_card(
     fields = {}
     for field in [
         "title", "subtitle", "description", "long_description", "icon",
-        "icon_color", "badge", "link_url", "sort_order", "is_active",
+        "icon_color", "badge", "link_url", "launch_url", "sort_order", "is_active",
     ]:
         val = getattr(req, field, None)
         if val is not None:

@@ -294,3 +294,23 @@ async def delete_user(user_id: str, admin: dict = Depends(require_admin)):
     if result == "DELETE 0":
         raise HTTPException(status_code=404, detail="User not found")
     return {"message": "User deleted"}
+
+
+# ── Guest interest signup (no auth required) ──────────────────────────────────
+
+class GuestInterestRequest(BaseModel):
+    email: str
+    source: str = "contribute"
+
+
+@router.post("/auth/guest-interest")
+async def guest_interest(req: GuestInterestRequest):
+    import re
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", req.email.strip()):
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO guest_interests (email, source) VALUES ($1, $2)",
+        req.email.strip().lower(), req.source,
+    )
+    return {"message": "Thank you! We'll be in touch."}
