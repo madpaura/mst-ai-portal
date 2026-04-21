@@ -15,7 +15,7 @@ from video.schemas import (
     ChapterCreate, ChapterUpdate, ChapterReorder, HowtoResponse, HowtoUpdate,
     QualitySettingResponse, QualitySettingUpdate, SeedNoteCreate,
     SeedNoteResponse, JobStatusResponse, BannerConfigResponse, BannerConfigUpdate,
-    TrimRequest, CutRequest, AttachmentResponse, AttachmentUpdate,
+    TrimRequest, CutRequest, SpeedSectionRequest, AttachmentResponse, AttachmentUpdate,
 )
 from pydantic import BaseModel
 from auth.dependencies import require_content as require_admin
@@ -611,6 +611,216 @@ async def _cut_video_task(
             await pool.execute(
                 "UPDATE videos SET status = 'error' WHERE id = $1", video_id,
             )
+        except Exception:
+            pass
+    finally:
+        await pool.close()
+
+
+def _build_atempo_chain(factor: float) -> str:
+    """Return a chained atempo filter string for any speed factor >= 1."""
+    filters = []
+    remaining = factor
+    while remaining > 2.0:
+        filters.append("atempo=2.0")
+        remaining /= 2.0
+    if remaining > 1.001:
+        filters.append(f"atempo={remaining:.6f}")
+    return ",".join(filters) if filters else "atempo=1.0"
+
+
+@router.post("/videos/{video_id}/speed-section")
+async def admin_speed_section(
+    video_id: str, req: SpeedSectionRequest, background_tasks: BackgroundTasks,
+    admin: dict = Depends(require_admin),
+):
+    """Speed up the segment between start_seconds and end_seconds by speed_factor."""
+    allowed_factors = {2.0, 4.0, 8.0, 16.0, 32.0}
+    if req.speed_factor not in allowed_factors:
+        raise HTTPException(status_code=400, detail=f"speed_factor must be one of {sorted(allowed_factors)}")
+    if req.start_seconds < 0:
+        raise HTTPException(status_code=400, detail="start_seconds must be >= 0")
+    if req.end_seconds <= req.start_seconds:
+        raise HTTPException(status_code=400, detail="end_seconds must be > start_seconds")
+
+    db = await get_db()
+    video = await db.fetchrow("SELECT id, status FROM videos WHERE id = $1", video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    raw_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original.mp4")
+    backup_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original_prespeed.mp4")
+
+    if not os.path.exists(raw_path):
+        raise HTTPException(status_code=400, detail="No raw video file found")
+
+    background_tasks.add_task(
+        _speed_section_task, video_id, req.start_seconds, req.end_seconds,
+        req.speed_factor, raw_path, backup_path, settings.DATABASE_URL,
+    )
+
+    await db.execute("UPDATE videos SET status = 'processing' WHERE id = $1", video_id)
+    return {"message": "Speed-up job started", "start": req.start_seconds, "end": req.end_seconds, "factor": req.speed_factor}
+
+
+async def _speed_section_task(
+    video_id: str, start: float, end: float, factor: float,
+    raw_path: str, backup_path: str, db_url: str,
+):
+    """Background task: speed up a segment of the video by re-encoding three segments."""
+    import asyncpg as apg
+
+    pool = await apg.create_pool(db_url, min_size=1, max_size=2)
+    part_before = raw_path + ".spd_before.mp4"
+    part_mid_raw = raw_path + ".spd_mid_raw.mp4"
+    part_mid_fast = raw_path + ".spd_mid_fast.mp4"
+    part_after = raw_path + ".spd_after.mp4"
+    concat_list = raw_path + ".spd_concat.txt"
+    spd_output = raw_path + ".spd_result.mp4"
+    tmp_files = [part_before, part_mid_raw, part_mid_fast, part_after, concat_list, spd_output]
+
+    try:
+        # Backup original (only first time)
+        if not os.path.exists(backup_path):
+            shutil.copy2(raw_path, backup_path)
+
+        source_path = backup_path if os.path.exists(backup_path) else raw_path
+
+        # Probe for audio streams
+        probe_cmd = [
+            settings.FFMPEG_PATH.replace("ffmpeg", "ffprobe"),
+            "-v", "quiet", "-print_format", "json", "-show_streams", source_path,
+        ]
+        probe_r = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30)
+        has_audio = False
+        if probe_r.returncode == 0:
+            try:
+                streams = json.loads(probe_r.stdout).get("streams", [])
+                has_audio = any(s.get("codec_type") == "audio" for s in streams)
+            except Exception:
+                pass
+
+        encode_opts = [
+            *get_encode_args(crf=18),
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+        ]
+        if has_audio:
+            encode_opts += ["-c:a", "aac", "-b:a", "128k"]
+
+        parts = []
+
+        # --- Part 1: before segment (0 → start) ---
+        if start > 0:
+            cmd = [settings.FFMPEG_PATH, "-y", "-i", source_path, "-t", str(start), *encode_opts, part_before]
+            log.info(f"Speed-section {video_id}: extracting before 0s-{start}s")
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            if r.returncode != 0:
+                raise RuntimeError(f"Before-segment failed: {r.stderr[-500:]}")
+            parts.append(part_before)
+
+        # --- Part 2: middle segment (start → end), extracted raw then sped up ---
+        cmd = [
+            settings.FFMPEG_PATH, "-y", "-ss", str(start), "-i", source_path,
+            "-t", str(end - start), *encode_opts, part_mid_raw,
+        ]
+        log.info(f"Speed-section {video_id}: extracting middle {start}s-{end}s")
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        if r.returncode != 0:
+            raise RuntimeError(f"Middle-segment failed: {r.stderr[-500:]}")
+
+        # Build speed-up filter
+        video_filter = f"setpts=PTS/{factor}"
+        if has_audio:
+            atempo = _build_atempo_chain(factor)
+            filter_complex = f"[0:v]{video_filter}[v];[0:a]{atempo}[a]"
+            speed_cmd = [
+                settings.FFMPEG_PATH, "-y", "-i", part_mid_raw,
+                "-filter_complex", filter_complex,
+                "-map", "[v]", "-map", "[a]",
+                *encode_opts,
+                part_mid_fast,
+            ]
+        else:
+            speed_cmd = [
+                settings.FFMPEG_PATH, "-y", "-i", part_mid_raw,
+                "-vf", video_filter,
+                "-an",
+                *encode_opts,
+                part_mid_fast,
+            ]
+        log.info(f"Speed-section {video_id}: applying {factor}x speed to middle")
+        r = subprocess.run(speed_cmd, capture_output=True, text=True, timeout=600)
+        if r.returncode != 0:
+            raise RuntimeError(f"Speed filter failed: {r.stderr[-500:]}")
+        parts.append(part_mid_fast)
+
+        # --- Part 3: after segment (end → EOF) ---
+        cmd = [settings.FFMPEG_PATH, "-y", "-ss", str(end), "-i", source_path, *encode_opts, part_after]
+        log.info(f"Speed-section {video_id}: extracting after {end}s-EOF")
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        if r.returncode != 0:
+            raise RuntimeError(f"After-segment failed: {r.stderr[-500:]}")
+        if os.path.exists(part_after) and os.path.getsize(part_after) > 0:
+            parts.append(part_after)
+
+        # --- Concatenate all parts ---
+        if len(parts) == 1:
+            shutil.move(parts[0], spd_output)
+        else:
+            with open(concat_list, "w") as f:
+                for p in parts:
+                    f.write(f"file '{p}'\n")
+            concat_cmd = [
+                settings.FFMPEG_PATH, "-y",
+                "-f", "concat", "-safe", "0", "-i", concat_list,
+                "-c", "copy", "-movflags", "+faststart",
+                spd_output,
+            ]
+            log.info(f"Speed-section {video_id}: concatenating {len(parts)} segments")
+            r = subprocess.run(concat_cmd, capture_output=True, text=True, timeout=600)
+            if r.returncode != 0:
+                raise RuntimeError(f"Concat failed: {r.stderr[-500:]}")
+
+        if not os.path.exists(spd_output) or os.path.getsize(spd_output) == 0:
+            raise RuntimeError("Speed-section output file is empty or missing")
+
+        shutil.move(spd_output, raw_path)
+
+        for tmp in [part_before, part_mid_raw, part_mid_fast, part_after, concat_list]:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+
+        # Probe new duration
+        probe_cmd2 = [
+            settings.FFMPEG_PATH.replace("ffmpeg", "ffprobe"),
+            "-v", "quiet", "-print_format", "json", "-show_format", raw_path,
+        ]
+        probe_r2 = subprocess.run(probe_cmd2, capture_output=True, text=True, timeout=30)
+        new_duration = None
+        if probe_r2.returncode == 0:
+            try:
+                new_duration = int(float(json.loads(probe_r2.stdout).get("format", {}).get("duration", 0)))
+            except Exception:
+                pass
+
+        if new_duration:
+            await pool.execute("UPDATE videos SET duration_s = $1 WHERE id = $2", new_duration, video_id)
+
+        await pool.execute("UPDATE videos SET status = 'uploaded' WHERE id = $1", video_id)
+        _write_ops_log(os.path.dirname(raw_path), "speed-section")
+        log.info(f"Video {video_id} speed-section ({factor}x) completed")
+
+    except Exception as e:
+        log.error(f"Speed-section unexpected error: {e}")
+        for tmp in tmp_files:
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except Exception:
+                    pass
+        try:
+            await pool.execute("UPDATE videos SET status = 'error' WHERE id = $1", video_id)
         except Exception:
             pass
     finally:

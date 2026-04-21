@@ -170,11 +170,14 @@ export const AdminVideos: React.FC = () => {
   const [emailShowSaved, setEmailShowSaved] = useState(false);
   const emailCsvRef = useRef<HTMLInputElement>(null);
 
-  // Trim / Cut
+  // Trim / Cut / Speed
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [trimming, setTrimming] = useState(false);
-  const [trimMode, setTrimMode] = useState<'trim' | 'cut'>('trim');
+  const [trimMode, setTrimMode] = useState<'trim' | 'cut' | 'speed'>('trim');
+  const [speedFactor, setSpeedFactor] = useState<number>(2);
+  const [dragging, setDragging] = useState<'start' | 'end' | null>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
 
   // Upload
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -512,6 +515,41 @@ export const AdminVideos: React.FC = () => {
       showMsg('error', err.message);
     } finally {
       setTrimming(false);
+    }
+  };
+
+  const handleSpeedSection = async () => {
+    if (!selected) return;
+    if (trimEnd <= trimStart) {
+      showMsg('error', 'End time must be after start time');
+      return;
+    }
+    setTrimming(true);
+    try {
+      await api.post(`/admin/videos/${selected.id}/speed-section`, {
+        start_seconds: trimStart,
+        end_seconds: trimEnd,
+        speed_factor: speedFactor,
+      });
+      await fetchVideos();
+      markEdited(selected.id);
+      showMsg('success', `Speed-up started: ${trimStart}s — ${trimEnd}s at ${speedFactor}x. Transcode when ready.`);
+    } catch (err: any) {
+      showMsg('error', err.message);
+    } finally {
+      setTrimming(false);
+    }
+  };
+
+  const handleTimelineDrag = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!dragging || !timelineRef.current || playerDuration <= 0) return;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const t = Math.round(pct * playerDuration * 10) / 10;
+    if (dragging === 'start') {
+      setTrimStart(Math.min(t, trimEnd - 0.1));
+    } else {
+      setTrimEnd(Math.max(t, trimStart + 0.1));
     }
   };
 
@@ -1710,28 +1748,67 @@ export const AdminVideos: React.FC = () => {
                     <span className="material-symbols-outlined text-sm">content_cut</span>
                     Cut
                   </button>
+                  <button
+                    onClick={() => setTrimMode('speed')}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                      trimMode === 'speed'
+                        ? 'bg-orange-500 text-white'
+                        : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700 border border-white/10'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-sm">fast_forward</span>
+                    Speed Up
+                  </button>
                 </div>
                 <p className="text-sm text-slate-400">
                   {trimMode === 'trim'
                     ? 'Trim keeps only the section between start and end times. The original is backed up before the first trim.'
-                    : 'Cut removes the section between start and end times, keeping everything before and after. The original is backed up before the first cut.'}
+                    : trimMode === 'cut'
+                    ? 'Cut removes the section between start and end times, keeping everything before and after. The original is backed up before the first cut.'
+                    : 'Speed Up accelerates the selected section by the chosen factor. Drag the handles on the timeline or use the inputs to define the section.'}
                 </p>
+
+                {/* Speed factor selector */}
+                {trimMode === 'speed' && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-orange-500/5 border border-orange-500/20">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">Speed Factor</span>
+                    {[2, 4, 8, 16, 32].map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => setSpeedFactor(f)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                          speedFactor === f
+                            ? 'bg-orange-500 text-white'
+                            : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700 border border-white/10'
+                        }`}
+                      >
+                        {f}x
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {/* Timeline with trim markers */}
                 {(selected.hls_path || selected.status !== 'draft') && playerDuration > 0 ? (
                   <div className="px-1">
-                    <div className="relative w-full h-10 bg-slate-800/50 rounded-lg border border-white/5 overflow-hidden">
+                    <div
+                      ref={timelineRef}
+                      className={`relative w-full h-10 bg-slate-800/50 rounded-lg border border-white/5 overflow-hidden ${dragging ? 'cursor-grabbing' : 'cursor-default'}`}
+                      onMouseMove={handleTimelineDrag}
+                      onMouseUp={() => setDragging(null)}
+                      onMouseLeave={() => setDragging(null)}
+                    >
                       {/* Playhead */}
                       {playerDuration > 0 && (
                         <div
-                          className="absolute top-0 h-full w-0.5 bg-white/60 z-20"
+                          className="absolute top-0 h-full w-0.5 bg-white/60 z-20 pointer-events-none"
                           style={{ left: `${(playerTime / playerDuration) * 100}%` }}
                         />
                       )}
                       {/* Selected region */}
                       {playerDuration > 0 && trimEnd > trimStart && trimMode === 'trim' && (
                         <div
-                          className="absolute top-0 h-full bg-primary/20 border-x-2 border-primary/60 z-10"
+                          className="absolute top-0 h-full bg-primary/20 border-x-2 border-primary/60 z-10 pointer-events-none"
                           style={{
                             left: `${(trimStart / playerDuration) * 100}%`,
                             width: `${((trimEnd - trimStart) / playerDuration) * 100}%`,
@@ -1742,7 +1819,7 @@ export const AdminVideos: React.FC = () => {
                       {playerDuration > 0 && trimEnd > trimStart && trimMode === 'cut' && (
                         <>
                           <div
-                            className="absolute top-0 h-full bg-red-500/20 border-x-2 border-red-500/60 z-10"
+                            className="absolute top-0 h-full bg-red-500/20 border-x-2 border-red-500/60 z-10 pointer-events-none"
                             style={{
                               left: `${(trimStart / playerDuration) * 100}%`,
                               width: `${((trimEnd - trimStart) / playerDuration) * 100}%`,
@@ -1752,7 +1829,7 @@ export const AdminVideos: React.FC = () => {
                           {/* Kept regions */}
                           {trimStart > 0 && (
                             <div
-                              className="absolute top-0 h-full bg-green-500/10 z-[5]"
+                              className="absolute top-0 h-full bg-green-500/10 z-[5] pointer-events-none"
                               style={{
                                 left: '0%',
                                 width: `${(trimStart / playerDuration) * 100}%`,
@@ -1760,7 +1837,7 @@ export const AdminVideos: React.FC = () => {
                             />
                           )}
                           <div
-                            className="absolute top-0 h-full bg-green-500/10 z-[5]"
+                            className="absolute top-0 h-full bg-green-500/10 z-[5] pointer-events-none"
                             style={{
                               left: `${(trimEnd / playerDuration) * 100}%`,
                               width: `${((playerDuration - trimEnd) / playerDuration) * 100}%`,
@@ -1768,22 +1845,39 @@ export const AdminVideos: React.FC = () => {
                           />
                         </>
                       )}
-                      {/* Start marker */}
+                      {/* Speed-up region (orange) */}
+                      {playerDuration > 0 && trimEnd > trimStart && trimMode === 'speed' && (
+                        <div
+                          className="absolute top-0 h-full bg-orange-500/25 border-x-2 border-orange-400/60 z-10 pointer-events-none"
+                          style={{
+                            left: `${(trimStart / playerDuration) * 100}%`,
+                            width: `${((trimEnd - trimStart) / playerDuration) * 100}%`,
+                            backgroundImage: 'repeating-linear-gradient(-45deg, transparent, transparent 4px, rgba(249,115,22,0.15) 4px, rgba(249,115,22,0.15) 8px)',
+                          }}
+                        />
+                      )}
+                      {/* Start marker (draggable) */}
                       {playerDuration > 0 && (
                         <div
-                          className="absolute top-0 h-full w-1 bg-green-400 z-15 cursor-pointer"
-                          style={{ left: `${(trimStart / playerDuration) * 100}%` }}
-                          title={`Start: ${formatDuration(trimStart)}`}
+                          className="absolute top-0 h-full w-2 bg-green-400 z-30 cursor-ew-resize hover:bg-green-300 transition-colors"
+                          style={{ left: `${(trimStart / playerDuration) * 100}%`, transform: 'translateX(-50%)' }}
+                          title={`Start: ${formatDuration(trimStart)} — drag to adjust`}
+                          onMouseDown={(e) => { e.preventDefault(); setDragging('start'); }}
                         />
                       )}
-                      {/* End marker */}
+                      {/* End marker (draggable) */}
                       {playerDuration > 0 && trimEnd > 0 && (
                         <div
-                          className="absolute top-0 h-full w-1 bg-red-400 z-15 cursor-pointer"
-                          style={{ left: `${(trimEnd / playerDuration) * 100}%` }}
-                          title={`End: ${formatDuration(trimEnd)}`}
+                          className="absolute top-0 h-full w-2 bg-red-400 z-30 cursor-ew-resize hover:bg-red-300 transition-colors"
+                          style={{ left: `${(trimEnd / playerDuration) * 100}%`, transform: 'translateX(-50%)' }}
+                          title={`End: ${formatDuration(trimEnd)} — drag to adjust`}
+                          onMouseDown={(e) => { e.preventDefault(); setDragging('end'); }}
                         />
                       )}
+                    </div>
+                    <div className="flex justify-between text-[10px] text-slate-600 mt-1 px-0.5">
+                      <span>0:00</span>
+                      <span>{formatDuration(Math.floor(playerDuration))}</span>
                     </div>
                   </div>
                 ) : (
@@ -1851,7 +1945,7 @@ export const AdminVideos: React.FC = () => {
                           {' '}
                           <span className="text-slate-500">({formatDuration(Math.floor(trimEnd - trimStart))} duration)</span>
                         </>
-                      ) : (
+                      ) : trimMode === 'cut' ? (
                         <>
                           Remove <span className="font-bold text-red-400">{formatDuration(Math.floor(trimStart))}</span>
                           {' → '}
@@ -1859,29 +1953,41 @@ export const AdminVideos: React.FC = () => {
                           {' '}
                           <span className="text-slate-500">({formatDuration(Math.floor(trimEnd - trimStart))} removed)</span>
                         </>
+                      ) : (
+                        <>
+                          Speed up <span className="font-bold text-orange-400">{formatDuration(Math.floor(trimStart))}</span>
+                          {' → '}
+                          <span className="font-bold text-orange-400">{formatDuration(Math.floor(trimEnd))}</span>
+                          {' '}
+                          <span className="text-slate-500">at {speedFactor}x ({formatDuration(Math.floor((trimEnd - trimStart) / speedFactor))} after)</span>
+                        </>
                       )
                     ) : (
                       <span className="text-slate-500">Set start and end times to define the {trimMode} region</span>
                     )}
                   </div>
                   <button
-                    onClick={trimMode === 'trim' ? handleTrim : handleCut}
+                    onClick={trimMode === 'trim' ? handleTrim : trimMode === 'cut' ? handleCut : handleSpeedSection}
                     disabled={trimming || trimEnd <= trimStart}
                     className={`flex items-center gap-2 px-5 py-2.5 disabled:opacity-30 text-white text-sm font-bold rounded-lg transition-colors ${
                       trimMode === 'trim'
                         ? 'bg-primary hover:bg-blue-500'
-                        : 'bg-red-600 hover:bg-red-500'
+                        : trimMode === 'cut'
+                        ? 'bg-red-600 hover:bg-red-500'
+                        : 'bg-orange-500 hover:bg-orange-400'
                     }`}
                   >
                     {trimming ? (
                       <>
                         <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
-                        {trimMode === 'trim' ? 'Trimming...' : 'Cutting...'}
+                        {trimMode === 'trim' ? 'Trimming...' : trimMode === 'cut' ? 'Cutting...' : 'Processing...'}
                       </>
                     ) : (
                       <>
-                        <span className="material-symbols-outlined text-sm">{trimMode === 'trim' ? 'crop' : 'content_cut'}</span>
-                        {trimMode === 'trim' ? 'Trim Video' : 'Cut Video'}
+                        <span className="material-symbols-outlined text-sm">
+                          {trimMode === 'trim' ? 'crop' : trimMode === 'cut' ? 'content_cut' : 'fast_forward'}
+                        </span>
+                        {trimMode === 'trim' ? 'Trim Video' : trimMode === 'cut' ? 'Cut Video' : `Speed Up ${speedFactor}x`}
                       </>
                     )}
                   </button>

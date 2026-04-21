@@ -213,6 +213,12 @@ class CutRequest(BaseModel):
     end_seconds: float
 
 
+class SpeedSectionRequest(BaseModel):
+    start_seconds: float
+    end_seconds: float
+    speed_factor: float  # 2, 4, 8, 16, 32
+
+
 class AttachmentResponse(BaseModel):
     id: str
     video_id: str
