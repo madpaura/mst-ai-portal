@@ -670,14 +670,16 @@ async def _speed_section_task(
     """Background task: speed up a segment of the video by re-encoding three segments."""
     import asyncpg as apg
 
+    # libx264/h264_nvenc require even dimensions; scale to nearest even if needed
+    SCALE_EVEN = "scale=trunc(iw/2)*2:trunc(ih/2)*2"
+
     pool = await apg.create_pool(db_url, min_size=1, max_size=2)
     part_before = raw_path + ".spd_before.mp4"
-    part_mid_raw = raw_path + ".spd_mid_raw.mp4"
     part_mid_fast = raw_path + ".spd_mid_fast.mp4"
     part_after = raw_path + ".spd_after.mp4"
     concat_list = raw_path + ".spd_concat.txt"
     spd_output = raw_path + ".spd_result.mp4"
-    tmp_files = [part_before, part_mid_raw, part_mid_fast, part_after, concat_list, spd_output]
+    tmp_files = [part_before, part_mid_fast, part_after, concat_list, spd_output]
 
     try:
         # Backup original (only first time)
@@ -700,67 +702,72 @@ async def _speed_section_task(
             except Exception:
                 pass
 
-        encode_opts = [
-            *get_encode_args(crf=18),
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-        ]
-        if has_audio:
-            encode_opts += ["-c:a", "aac", "-b:a", "128k"]
+        vcodec_opts = [*get_encode_args(crf=18), "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
+        acodec_opts = (["-c:a", "aac", "-b:a", "128k"] if has_audio else ["-an"])
 
         parts = []
 
         # --- Part 1: before segment (0 → start) ---
         if start > 0:
-            cmd = [settings.FFMPEG_PATH, "-y", "-i", source_path, "-t", str(start), *encode_opts, part_before]
+            cmd = [
+                settings.FFMPEG_PATH, "-y",
+                *get_hwaccel_args(),
+                "-t", str(start), "-i", source_path,
+                "-vf", SCALE_EVEN,
+                *vcodec_opts, *acodec_opts,
+                part_before,
+            ]
             log.info(f"Speed-section {video_id}: extracting before 0s-{start}s")
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
             if r.returncode != 0:
-                raise RuntimeError(f"Before-segment failed: {r.stderr[-500:]}")
+                raise RuntimeError(f"Before-segment failed: {r.stderr[-800:]}")
             parts.append(part_before)
 
-        # --- Part 2: middle segment (start → end), extracted raw then sped up ---
-        cmd = [
-            settings.FFMPEG_PATH, "-y", "-ss", str(start), "-i", source_path,
-            "-t", str(end - start), *encode_opts, part_mid_raw,
-        ]
-        log.info(f"Speed-section {video_id}: extracting middle {start}s-{end}s")
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-        if r.returncode != 0:
-            raise RuntimeError(f"Middle-segment failed: {r.stderr[-500:]}")
-
-        # Build speed-up filter
-        video_filter = f"setpts=PTS/{factor}"
+        # --- Part 2 (middle): extract + apply speed in one pass via filter_complex ---
+        # Use (PTS-STARTPTS)/N so PTS resets to 0 before dividing (required for VFR sources).
+        # Place -ss and -t as INPUT options (before -i) for accurate seeking and trimming.
+        mid_duration = end - start
+        atempo = _build_atempo_chain(factor) if has_audio else None
         if has_audio:
-            atempo = _build_atempo_chain(factor)
-            filter_complex = f"[0:v]{video_filter}[v];[0:a]{atempo}[a]"
+            fc = f"[0:v]{SCALE_EVEN},setpts=(PTS-STARTPTS)/{factor}[v];[0:a]{atempo}[a]"
             speed_cmd = [
-                settings.FFMPEG_PATH, "-y", "-i", part_mid_raw,
-                "-filter_complex", filter_complex,
+                settings.FFMPEG_PATH, "-y",
+                *get_hwaccel_args(),
+                "-ss", str(start), "-t", str(mid_duration), "-i", source_path,
+                "-filter_complex", fc,
                 "-map", "[v]", "-map", "[a]",
-                *encode_opts,
+                *vcodec_opts, *acodec_opts,
                 part_mid_fast,
             ]
         else:
             speed_cmd = [
-                settings.FFMPEG_PATH, "-y", "-i", part_mid_raw,
-                "-vf", video_filter,
-                "-an",
-                *encode_opts,
+                settings.FFMPEG_PATH, "-y",
+                *get_hwaccel_args(),
+                "-ss", str(start), "-t", str(mid_duration), "-i", source_path,
+                "-vf", f"{SCALE_EVEN},setpts=(PTS-STARTPTS)/{factor}",
+                *vcodec_opts, "-an",
                 part_mid_fast,
             ]
-        log.info(f"Speed-section {video_id}: applying {factor}x speed to middle")
+        log.info(f"Speed-section {video_id}: extracting+speeding middle {start}s-{end}s at {factor}x")
         r = subprocess.run(speed_cmd, capture_output=True, text=True, timeout=600)
         if r.returncode != 0:
-            raise RuntimeError(f"Speed filter failed: {r.stderr[-500:]}")
+            raise RuntimeError(f"Speed filter failed: {r.stderr[-800:]}")
         parts.append(part_mid_fast)
 
         # --- Part 3: after segment (end → EOF) ---
-        cmd = [settings.FFMPEG_PATH, "-y", "-ss", str(end), "-i", source_path, *encode_opts, part_after]
+        cmd = [
+            settings.FFMPEG_PATH, "-y",
+            *get_hwaccel_args(),
+            "-ss", str(end), "-i", source_path,
+            "-vf", SCALE_EVEN,
+            *vcodec_opts, *acodec_opts,
+            part_after,
+        ]
+        # note: no -t here — read to EOF
         log.info(f"Speed-section {video_id}: extracting after {end}s-EOF")
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
         if r.returncode != 0:
-            raise RuntimeError(f"After-segment failed: {r.stderr[-500:]}")
+            raise RuntimeError(f"After-segment failed: {r.stderr[-800:]}")
         if os.path.exists(part_after) and os.path.getsize(part_after) > 0:
             parts.append(part_after)
 
@@ -787,7 +794,7 @@ async def _speed_section_task(
 
         shutil.move(spd_output, raw_path)
 
-        for tmp in [part_before, part_mid_raw, part_mid_fast, part_after, concat_list]:
+        for tmp in [part_before, part_mid_fast, part_after, concat_list]:
             if os.path.exists(tmp):
                 os.remove(tmp)
 
