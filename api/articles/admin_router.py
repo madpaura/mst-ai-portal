@@ -104,6 +104,7 @@ async def admin_update_article(
     if not row:
         raise HTTPException(status_code=404, detail="Article not found")
 
+    _ARTICLE_UPDATABLE_FIELDS = frozenset({"title", "slug", "summary", "content", "category"})
     updates = {}
     if req.title is not None:
         updates["title"] = req.title
@@ -115,6 +116,7 @@ async def admin_update_article(
         updates["content"] = req.content
     if req.category is not None:
         updates["category"] = req.category
+    updates = {k: v for k, v in updates.items() if k in _ARTICLE_UPDATABLE_FIELDS}
 
     if updates:
         set_clauses = [f"{k} = ${i+1}" for i, k in enumerate(updates.keys())]

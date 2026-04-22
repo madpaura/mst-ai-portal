@@ -136,8 +136,9 @@ async def admin_update_video(
     if not existing:
         raise HTTPException(status_code=404, detail="Video not found")
 
+    _VIDEO_UPDATABLE_FIELDS = frozenset({"title", "description", "category", "course_id", "sort_order"})
     fields = {}
-    for field in ["title", "description", "category", "course_id", "sort_order"]:
+    for field in _VIDEO_UPDATABLE_FIELDS:
         val = getattr(req, field, None)
         if val is not None:
             fields[field] = val
