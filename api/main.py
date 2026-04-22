@@ -1,4 +1,5 @@
 import os
+import uuid
 import traceback
 
 from fastapi import FastAPI, Request
@@ -8,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from contextlib import asynccontextmanager
+from loguru import logger as log
 
 from config import settings
 from database import init_db, close_db
@@ -95,16 +97,31 @@ app.include_router(articles_router, prefix="/articles", tags=["articles"])
 app.include_router(articles_admin_router, prefix="/admin", tags=["admin-articles"])
 
 
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    """Inject X-Request-ID into every request/response for log correlation."""
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        request.state.request_id = request_id
+        response: Response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+
+app.add_middleware(RequestIDMiddleware)
+
+
 # Middleware to prevent caching of HLS manifests and segments
 class NoCacheHLSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         try:
             response: Response = await call_next(request)
         except Exception as exc:
-            traceback.print_exc()
+            request_id = getattr(request.state, "request_id", "unknown")
+            log.error(f"[{request_id}] Unhandled error in {request.method} {request.url.path}: {exc}")
+            log.error(traceback.format_exc())
             return JSONResponse(
                 status_code=500,
-                content={"detail": str(exc)},
+                content={"detail": "internal_error", "request_id": request_id},
+                headers={"X-Request-ID": request_id},
             )
         path = request.url.path
         if path.startswith("/streams/") and (path.endswith(".m3u8") or path.endswith(".ts")):
@@ -118,10 +135,13 @@ app.add_middleware(NoCacheHLSMiddleware)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    traceback.print_exc()
+    request_id = getattr(request.state, "request_id", "unknown")
+    log.error(f"[{request_id}] Unhandled exception: {exc}")
+    log.error(traceback.format_exc())
     return JSONResponse(
         status_code=500,
-        content={"detail": str(exc)},
+        content={"detail": "internal_error", "request_id": request_id},
+        headers={"X-Request-ID": request_id},
     )
 
 # Serve transcoded video streams (HLS segments, manifests, thumbnails)
