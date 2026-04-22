@@ -1,4 +1,5 @@
 import os
+import sys
 import uuid
 import traceback
 
@@ -13,6 +14,27 @@ from loguru import logger as log
 
 from config import settings
 from database import init_db, close_db, get_db
+
+# ── Structured logging setup ──────────────────────────────────────────────────
+# In production (ENV != development) emit JSON lines so log aggregators
+# (Loki, CloudWatch, Datadog) can parse fields without regex.
+_LOG_ENV = os.environ.get("ENV", "development").lower()
+
+log.remove()  # remove default stderr handler
+if _LOG_ENV not in ("development", "dev", "test"):
+    log.add(
+        sys.stdout,
+        format="{message}",
+        level="INFO",
+        serialize=True,  # loguru JSON: {"text":"...", "record":{...}}
+    )
+else:
+    log.add(
+        sys.stderr,
+        format="<green>{time:HH:mm:ss}</green> | <level>{level:<7}</level> | {message}",
+        level="DEBUG",
+        colorize=True,
+    )
 from auth.router import router as auth_router
 from auth.saml_router import router as saml_router
 from auth.seed import seed_admin_user
@@ -109,11 +131,14 @@ app.include_router(articles_admin_router, prefix="/admin", tags=["admin-articles
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
-    """Inject X-Request-ID into every request/response for log correlation."""
+    """Inject X-Request-ID into every request/response; bind to log context."""
     async def dispatch(self, request: Request, call_next):
         request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
         request.state.request_id = request_id
-        response: Response = await call_next(request)
+        with log.contextualize(request_id=request_id,
+                               method=request.method,
+                               path=request.url.path):
+            response: Response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
         return response
 
