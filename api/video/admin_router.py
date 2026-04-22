@@ -221,17 +221,25 @@ async def admin_upload_video_file(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    # Save raw file
+    # Save raw file — write to a .tmp sibling first, then atomically rename
+    # so the transcoder never picks up a partially-written original.mp4.
     video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
     raw_dir = os.path.join(video_dir, "raw")
     os.makedirs(raw_dir, exist_ok=True)
 
+    tmp_path = os.path.join(raw_dir, "original.mp4.tmp")
     file_path = os.path.join(raw_dir, "original.mp4")
-    with open(file_path, "wb") as f:
-        while chunk := await file.read(1024 * 1024):  # 1MB chunks
-            f.write(chunk)
+    try:
+        with open(tmp_path, "wb") as f:
+            while chunk := await file.read(1024 * 1024):  # 1MB chunks
+                f.write(chunk)
+        os.replace(tmp_path, file_path)  # atomic on POSIX
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
 
-    # Update video status to uploaded (no auto-transcode)
+    # Update video status to uploaded only after the file is fully on disk
     await db.execute("UPDATE videos SET status = 'uploaded' WHERE id = $1", video_id)
     _write_ops_log(raw_dir, "upload")
 
