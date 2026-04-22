@@ -27,6 +27,7 @@ import time
 import urllib.parse
 from functools import lru_cache
 from typing import Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
@@ -36,6 +37,21 @@ from config import settings
 from database import get_db
 
 router = APIRouter()
+
+
+def _is_allowed_redirect(url: str) -> bool:
+    """Return True only if url resolves to the configured portal origin."""
+    if not url:
+        return False
+    portal_origin = settings.PORTAL_URL.rstrip("/")
+    portal_parsed = urlparse(portal_origin)
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False
+    # Must share scheme + netloc with PORTAL_URL; path-only or relative is rejected
+    return parsed.scheme == portal_parsed.scheme and parsed.netloc == portal_parsed.netloc
+
 
 # ── in-memory one-time code store (TTL 120 s, single-use) ───────────────────
 # Structure: { code: {"user_id": str, "role": str, "exp": float} }
@@ -236,7 +252,8 @@ async def _upsert_saml_user(email: str, display_name: str, role: str) -> dict:
 async def saml_login(request: Request, next: str = ""):
     """Redirect browser to ADFS login page with a SAMLRequest."""
     auth = _get_saml_auth(request)
-    relay_state = next or settings.PORTAL_URL
+    # Validate next against the portal origin to prevent open-redirect
+    relay_state = next if _is_allowed_redirect(next) else settings.PORTAL_URL
     login_url = auth.login(return_to=relay_state)
     return RedirectResponse(url=login_url, status_code=302)
 
@@ -292,16 +309,9 @@ async def saml_acs(request: Request):
     # Issue one-time code; React SPA will exchange it for a JWT
     code = _issue_saml_code(str(user["id"]), user["role"])
 
-    # RelayState is the original page the user wanted or portal root
-    relay_state = form.get("RelayState", "")
-    # Guard against open redirect — only allow relay to our portal
     portal_origin = settings.PORTAL_URL.rstrip("/")
-    if relay_state and relay_state.startswith(portal_origin):
-        redirect_base = relay_state
-    else:
-        redirect_base = portal_origin
-
-    # Redirect to frontend /login with the one-time code
+    # Redirect to frontend /login with the one-time code (ignore RelayState
+    # for the final redirect — code exchange always goes to /login)
     redirect_url = f"{portal_origin}/login?saml_code={urllib.parse.quote(code)}"
     return RedirectResponse(url=redirect_url, status_code=302)
 
