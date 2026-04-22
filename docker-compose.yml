@@ -89,6 +89,11 @@ services:
     volumes:
       - "${VIDEO_DATA_VOLUME}:/data/videos"
     command: ["python", "worker/transcoder.py"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h db -U ${POSTGRES_USER:-portal} -d ${POSTGRES_DB:-mst_portal} || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   # ── React Frontend (nginx) ───────────────────────────────
   frontend:
@@ -104,6 +109,11 @@ services:
       - backend
     ports:
       - "${FRONTEND_PORT:-9800}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   pg-data:
