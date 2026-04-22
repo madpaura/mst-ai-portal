@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import DOMPurify from 'dompurify';
 import { api } from '../api/client';
 
 interface DigestPreview {
@@ -227,14 +228,14 @@ export const AdminDigest: React.FC = () => {
   const handleViewInNewTab = () => {
     if (!preview) return;
     const win = window.open('', '_blank');
-    if (win) { win.document.write(preview.html_content); win.document.close(); }
+    if (win) { win.document.write(DOMPurify.sanitize(preview.html_content)); win.document.close(); }
   };
 
   const handleDownloadPdf = () => {
     if (!preview) return;
     const win = window.open('', '_blank');
     if (win) {
-      win.document.write(`<html><head><title>${editedSubject || preview.subject}</title><style>@media print{body{margin:0}}</style></head><body onload="setTimeout(()=>{window.print();},500)">${preview.html_content}</body></html>`);
+      win.document.write(`<html><head><title>${editedSubject || preview.subject}</title><style>@media print{body{margin:0}}</style></head><body onload="setTimeout(()=>{window.print();},500)">${DOMPurify.sanitize(preview.html_content)}</body></html>`);
       win.document.close();
     }
   };
@@ -518,7 +519,7 @@ export const AdminDigest: React.FC = () => {
                       <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Email Preview</label>
                       <div
                         className="bg-white rounded-lg p-4 text-slate-900 text-sm max-h-96 overflow-y-auto border border-white/10"
-                        dangerouslySetInnerHTML={{ __html: preview.html_content }}
+                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(preview.html_content) }}
                       />
                     </div>
                   </div>
