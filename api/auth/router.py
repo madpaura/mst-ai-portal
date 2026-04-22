@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from auth.schemas import LoginRequest, TokenResponse, UserResponse, UserUpdateRequest
 from auth.service import verify_password, create_access_token
 from auth.dependencies import get_current_user, require_admin
+from auth.audit import audit
 from database import get_db
 from config import settings
 
@@ -189,7 +190,7 @@ async def list_contribute_requests(admin: dict = Depends(require_admin)):
 
 @router.put("/admin/contribute-requests/{request_id}", response_model=ContributeRequestResponse)
 async def review_contribute_request(
-    request_id: str, req: ReviewContributeRequest, admin: dict = Depends(require_admin)
+    request: Request, request_id: str, req: ReviewContributeRequest, admin: dict = Depends(require_admin)
 ):
     """Approve or reject a contribution request. Approved → sets user role to 'content'."""
     if req.status not in ("approved", "rejected"):
@@ -211,6 +212,8 @@ async def review_contribute_request(
             row["user_id"],
         )
 
+    await audit(request, admin, f"contribute_request.{req.status}", "contribute_request", request_id,
+                {"user_id": str(row["user_id"]), "admin_note": req.admin_note})
     updated = await db.fetchrow("SELECT * FROM contribute_requests WHERE id = $1", request_id)
     return ContributeRequestResponse(
         id=str(updated["id"]), user_id=str(updated["user_id"]),
@@ -245,7 +248,7 @@ class AdminCreateUser(BaseModel):
 
 
 @router.post("/admin/users", response_model=UserResponse)
-async def create_user(body: AdminCreateUser, admin: dict = Depends(require_admin)):
+async def create_user(request: Request, body: AdminCreateUser, admin: dict = Depends(require_admin)):
     import asyncpg
     if body.role not in ("user", "content", "admin"):
         raise HTTPException(status_code=400, detail="Role must be user, content, or admin")
@@ -271,6 +274,8 @@ async def create_user(body: AdminCreateUser, admin: dict = Depends(require_admin
     except asyncpg.UniqueViolationError as e:
         detail = "Email already in use" if "users_email_key" in str(e) else "Username already taken"
         raise HTTPException(status_code=409, detail=detail)
+    await audit(request, admin, "user.create", "user", str(row["id"]),
+                {"username": body.username, "role": body.role})
     return UserResponse(
         id=str(row["id"]), username=row["username"], email=row.get("email"),
         display_name=row["display_name"], initials=row.get("initials"),
@@ -279,13 +284,14 @@ async def create_user(body: AdminCreateUser, admin: dict = Depends(require_admin
 
 
 @router.put("/admin/users/{user_id}/role")
-async def update_user_role(user_id: str, role: str, admin: dict = Depends(require_admin)):
+async def update_user_role(request: Request, user_id: str, role: str, admin: dict = Depends(require_admin)):
     if role not in ("user", "content", "admin"):
         raise HTTPException(status_code=400, detail="Role must be user, content, or admin")
     db = await get_db()
     result = await db.execute("UPDATE users SET role = $1 WHERE id = $2", role, user_id)
     if result == "UPDATE 0":
         raise HTTPException(status_code=404, detail="User not found")
+    await audit(request, admin, "user.role_change", "user", user_id, {"new_role": role})
     return {"message": f"Role updated to '{role}'"}
 
 
@@ -314,7 +320,7 @@ def _validate_password_strength(password: str) -> None:
 
 
 @router.put("/admin/users/{user_id}/password")
-async def reset_user_password(user_id: str, body: ResetPasswordRequest, admin: dict = Depends(require_admin)):
+async def reset_user_password(request: Request, user_id: str, body: ResetPasswordRequest, admin: dict = Depends(require_admin)):
     _validate_password_strength(body.new_password)
     from auth.service import hash_password
     pw_hash = hash_password(body.new_password)
@@ -324,17 +330,19 @@ async def reset_user_password(user_id: str, body: ResetPasswordRequest, admin: d
     )
     if result == "UPDATE 0":
         raise HTTPException(status_code=404, detail="User not found")
+    await audit(request, admin, "user.password_reset", "user", user_id)
     return {"message": "Password updated"}
 
 
 @router.delete("/admin/users/{user_id}")
-async def delete_user(user_id: str, admin: dict = Depends(require_admin)):
+async def delete_user(request: Request, user_id: str, admin: dict = Depends(require_admin)):
     if str(admin["id"]) == user_id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     db = await get_db()
     result = await db.execute("DELETE FROM users WHERE id = $1", user_id)
     if result == "DELETE 0":
         raise HTTPException(status_code=404, detail="User not found")
+    await audit(request, admin, "user.delete", "user", user_id)
     return {"message": "User deleted"}
 
 
