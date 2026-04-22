@@ -24,6 +24,13 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Copy built assets
 COPY --from=build /app/dist /usr/share/nginx/html
 
+# nginx runs as nginx user (uid 101) by default in the official image.
+# Ensure cache/pid directories are writable for that user.
+RUN chown -R nginx:nginx /var/cache/nginx /var/run /var/log/nginx \
+    && chmod -R 755 /var/cache/nginx
+
+USER nginx
+
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]

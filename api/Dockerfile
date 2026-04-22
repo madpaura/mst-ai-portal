@@ -22,8 +22,13 @@ RUN pip install --no-cache-dir -r requirements.txt httpx
 # Copy application code
 COPY . .
 
-# Create storage directories
-RUN mkdir -p storage/videos storage/thumbnails storage/media
+# Create storage directories and non-root user
+RUN mkdir -p storage/videos storage/thumbnails storage/media \
+    && addgroup --system appgroup \
+    && adduser --system --ingroup appgroup --no-create-home appuser \
+    && chown -R appuser:appgroup /app
+
+USER appuser
 
 EXPOSE 8000
 
