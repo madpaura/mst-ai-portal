@@ -62,6 +62,9 @@ async def get_me(user: dict = Depends(get_current_user)):
     )
 
 
+_USER_UPDATABLE_FIELDS = frozenset({"display_name", "initials"})
+
+
 @router.put("/me", response_model=UserResponse)
 async def update_me(req: UserUpdateRequest, user: dict = Depends(get_current_user)):
     db = await get_db()
@@ -70,6 +73,9 @@ async def update_me(req: UserUpdateRequest, user: dict = Depends(get_current_use
         updates["display_name"] = req.display_name
     if req.initials is not None:
         updates["initials"] = req.initials
+
+    # Defensive: only columns in the whitelist may reach the query
+    updates = {k: v for k, v in updates.items() if k in _USER_UPDATABLE_FIELDS}
 
     if updates:
         set_clause = ", ".join(f"{k} = ${i+2}" for i, k in enumerate(updates.keys()))
