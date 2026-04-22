@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from loguru import logger as log
 
 from config import settings
-from database import init_db, close_db
+from database import init_db, close_db, get_db
 from auth.router import router as auth_router
 from auth.saml_router import router as saml_router
 from auth.seed import seed_admin_user
@@ -166,13 +166,49 @@ app.mount("/media", StaticFiles(directory=settings.MEDIA_STORAGE_PATH), name="me
 
 @app.get("/health")
 async def health():
+    import shutil
     from worker.gpu_detect import get_gpu_info
-    gpu = get_gpu_info()
-    return {
-        "status": "ok",
-        "gpu": {
-            "available": gpu["gpu_available"],
-            "name": gpu["gpu_name"],
-            "encoder": gpu["encoder"],
-        },
+    from database import pool
+
+    # DB liveness check
+    db_ok = False
+    db_error = None
+    db_pool_stats = {}
+    try:
+        db = await get_db()
+        await db.fetchval("SELECT 1")
+        db_ok = True
+        if pool:
+            db_pool_stats = {
+                "min_size": pool.get_min_size(),
+                "max_size": pool.get_max_size(),
+                "size": pool.get_size(),
+                "idle": pool.get_idle_size(),
+            }
+    except Exception as exc:
+        db_error = str(exc)
+
+    # Disk space for video storage
+    disk = shutil.disk_usage(settings.VIDEO_STORAGE_PATH)
+    disk_info = {
+        "total_gb": round(disk.total / 1e9, 1),
+        "used_gb": round(disk.used / 1e9, 1),
+        "free_gb": round(disk.free / 1e9, 1),
+        "used_pct": round(disk.used / disk.total * 100, 1),
     }
+
+    gpu = get_gpu_info()
+    overall = "ok" if db_ok else "degraded"
+    return JSONResponse(
+        status_code=200 if db_ok else 503,
+        content={
+            "status": overall,
+            "db": {"ok": db_ok, "error": db_error, "pool": db_pool_stats},
+            "disk": disk_info,
+            "gpu": {
+                "available": gpu["gpu_available"],
+                "name": gpu["gpu_name"],
+                "encoder": gpu["encoder"],
+            },
+        },
+    )
