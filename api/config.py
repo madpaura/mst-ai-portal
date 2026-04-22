@@ -1,6 +1,16 @@
 from pydantic_settings import BaseSettings
 from typing import Literal
 import os
+import sys
+
+_INSECURE_JWT_DEFAULTS = {
+    "dev-secret-change-in-production",
+    "change-me",
+    "secret",
+    "changeme",
+}
+
+_INSECURE_DB_PASSWORDS = {"portal123", "postgres", "password", "admin", "root"}
 
 
 class Settings(BaseSettings):
@@ -71,9 +81,38 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = ["*"]
     CORS_ALLOW_ORIGIN_REGEX: str = ""
 
+    # Seed default admin (open mode only). Set to "false" in production.
+    SEED_DEFAULT_ADMIN: bool = True
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
 
 
 settings = Settings()
+
+
+def _check_insecure_defaults() -> None:
+    """Abort startup if obviously insecure defaults are detected outside dev mode."""
+    env = os.environ.get("ENV", "development").lower()
+    if env in ("development", "dev", "test"):
+        return
+
+    errors = []
+    if settings.JWT_SECRET in _INSECURE_JWT_DEFAULTS:
+        errors.append("JWT_SECRET is set to an insecure default value")
+
+    db_url = settings.DATABASE_URL
+    for pw in _INSECURE_DB_PASSWORDS:
+        if f":{pw}@" in db_url:
+            errors.append(f"DATABASE_URL contains insecure password '{pw}'")
+            break
+
+    if errors:
+        for e in errors:
+            print(f"[FATAL] {e}", file=sys.stderr)
+        print("[FATAL] Set ENV=development to bypass this check during local development.", file=sys.stderr)
+        sys.exit(1)
+
+
+_check_insecure_defaults()

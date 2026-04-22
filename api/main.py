@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
     from forge.scheduler import run_scheduler
 
     await init_db()
-    if settings.AUTH_MODE == "open":
+    if settings.AUTH_MODE == "open" and settings.SEED_DEFAULT_ADMIN:
         await seed_admin_user()
 
     # Start the nightly forge sync scheduler
