@@ -69,15 +69,26 @@ if settings.CORS_ALLOW_ORIGIN_REGEX:
         allow_headers=["*"],
     )
 else:
-    # Wildcard origins require allow_credentials=False (JWT Bearer is used, no cookies)
     wildcard = settings.CORS_ORIGINS == ["*"] or "*" in settings.CORS_ORIGINS
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.CORS_ORIGINS,
-        allow_credentials=not wildcard,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    if wildcard:
+        # Wildcard origin cannot be combined with allow_credentials=True.
+        # For single-origin dev setups this is fine (cookie is same-origin).
+        # For cross-origin production, set CORS_ORIGINS or CORS_ALLOW_ORIGIN_REGEX.
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=False,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    else:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.CORS_ORIGINS,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(saml_router, prefix="/saml", tags=["saml"])

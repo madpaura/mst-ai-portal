@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
 
@@ -8,21 +8,39 @@ from database import get_db
 
 security = HTTPBearer(auto_error=False)
 
+_COOKIE_NAME = "mst_token"
+
+
+def _extract_token(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials],
+) -> Optional[str]:
+    """Return JWT from httpOnly cookie first, then Bearer header."""
+    cookie = request.cookies.get(_COOKIE_NAME)
+    if cookie:
+        return cookie
+    if credentials:
+        return credentials.credentials
+    return None
+
 
 async def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> dict:
-    if settings.AUTH_MODE == "open" and credentials is None:
+    token = _extract_token(request, credentials)
+
+    if settings.AUTH_MODE == "open" and token is None:
         db = await get_db()
         row = await db.fetchrow("SELECT * FROM users WHERE username = 'admin' LIMIT 1")
         if row:
             return dict(row)
         raise HTTPException(status_code=401, detail="No admin user found")
 
-    if credentials is None:
+    if token is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    payload = decode_access_token(credentials.credentials)
+    payload = decode_access_token(token)
     if payload is None:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
@@ -35,16 +53,19 @@ async def get_current_user(
 
 
 async def get_optional_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> Optional[dict]:
-    if credentials is None:
+    token = _extract_token(request, credentials)
+
+    if token is None:
         if settings.AUTH_MODE == "open":
             db = await get_db()
             row = await db.fetchrow("SELECT * FROM users WHERE username = 'admin' LIMIT 1")
             return dict(row) if row else None
         return None
 
-    payload = decode_access_token(credentials.credentials)
+    payload = decode_access_token(token)
     if payload is None:
         return None
 
