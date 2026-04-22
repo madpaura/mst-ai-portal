@@ -36,12 +36,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   const fetchUser = useCallback(async () => {
-    if (!isLoggedIn()) {
-      setLoading(false);
-      return;
-    }
+    // Always attempt /auth/me — the httpOnly cookie will authenticate
+    // automatically if present, even after a page reload.
     try {
       const u = await api.get<User>('/auth/me');
+      setToken('');      // mark in-memory flag as logged in
       setUser(u);
     } catch {
       clearToken();
@@ -69,6 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
+    api.post('/auth/logout').catch(() => {});  // clears httpOnly cookie server-side
     clearToken();
     setUser(null);
   };

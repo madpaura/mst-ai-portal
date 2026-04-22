@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Response, Request
 import os
 from typing import Optional
 from pydantic import BaseModel
@@ -6,6 +6,10 @@ from auth.schemas import LoginRequest, TokenResponse, UserResponse, UserUpdateRe
 from auth.service import verify_password, create_access_token
 from auth.dependencies import get_current_user, require_admin
 from database import get_db
+from config import settings
+
+_COOKIE_NAME = "mst_token"
+_COOKIE_MAX_AGE = int(settings.JWT_EXPIRE_HOURS * 3600)
 
 
 class ContributeRequestCreate(BaseModel):
@@ -29,7 +33,7 @@ router = APIRouter()
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(req: LoginRequest):
+async def login(req: LoginRequest, response: Response):
     db = await get_db()
     user = await db.fetchrow("SELECT * FROM users WHERE username = $1", req.username)
     if not user:
@@ -41,11 +45,24 @@ async def login(req: LoginRequest):
     await db.execute("UPDATE users SET last_login = now() WHERE id = $1", user["id"])
 
     token = create_access_token(str(user["id"]), user["role"])
+
+    # Set httpOnly cookie in addition to returning token in body (dual mode).
+    # The cookie prevents XSS token theft; the body keeps API/CLI clients working.
+    response.set_cookie(
+        key=_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=False,       # set to True behind HTTPS (nginx terminates TLS)
+        samesite="lax",
+        max_age=_COOKIE_MAX_AGE,
+        path="/",
+    )
     return TokenResponse(access_token=token)
 
 
 @router.post("/logout")
-async def logout(user: dict = Depends(get_current_user)):
+async def logout(response: Response, user: dict = Depends(get_current_user)):
+    response.delete_cookie(key=_COOKIE_NAME, path="/")
     return {"message": "Logged out"}
 
 

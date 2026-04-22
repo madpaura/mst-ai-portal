@@ -1,33 +1,32 @@
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
-function getToken(): string | null {
-  return localStorage.getItem('mst_token');
-}
+// Token is now stored as an httpOnly cookie set by the backend on login.
+// We keep a lightweight in-memory flag so the frontend can know whether
+// the user is logged in without reading the cookie (which is inaccessible
+// to JS by design). On page reload fetchUser() is the authoritative check.
+let _loggedIn = false;
 
-export function setToken(token: string) {
-  localStorage.setItem('mst_token', token);
+export function setToken(_token: string) {
+  // Cookie is set by the server; nothing to store in JS.
+  _loggedIn = true;
 }
 
 export function clearToken() {
-  localStorage.removeItem('mst_token');
+  _loggedIn = false;
+  // The cookie is cleared server-side via POST /auth/logout.
 }
 
 export function isLoggedIn(): boolean {
-  return !!getToken();
+  return _loggedIn;
 }
 
 async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const token = getToken();
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string> || {}),
   };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
 
   // Don't set Content-Type for FormData (browser sets multipart boundary)
   if (!(options.body instanceof FormData)) {
@@ -37,6 +36,7 @@ async function request<T>(
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers,
+    credentials: 'include',   // send httpOnly cookie on every request
   });
 
   if (!res.ok) {
