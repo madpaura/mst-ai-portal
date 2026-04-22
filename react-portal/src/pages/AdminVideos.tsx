@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import DOMPurify from 'dompurify';
 import { api } from '../api/client';
 import { HlsPlayer, type HlsPlayerHandle } from '../components/HlsPlayer';
 
@@ -2302,7 +2303,7 @@ export const AdminVideos: React.FC = () => {
                       <button
                         onClick={() => {
                           const win = window.open('', '_blank');
-                          if (win) { win.document.write(emailPreview.html_content); win.document.close(); }
+                          if (win) { win.document.write(DOMPurify.sanitize(emailPreview.html_content)); win.document.close(); }
                         }}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition-colors border border-white/10"
                         title="View in new tab"
@@ -2314,7 +2315,7 @@ export const AdminVideos: React.FC = () => {
                         onClick={() => {
                           const win = window.open('', '_blank');
                           if (win) {
-                            win.document.write(`<html><head><title>${emailSubject || emailPreview.subject}</title><style>@media print { body { margin: 0; } }</style></head><body onload="setTimeout(()=>{window.print();},500)">${emailPreview.html_content}</body></html>`);
+                            win.document.write(`<html><head><title>${emailSubject || emailPreview.subject}</title><style>@media print { body { margin: 0; } }</style></head><body onload="setTimeout(()=>{window.print();},500)">${DOMPurify.sanitize(emailPreview.html_content)}</body></html>`);
                             win.document.close();
                           }
                         }}
@@ -2369,7 +2370,7 @@ export const AdminVideos: React.FC = () => {
                       <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Preview</label>
                       <div
                         className="bg-white dark:bg-slate-900 rounded-lg p-4 text-slate-900 dark:text-white text-sm max-h-64 overflow-y-auto border border-white/10"
-                        dangerouslySetInnerHTML={{ __html: emailPreview.html_content }}
+                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(emailPreview.html_content) }}
                       />
                     </div>
                     <div className="space-y-2">
