@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { api, setToken, clearToken, isLoggedIn } from './client';
+import { api, setToken, clearToken } from './client';
 
 interface User {
   id: string;
