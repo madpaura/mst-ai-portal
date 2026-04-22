@@ -270,10 +270,29 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
+def _validate_password_strength(password: str) -> None:
+    """Raise HTTPException if password does not meet complexity requirements."""
+    errors = []
+    if len(password) < 12:
+        errors.append("at least 12 characters")
+    if not any(c.isupper() for c in password):
+        errors.append("one uppercase letter")
+    if not any(c.islower() for c in password):
+        errors.append("one lowercase letter")
+    if not any(c.isdigit() for c in password):
+        errors.append("one digit")
+    if not any(c in "!@#$%^&*()-_=+[]{}|;:',.<>?/`~" for c in password):
+        errors.append("one special character")
+    if errors:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Password must contain: {', '.join(errors)}",
+        )
+
+
 @router.put("/admin/users/{user_id}/password")
 async def reset_user_password(user_id: str, body: ResetPasswordRequest, admin: dict = Depends(require_admin)):
-    if len(body.new_password) < 4:
-        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
+    _validate_password_strength(body.new_password)
     from auth.service import hash_password
     pw_hash = hash_password(body.new_password)
     db = await get_db()
