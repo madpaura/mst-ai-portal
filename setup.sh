@@ -308,11 +308,22 @@ setup_gpu() {
     echo -e "  ${GREEN}→${NC} Run ${GREEN}./setup.sh deploy${NC} to start with GPU acceleration"
 }
 
+# ── Migrate (run Alembic inside the running backend container) ──
+
+run_migrations() {
+    header "Running Alembic Migrations"
+    local COMPOSE=$(compose_cmd)
+    local FILES=$(compose_files)
+    $COMPOSE $FILES exec backend python -m alembic upgrade head
+    ok "Migrations applied"
+}
+
 # ── Main ──────────────────────────────────────────────────
 
 case "${1:-check}" in
     check)     check_prereqs ;;
     deploy)    check_prereqs && deploy ;;
+    migrate)   run_migrations ;;
     down)      down ;;
     logs)      show_logs "$2" ;;
     setup-gpu) setup_gpu ;;
@@ -323,6 +334,7 @@ case "${1:-check}" in
         echo ""
         echo "  check      Check prerequisites (default)"
         echo "  deploy     Build and start all containers"
+        echo "  migrate    Run Alembic migrations inside the running backend"
         echo "  down       Stop all containers"
         echo "  logs       Show logs: ./setup.sh logs [backend|worker|frontend|db]"
         echo "  setup-gpu  Install NVIDIA container toolkit for GPU transcoding"

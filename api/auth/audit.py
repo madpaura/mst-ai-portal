@@ -1,6 +1,7 @@
 """Lightweight admin audit logging — fire-and-forget DB inserts."""
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import Request
@@ -31,7 +32,7 @@ async def audit(
             action,
             target_type,
             str(target_id) if target_id is not None else None,
-            details or {},
+            json.dumps(details or {}),
             ip,
             request_id,
         )
