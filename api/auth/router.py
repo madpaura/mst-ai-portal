@@ -346,6 +346,64 @@ async def delete_user(request: Request, user_id: str, admin: dict = Depends(requ
     return {"message": "User deleted"}
 
 
+# ── Admin: Audit Log ──────────────────────────────────────────────────────────
+
+@router.get("/admin/audit-log")
+async def list_audit_log(
+    limit: int = 100,
+    offset: int = 0,
+    action: Optional[str] = None,
+    admin_id: Optional[str] = None,
+    admin: dict = Depends(require_admin),
+):
+    db = await get_db()
+    conditions = []
+    params: list = []
+    if action:
+        params.append(f"%{action}%")
+        conditions.append(f"action ILIKE ${len(params)}")
+    if admin_id:
+        params.append(admin_id)
+        conditions.append(f"admin_id = ${len(params)}")
+
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    params += [limit, offset]
+    rows = await db.fetch(
+        f"""
+        SELECT a.*, u.username
+        FROM admin_audit_log a
+        LEFT JOIN users u ON u.id = a.admin_id
+        {where}
+        ORDER BY a.ts DESC
+        LIMIT ${len(params) - 1} OFFSET ${len(params)}
+        """,
+        *params,
+    )
+    total = await db.fetchval(
+        f"SELECT COUNT(*) FROM admin_audit_log a {where}",
+        *params[:-2],
+    )
+    return {
+        "total": total,
+        "items": [
+            {
+                "id": str(r["id"]),
+                "ts": r["ts"].isoformat(),
+                "admin_id": str(r["admin_id"]) if r["admin_id"] else None,
+                "admin_name": r["admin_name"],
+                "username": r.get("username"),
+                "action": r["action"],
+                "target_type": r["target_type"],
+                "target_id": r["target_id"],
+                "details": r["details"],
+                "ip_address": r["ip_address"],
+                "request_id": r["request_id"],
+            }
+            for r in rows
+        ],
+    }
+
+
 # ── Guest interest signup (no auth required) ──────────────────────────────────
 
 class GuestInterestRequest(BaseModel):

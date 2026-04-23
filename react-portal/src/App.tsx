@@ -26,6 +26,7 @@ import { ArticleEditor } from './pages/ArticleEditor';
 import { AdminArticles } from './pages/AdminArticles';
 import { ContributeRequest } from './pages/ContributeRequest';
 import { AdminContributions } from './pages/AdminContributions';
+import { AdminAuditLog } from './pages/AdminAuditLog';
 
 function App() {
   useEffect(() => {
@@ -65,6 +66,7 @@ function App() {
             <Route path="analytics" element={<AdminAnalytics />} />
             <Route path="settings" element={<AdminSettings />} />
             <Route path="contributions" element={<AdminContributions />} />
+            <Route path="audit-log" element={<AdminAuditLog />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
