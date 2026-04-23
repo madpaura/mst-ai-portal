@@ -300,18 +300,14 @@ class ResetPasswordRequest(BaseModel):
 
 
 def _validate_password_strength(password: str) -> None:
-    """Raise HTTPException if password does not meet complexity requirements."""
+    """Raise HTTPException if password does not meet minimum requirements."""
     errors = []
-    if len(password) < 12:
-        errors.append("at least 12 characters")
-    if not any(c.isupper() for c in password):
-        errors.append("one uppercase letter")
-    if not any(c.islower() for c in password):
-        errors.append("one lowercase letter")
+    if len(password) < 6:
+        errors.append("at least 6 characters")
+    if not any(c.isalpha() for c in password):
+        errors.append("at least one letter")
     if not any(c.isdigit() for c in password):
-        errors.append("one digit")
-    if not any(c in "!@#$%^&*()-_=+[]{}|;:',.<>?/`~" for c in password):
-        errors.append("one special character")
+        errors.append("at least one number")
     if errors:
         raise HTTPException(
             status_code=400,
@@ -404,6 +400,71 @@ async def list_audit_log(
     }
 
 
+# ── Admin: Guest Interest List ────────────────────────────────────────────────
+
+class GuestInterestStatusUpdate(BaseModel):
+    status: str  # 'contacted' or 'dismissed'
+    admin_note: Optional[str] = None
+
+
+@router.get("/admin/guest-interests")
+async def list_guest_interests(
+    status: Optional[str] = None,
+    admin: dict = Depends(require_admin),
+):
+    db = await get_db()
+    where = "WHERE gi.status = $1" if status else ""
+    params = [status] if status else []
+    rows = await db.fetch(
+        f"""
+        SELECT gi.*, u.display_name as reviewer_name
+        FROM guest_interests gi
+        LEFT JOIN users u ON u.id = gi.reviewed_by
+        {where}
+        ORDER BY gi.created_at DESC
+        """,
+        *params,
+    )
+    return [
+        {
+            "id": r["id"],
+            "email": r["email"],
+            "source": r["source"],
+            "status": r["status"],
+            "admin_note": r.get("admin_note"),
+            "reviewer_name": r.get("reviewer_name"),
+            "reviewed_at": r["reviewed_at"].isoformat() if r.get("reviewed_at") else None,
+            "created_at": r["created_at"].isoformat(),
+        }
+        for r in rows
+    ]
+
+
+@router.put("/admin/guest-interests/{interest_id}")
+async def update_guest_interest(
+    request: Request,
+    interest_id: int,
+    body: GuestInterestStatusUpdate,
+    admin: dict = Depends(require_admin),
+):
+    if body.status not in ("contacted", "dismissed", "pending"):
+        raise HTTPException(status_code=400, detail="Status must be contacted, dismissed, or pending")
+    db = await get_db()
+    result = await db.execute(
+        """
+        UPDATE guest_interests
+        SET status = $1, admin_note = $2, reviewed_by = $3, reviewed_at = now()
+        WHERE id = $4
+        """,
+        body.status, body.admin_note, admin["id"], interest_id,
+    )
+    if result == "UPDATE 0":
+        raise HTTPException(status_code=404, detail="Not found")
+    await audit(request, admin, f"guest_interest.{body.status}", "guest_interest", str(interest_id),
+                {"admin_note": body.admin_note})
+    return {"message": "Updated"}
+
+
 # ── Guest interest signup (no auth required) ──────────────────────────────────
 
 class GuestInterestRequest(BaseModel):
@@ -411,7 +472,7 @@ class GuestInterestRequest(BaseModel):
     source: str = "contribute"
 
 
-@router.post("/auth/guest-interest")
+@router.post("/guest-interest")
 async def guest_interest(req: GuestInterestRequest):
     import re
     if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", req.email.strip()):
