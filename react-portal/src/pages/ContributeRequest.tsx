@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, isLoggedIn } from '../api/client';
+import { api } from '../api/client';
+import { useAuth } from '../api/auth';
 
 interface ContributeRequestData {
   id: string;
@@ -12,28 +13,26 @@ interface ContributeRequestData {
 
 export const ContributeRequest: React.FC = () => {
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [existingRequest, setExistingRequest] = useState<ContributeRequestData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isLoggedIn()) { navigate('/ignite'); return; }
-    Promise.all([
-      api.get<{ role: string }>('/auth/me'),
-      api.get<ContributeRequestData | null>('/auth/contribute-request'),
-    ]).then(([me, req]) => {
-      setUserRole(me.role);
-      setExistingRequest(req);
-    }).catch(() => {}).finally(() => setLoading(false));
-  }, [navigate]);
+    if (authLoading) return;
+    if (!user) { navigate('/ignite'); return; }
+    api.get<ContributeRequestData | null>('/auth/contribute-request')
+      .then(setExistingRequest)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [authLoading, user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reason.trim() || reason.trim().length < 20) {
-      setError('Please write at least 20 characters explaining your interest.');
+    if (!reason.trim()) {
+      setError('Please describe why you want to contribute.');
       return;
     }
     setSubmitting(true);
@@ -49,7 +48,9 @@ export const ContributeRequest: React.FC = () => {
     }
   };
 
-  if (loading) {
+  const userRole = user?.role ?? null;
+
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
         <span className="material-symbols-outlined text-3xl text-slate-400 animate-spin">progress_activity</span>
@@ -167,7 +168,7 @@ export const ContributeRequest: React.FC = () => {
                 className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-300 dark:border-white/10 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:border-primary focus:ring-1 focus:ring-primary outline-none resize-none transition-all"
                 required
               />
-              <p className="text-[11px] text-slate-400 mt-1">{reason.length} characters (min 20)</p>
+              <p className="text-[11px] text-slate-400 mt-1">{reason.length} characters</p>
             </div>
 
             {error && (
@@ -176,7 +177,7 @@ export const ContributeRequest: React.FC = () => {
 
             <button
               type="submit"
-              disabled={submitting || reason.trim().length < 20}
+              disabled={submitting || !reason.trim()}
               className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-primary hover:bg-blue-500 text-white font-bold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? (
