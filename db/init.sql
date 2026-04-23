@@ -318,8 +318,14 @@ CREATE TABLE IF NOT EXISTS guest_interests (
     id          BIGSERIAL PRIMARY KEY,
     email       TEXT NOT NULL,
     source      TEXT DEFAULT 'contribute',
+    status      TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'contacted', 'dismissed')),
+    admin_note  TEXT,
+    reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    reviewed_at TIMESTAMPTZ,
     created_at  TIMESTAMPTZ DEFAULT now()
 );
+
+CREATE INDEX IF NOT EXISTS idx_guest_interests_status ON guest_interests (status);
 
 ---------------------------------------------------
 -- NEWS FEED (Issue #7)

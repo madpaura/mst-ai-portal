@@ -2,6 +2,17 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../api/auth';
 
+interface GuestInterest {
+  id: number;
+  email: string;
+  source: string;
+  status: string;
+  admin_note: string | null;
+  reviewer_name: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
 interface ContributeRequest {
   id: string;
   user_id: string;
@@ -41,6 +52,8 @@ const STATUS_STYLES: Record<string, string> = {
   pending: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
   approved: 'bg-green-500/10 text-green-500 border-green-500/20',
   rejected: 'bg-red-400/10 text-red-400 border-red-400/20',
+  contacted: 'bg-blue-400/10 text-blue-400 border-blue-400/20',
+  dismissed: 'bg-slate-400/10 text-slate-400 border-slate-400/20',
 };
 
 export const AdminContributions: React.FC = () => {
@@ -50,6 +63,11 @@ export const AdminContributions: React.FC = () => {
   const [reviewNote, setReviewNote] = useState<Record<string, string>>({});
   const [processing, setProcessing] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  // Guest interests
+  const [guestInterests, setGuestInterests] = useState<GuestInterest[]>([]);
+  const [guestNotes, setGuestNotes] = useState<Record<number, string>>({});
+  const [guestProcessing, setGuestProcessing] = useState<number | null>(null);
+  const [showDismissed, setShowDismissed] = useState(false);
   // User list
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -137,7 +155,27 @@ export const AdminContributions: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => { fetchRequests(); fetchUsers(); }, [fetchRequests, fetchUsers]);
+  const fetchGuestInterests = useCallback(async () => {
+    try {
+      const data = await api.get<GuestInterest[]>('/auth/admin/guest-interests');
+      setGuestInterests(data);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { fetchRequests(); fetchUsers(); fetchGuestInterests(); }, [fetchRequests, fetchUsers, fetchGuestInterests]);
+
+  const handleGuestAction = async (id: number, status: 'contacted' | 'dismissed') => {
+    setGuestProcessing(id);
+    try {
+      await api.put(`/auth/admin/guest-interests/${id}`, { status, admin_note: guestNotes[id] || null });
+      showMsg('success', `Marked as ${status}`);
+      fetchGuestInterests();
+    } catch (err: any) {
+      showMsg('error', err.message);
+    } finally {
+      setGuestProcessing(null);
+    }
+  };
 
   const handleReview = async (id: string, status: 'approved' | 'rejected') => {
     setProcessing(id);
@@ -362,6 +400,99 @@ export const AdminContributions: React.FC = () => {
           </div>
         </>
       )}
+
+      {/* ── Guest Interest Signups ────────────────────────── */}
+      <div className="border-t border-slate-200 dark:border-white/10 pt-8 mb-8">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+            <span className="material-symbols-outlined text-base text-amber-400">mail</span>
+            Guest Interest Signups ({guestInterests.filter(g => g.status === 'pending').length} pending)
+          </h2>
+          <button
+            onClick={() => setShowDismissed(v => !v)}
+            className="text-xs text-slate-400 hover:text-slate-300 transition-colors"
+          >
+            {showDismissed ? 'Hide dismissed' : 'Show dismissed'}
+          </button>
+        </div>
+
+        {guestInterests.filter(g => showDismissed || g.status !== 'dismissed').length === 0 ? (
+          <p className="text-sm text-slate-400 italic">No guest interest submissions.</p>
+        ) : (
+          <div className="space-y-3">
+            {guestInterests
+              .filter(g => showDismissed || g.status !== 'dismissed')
+              .map(g => (
+                <div key={g.id} className="bg-card-light dark:bg-card-dark border border-slate-200 dark:border-white/10 rounded-xl p-4">
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 text-xs font-bold shrink-0">
+                        {g.email.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-slate-800 dark:text-slate-200">{g.email}</div>
+                        <div className="text-xs text-slate-400">
+                          {g.source} · {new Date(g.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </div>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${STATUS_STYLES[g.status]}`}>
+                      {g.status}
+                    </span>
+                  </div>
+
+                  {g.status === 'pending' && (
+                    <>
+                      <textarea
+                        placeholder="Note (optional)"
+                        value={guestNotes[g.id] || ''}
+                        onChange={e => setGuestNotes(n => ({ ...n, [g.id]: e.target.value }))}
+                        rows={2}
+                        className="w-full px-3 py-2 mb-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:border-primary outline-none resize-none"
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleGuestAction(g.id, 'contacted')}
+                          disabled={guestProcessing === g.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          <span className="material-symbols-outlined text-sm">mark_email_read</span>
+                          Mark Contacted
+                        </button>
+                        <button
+                          onClick={() => {
+                            setNewUser(u => ({ ...u, email: g.email }));
+                            setShowCreateForm(true);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-bold rounded-lg transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-sm">person_add</span>
+                          Create Account
+                        </button>
+                        <button
+                          onClick={() => handleGuestAction(g.id, 'dismissed')}
+                          disabled={guestProcessing === g.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-slate-400 hover:text-slate-300 text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          <span className="material-symbols-outlined text-sm">close</span>
+                          Dismiss
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  {g.status !== 'pending' && g.admin_note && (
+                    <p className="text-xs text-slate-400 italic mt-1">Note: {g.admin_note}</p>
+                  )}
+                  {g.status !== 'pending' && g.reviewer_name && (
+                    <p className="text-xs text-slate-500 mt-0.5">by {g.reviewer_name} · {g.reviewed_at ? new Date(g.reviewed_at).toLocaleDateString() : ''}</p>
+                  )}
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
 
       {/* ── User List ─────────────────────────────────────── */}
       <div className="border-t border-slate-200 dark:border-white/10 pt-8">
