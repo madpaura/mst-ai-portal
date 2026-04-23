@@ -382,12 +382,12 @@ export const Ignite: React.FC = () => {
                   </div>
                   {/* Logged-in user actions */}
                   {!!user && (!contributeRequest || contributeRequest.status === 'rejected') && (
-                    <a
-                      href="/contribute"
+                    <button
+                      onClick={() => navigate('/contribute')}
                       className="shrink-0 px-4 py-2 bg-primary hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors"
                     >
                       Apply Now
-                    </a>
+                    </button>
                   )}
                   {!!user && contributeRequest?.status === 'pending' && (
                     <span className="shrink-0 px-3 py-1.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 text-xs font-bold rounded-lg">
