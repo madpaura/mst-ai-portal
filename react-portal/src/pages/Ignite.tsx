@@ -13,7 +13,7 @@ import { CourseBrowser } from '../components/CourseBrowser';
 import type { CourseInfo } from '../components/CourseBrowser';
 import { HlsPlayer, type HlsPlayerHandle } from '../components/HlsPlayer';
 import { api } from '../api/client';
-import { isLoggedIn } from '../api/client';
+import { useAuth } from '../api/auth';
 
 interface VideoLikeData {
   video_id: string;
@@ -66,6 +66,7 @@ const fmtTime = (s: number): string => {
 
 export const Ignite: React.FC = () => {
   const { videoSlug } = useParams<{ videoSlug?: string }>();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const playerRef = useRef<HlsPlayerHandle>(null);
   const [activeVideo, setActiveVideo] = useState<Video | null>(ALL_VIDEOS[0] || null);
@@ -89,21 +90,20 @@ export const Ignite: React.FC = () => {
   const [guestEmailSent, setGuestEmailSent] = useState(false);
   const [guestEmailSubmitting, setGuestEmailSubmitting] = useState(false);
 
-  // Check contribute request status — show CTA for all; for logged-in 'user' role fetch request status
+  // Check contribute request status once auth has resolved
   useEffect(() => {
-    if (!isLoggedIn()) {
+    if (authLoading) return;
+    if (!user) {
       setShowContributeCTA(true);
       return;
     }
-    api.get<{ role: string }>('/auth/me').then((me) => {
-      if (me.role === 'user') {
-        setShowContributeCTA(true);
-        api.get<{ status: string } | null>('/auth/contribute-request')
-          .then(setContributeRequest)
-          .catch(() => {});
-      }
-    }).catch(() => {});
-  }, []);
+    if (user.role === 'user') {
+      setShowContributeCTA(true);
+      api.get<{ status: string } | null>('/auth/contribute-request')
+        .then(setContributeRequest)
+        .catch(() => {});
+    }
+  }, [authLoading, user]);
 
   const handleGuestInterest = async () => {
     if (!guestEmail.trim() || guestEmailSubmitting) return;
@@ -130,7 +130,7 @@ export const Ignite: React.FC = () => {
     api.get<Attachment[]>(`/video/videos/${video.slug}/attachments`)
       .then(setAttachments).catch(() => setAttachments([]));
     // Load notes (requires auth)
-    if (isLoggedIn()) {
+    if (!!user) {
       api.get<Note[]>(`/video/videos/${video.slug}/notes`)
         .then(setNotes).catch(() => setNotes([]));
     }
@@ -368,7 +368,7 @@ export const Ignite: React.FC = () => {
                     <div>
                       <p className="text-sm font-bold text-slate-900 dark:text-white">Interested in contributing?</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {!isLoggedIn()
+                        {!!!user
                           ? guestEmailSent
                             ? 'Thanks! We\'ll be in touch soon.'
                             : 'Share your email and we\'ll reach out about becoming a content creator.'
@@ -381,7 +381,7 @@ export const Ignite: React.FC = () => {
                     </div>
                   </div>
                   {/* Logged-in user actions */}
-                  {isLoggedIn() && (!contributeRequest || contributeRequest.status === 'rejected') && (
+                  {!!user && (!contributeRequest || contributeRequest.status === 'rejected') && (
                     <a
                       href="/contribute"
                       className="shrink-0 px-4 py-2 bg-primary hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors"
@@ -389,13 +389,13 @@ export const Ignite: React.FC = () => {
                       Apply Now
                     </a>
                   )}
-                  {isLoggedIn() && contributeRequest?.status === 'pending' && (
+                  {!!user && contributeRequest?.status === 'pending' && (
                     <span className="shrink-0 px-3 py-1.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 text-xs font-bold rounded-lg">
                       Under Review
                     </span>
                   )}
                   {/* Non-logged-in actions */}
-                  {!isLoggedIn() && !guestEmailSent && (
+                  {!!!user && !guestEmailSent && (
                     <button
                       onClick={() => setShowGuestEmailForm(!showGuestEmailForm)}
                       className="shrink-0 px-4 py-2 bg-primary hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors"
@@ -405,7 +405,7 @@ export const Ignite: React.FC = () => {
                   )}
                 </div>
                 {/* Inline email form for guests */}
-                {!isLoggedIn() && showGuestEmailForm && !guestEmailSent && (
+                {!!!user && showGuestEmailForm && !guestEmailSent && (
                   <div className="flex items-center gap-2 mt-1">
                     <input
                       type="email"
