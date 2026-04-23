@@ -93,13 +93,13 @@ if settings.CORS_ALLOW_ORIGIN_REGEX:
 else:
     wildcard = settings.CORS_ORIGINS == ["*"] or "*" in settings.CORS_ORIGINS
     if wildcard:
-        # Wildcard origin cannot be combined with allow_credentials=True.
-        # For single-origin dev setups this is fine (cookie is same-origin).
-        # For cross-origin production, set CORS_ORIGINS or CORS_ALLOW_ORIGIN_REGEX.
+        # allow_origins=["*"] + allow_credentials=True is rejected by browsers.
+        # Use allow_origin_regex=".*" instead — Starlette reflects the actual
+        # Origin header so credentials:include works in dev (Vite, curl, etc.).
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],
-            allow_credentials=False,
+            allow_origin_regex=".*",
+            allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
         )
