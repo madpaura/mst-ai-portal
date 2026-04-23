@@ -18,15 +18,15 @@ RUN npm run build
 # Stage 2: Serve with nginx
 FROM nginx:alpine
 
-# Copy custom nginx config
+# Override main nginx config: move pid to /tmp so non-root nginx user can write it
+COPY nginx-main.conf /etc/nginx/nginx.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy built assets
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# nginx runs as nginx user (uid 101) by default in the official image.
-# Ensure cache/pid directories are writable for that user.
-RUN chown -R nginx:nginx /var/cache/nginx /var/run /var/log/nginx \
+# Grant nginx user write access to the directories it needs at runtime
+RUN chown -R nginx:nginx /var/cache/nginx /var/log/nginx /usr/share/nginx/html \
     && chmod -R 755 /var/cache/nginx
 
 USER nginx
