@@ -59,6 +59,21 @@ async def lifespan(app: FastAPI):
     import asyncio
     from forge.scheduler import run_scheduler
 
+    # Run Alembic migrations before initialising the connection pool
+    import subprocess, sys, os
+    alembic_dir = os.path.dirname(__file__)
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        cwd=alembic_dir,
+        capture_output=True,
+        text=True,
+        env={**os.environ},
+    )
+    if result.returncode != 0:
+        log.error("alembic upgrade failed: {}", result.stderr)
+    else:
+        log.info("alembic upgrade head: OK")
+
     await init_db()
     if settings.AUTH_MODE == "open" and settings.SEED_DEFAULT_ADMIN:
         await seed_admin_user()
