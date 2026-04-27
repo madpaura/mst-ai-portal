@@ -40,7 +40,7 @@ services:
       FFMPEG_PATH: ffmpeg
       REMOTION_BANNER_PATH: /remotion-banner
       OLLAMA_BASE_URL: http://host.docker.internal:11434
-      PORTAL_URL: http://host.docker.internal:${FRONTEND_PORT:-9800}
+      PORTAL_URL: ${PORTAL_URL:-http://localhost:9800}
       CORS_ORIGINS: ${CORS_ORIGINS:-["*"]}
       CORS_ALLOW_ORIGIN_REGEX: ${CORS_ALLOW_ORIGIN_REGEX:-}
       SAML_SP_ENTITY_ID: ${SAML_SP_ENTITY_ID:-}
