@@ -130,6 +130,8 @@ export const AdminVideos: React.FC = () => {
   // Chapters
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [newChapter, setNewChapter] = useState({ title: '', start_time: 0 });
+  const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
+  const [editChapterForm, setEditChapterForm] = useState({ title: '', start_time: 0 });
 
   // How-to
   const [howtoTitle, setHowtoTitle] = useState('');
@@ -566,6 +568,23 @@ export const AdminVideos: React.FC = () => {
       const chaps = await api.get<Chapter[]>(`/admin/videos/${selected.id}/chapters`);
       setChapters(chaps);
       showMsg('success', 'Chapter added');
+    } catch (err: any) {
+      showMsg('error', err.message);
+    }
+  };
+
+  const handleEditChapterStart = (ch: Chapter) => {
+    setEditingChapterId(ch.id);
+    setEditChapterForm({ title: ch.title, start_time: ch.start_time });
+  };
+
+  const handleEditChapterSave = async () => {
+    if (!editingChapterId || !editChapterForm.title) return;
+    try {
+      await api.put(`/admin/chapters/${editingChapterId}`, editChapterForm);
+      setChapters((prev) => prev.map((c) => c.id === editingChapterId ? { ...c, ...editChapterForm } : c));
+      setEditingChapterId(null);
+      showMsg('success', 'Chapter updated');
     } catch (err: any) {
       showMsg('error', err.message);
     }
@@ -1590,18 +1609,59 @@ export const AdminVideos: React.FC = () => {
                   </h4>
                   <div className="space-y-2">
                     {chapters.map((ch) => (
-                      <div key={ch.id} className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/30 border border-white/5 group/ch">
-                        <button
-                          onClick={() => playerRef.current?.seekTo(ch.start_time)}
-                          className="font-mono text-xs text-primary min-w-[50px] hover:text-white transition-colors cursor-pointer"
-                          title="Seek to this chapter"
-                        >
-                          {formatDuration(ch.start_time)}
-                        </button>
-                        <span className="text-sm text-white flex-1">{ch.title}</span>
-                        <button onClick={() => handleDeleteChapter(ch.id)} className="text-red-400/0 group-hover/ch:text-red-400/50 hover:!text-red-400 transition-colors">
-                          <span className="material-symbols-outlined text-sm">close</span>
-                        </button>
+                      <div key={ch.id} className="rounded-lg bg-slate-800/30 border border-white/5 group/ch">
+                        {editingChapterId === ch.id ? (
+                          <div className="flex items-end gap-3 p-3">
+                            <div className="flex-1">
+                              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Title</label>
+                              <input
+                                value={editChapterForm.title}
+                                onChange={(e) => setEditChapterForm((f) => ({ ...f, title: e.target.value }))}
+                                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                                autoFocus
+                              />
+                            </div>
+                            <div className="w-32">
+                              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Start (sec)</label>
+                              <input
+                                type="number"
+                                value={editChapterForm.start_time}
+                                onChange={(e) => setEditChapterForm((f) => ({ ...f, start_time: parseInt(e.target.value) || 0 }))}
+                                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                              />
+                            </div>
+                            <button
+                              onClick={() => setEditChapterForm((f) => ({ ...f, start_time: Math.floor(playerTime) }))}
+                              className="px-3 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs font-bold rounded-lg transition-colors border border-amber-500/30"
+                              title="Set start time to current player position"
+                            >
+                              <span className="material-symbols-outlined text-sm">my_location</span>
+                            </button>
+                            <button onClick={handleEditChapterSave} className="px-3 py-2 bg-primary hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors">
+                              Save
+                            </button>
+                            <button onClick={() => setEditingChapterId(null)} className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-bold rounded-lg transition-colors">
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-3 p-3">
+                            <button
+                              onClick={() => playerRef.current?.seekTo(ch.start_time)}
+                              className="font-mono text-xs text-primary min-w-[50px] hover:text-white transition-colors cursor-pointer"
+                              title="Seek to this chapter"
+                            >
+                              {formatDuration(ch.start_time)}
+                            </button>
+                            <span className="text-sm text-white flex-1">{ch.title}</span>
+                            <button onClick={() => handleEditChapterStart(ch)} className="text-slate-400/0 group-hover/ch:text-slate-400/50 hover:!text-slate-300 transition-colors" title="Edit chapter">
+                              <span className="material-symbols-outlined text-sm">edit</span>
+                            </button>
+                            <button onClick={() => handleDeleteChapter(ch.id)} className="text-red-400/0 group-hover/ch:text-red-400/50 hover:!text-red-400 transition-colors">
+                              <span className="material-symbols-outlined text-sm">close</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))}
                     {chapters.length === 0 && <p className="text-slate-500 text-sm">No chapters yet. Play the video above and mark chapter points.</p>}
