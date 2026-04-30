@@ -36,6 +36,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   const fetchUser = useCallback(async () => {
+    // In open mode, skip auto-login if the user explicitly signed out this session.
+    if (localStorage.getItem('mst_logged_out') === '1') {
+      setLoading(false);
+      return;
+    }
     // Always attempt /auth/me — the httpOnly cookie will authenticate
     // automatically if present, even after a page reload.
     try {
@@ -55,6 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [fetchUser]);
 
   const login = async (username: string, password: string): Promise<User> => {
+    localStorage.removeItem('mst_logged_out');
     const res = await api.post<{ access_token: string }>('/auth/login', { username, password });
     setToken(res.access_token);
     await fetchUser();
@@ -63,11 +69,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginWithSamlToken = async (token: string) => {
+    localStorage.removeItem('mst_logged_out');
     setToken(token);
     await fetchUser();
   };
 
   const logout = () => {
+    localStorage.setItem('mst_logged_out', '1');
     api.post('/auth/logout').catch(() => {});  // clears httpOnly cookie server-side
     clearToken();
     setUser(null);
