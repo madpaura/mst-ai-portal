@@ -248,7 +248,8 @@ deploy() {
     echo ""
     _tkey=$(grep '^TRANSCRIPT_API_KEY=' .env 2>/dev/null | cut -d= -f2)
     echo -e "  ${YELLOW}Transcript API key:${NC} ${_tkey:-change-me-please}"
-    echo -e "  Set this in Admin → Settings → Transcript Service (URL: http://localhost:${TRANSCRIPT_PORT:-9100})"
+    echo -e "  In Admin → Settings → Transcript Service use URL: ${GREEN}http://transcript-service:9100${NC}"
+    echo -e "  (Use http://localhost:${TRANSCRIPT_PORT:-9100} only for direct host access)"
     echo ""
     echo "  Useful commands:"
     echo "    ./setup.sh logs backend             # Backend logs"
