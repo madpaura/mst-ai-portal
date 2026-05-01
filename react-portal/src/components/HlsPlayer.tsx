@@ -31,6 +31,7 @@ export interface HlsPlayerHandle {
 interface HlsPlayerProps {
   hlsPath: string | null;
   chapters?: Chapter[];
+  captionsUrl?: string;
   onTimeUpdate?: (currentTime: number, duration: number) => void;
   className?: string;
   autoPlay?: boolean;
@@ -39,6 +40,7 @@ interface HlsPlayerProps {
 export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
   hlsPath,
   chapters = [],
+  captionsUrl,
   onTimeUpdate,
   className = '',
   autoPlay = false,
@@ -66,6 +68,42 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
   const [qualityLevels, setQualityLevels] = useState<QualityLevel[]>([]);
   const [currentQuality, setCurrentQuality] = useState(-1); // -1 = auto
   const [showQualityMenu, setShowQualityMenu] = useState(false);
+  const [ccEnabled, setCcEnabled] = useState(false);
+  const [blobCaptionsUrl, setBlobCaptionsUrl] = useState<string | null>(null);
+  const ccEnabledRef = useRef(ccEnabled);
+  ccEnabledRef.current = ccEnabled;
+
+  // Fetch VTT cross-origin and serve as a blob URL so <track> sees it as same-origin
+  useEffect(() => {
+    if (!captionsUrl) {
+      setBlobCaptionsUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
+      return;
+    }
+    let objectUrl: string | null = null;
+    fetch(captionsUrl)
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.blob(); })
+      .then(blob => { objectUrl = URL.createObjectURL(blob); setBlobCaptionsUrl(objectUrl); })
+      .catch(() => setBlobCaptionsUrl(null));
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [captionsUrl]);
+
+  // Apply mode when user toggles CC (tracks are already loaded at this point)
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    for (let i = 0; i < video.textTracks.length; i++) {
+      video.textTracks[i].mode = ccEnabled ? 'showing' : 'hidden';
+    }
+  }, [ccEnabled]);
+
+  // Called by <track onLoad> — fires when the track finishes loading, including on navigation
+  const handleTrackLoad = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    for (let i = 0; i < video.textTracks.length; i++) {
+      video.textTracks[i].mode = ccEnabledRef.current ? 'showing' : 'hidden';
+    }
+  }, []);
 
   useImperativeHandle(ref, () => ({
     getCurrentTime: () => videoRef.current?.currentTime || 0,
@@ -263,6 +301,8 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
     setShowQualityMenu(false);
   };
 
+  const toggleCC = () => setCcEnabled(prev => !prev);
+
   const handlePrevChapter = useCallback(() => {
     if (chapters.length === 0 || !videoRef.current) return;
     const sorted = [...chapters].sort((a, b) => a.start_time - b.start_time);
@@ -316,7 +356,17 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
         className="w-full h-full object-contain cursor-pointer"
         onClick={togglePlay}
         playsInline
-      />
+      >
+        {blobCaptionsUrl && (
+          <track
+            kind="captions"
+            src={blobCaptionsUrl}
+            srcLang="en"
+            label="English"
+            onLoad={handleTrackLoad}
+          />
+        )}
+      </video>
 
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-30">
@@ -471,6 +521,17 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
                   </div>
                 )}
               </div>
+            )}
+
+            {/* Closed Captions toggle */}
+            {captionsUrl && (
+              <button
+                onClick={toggleCC}
+                className={`transition-colors text-xl font-bold px-1 rounded ${ccEnabled ? 'text-primary' : 'text-white/60 hover:text-white'}`}
+                title={ccEnabled ? 'Hide captions' : 'Show captions'}
+              >
+                <span className="material-symbols-outlined text-xl">closed_caption</span>
+              </button>
             )}
 
             {/* Fullscreen */}

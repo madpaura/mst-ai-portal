@@ -450,6 +450,7 @@ export const Ignite: React.FC = () => {
                   ref={playerRef}
                   hlsPath={activeVideo.hls_path}
                   chapters={chapters}
+                  captionsUrl={activeVideo.transcript_status === 'ready' ? `${import.meta.env.VITE_API_URL || ''}/video/videos/${activeVideo.id}/captions.vtt` : undefined}
                   onTimeUpdate={handleTimeUpdate}
                   className="shadow-2xl border border-slate-300 dark:border-slate-800"
                 />

@@ -12,6 +12,7 @@ POST /admin/transcript-service/test               — test transcript service co
 import json
 import os
 from typing import Optional
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,6 +24,17 @@ from config import settings
 from database import get_db
 
 router = APIRouter()
+
+_LOCAL_HOSTS = {"0.0.0.0", "localhost", "127.0.0.1"}
+
+def _docker_url(url: str) -> str:
+    """Replace loopback/unspecified hosts with host.docker.internal so the
+    backend container can reach services bound on the Docker host."""
+    parsed = urlparse(url)
+    if parsed.hostname in _LOCAL_HOSTS:
+        netloc = f"host.docker.internal:{parsed.port}" if parsed.port else "host.docker.internal"
+        parsed = parsed._replace(netloc=netloc)
+    return urlunparse(parsed)
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
@@ -50,16 +62,16 @@ class TranscriptServiceTestRequest(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 async def _get_transcript_settings() -> dict:
+    import json as _json
     db = await get_db()
-    row = await db.fetchrow(
-        "SELECT transcript_service_url, transcript_service_api_key, transcript_model FROM forge_settings WHERE is_active = true LIMIT 1"
-    )
+    row = await db.fetchrow("SELECT value FROM app_settings WHERE key = 'transcript_config'")
     if not row:
         return {"url": None, "api_key": None, "model": "large-v3"}
+    cfg = _json.loads(row["value"])
     return {
-        "url": row["transcript_service_url"],
-        "api_key": row["transcript_service_api_key"],
-        "model": row.get("transcript_model") or "large-v3",
+        "url": cfg.get("url"),
+        "api_key": cfg.get("api_key"),
+        "model": cfg.get("model") or "large-v3",
     }
 
 
@@ -189,7 +201,7 @@ async def test_transcript_service(
     req: TranscriptServiceTestRequest, admin: dict = Depends(require_admin)
 ):
     """Test connectivity to the configured transcript service."""
-    url = req.url.rstrip("/")
+    url = _docker_url(req.url.rstrip("/"))
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(

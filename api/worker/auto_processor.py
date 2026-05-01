@@ -16,6 +16,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from urllib.parse import urlparse, urlunparse
 
 import asyncpg
 import httpx
@@ -25,6 +26,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import settings
 
 POLL_INTERVAL = int(os.environ.get("AUTO_POLL_INTERVAL", "5"))
+TRANSCRIPT_MOCK = os.environ.get("TRANSCRIPT_MOCK", "").lower() in ("1", "true", "yes")
+
+_LOCAL_HOSTS = {"0.0.0.0", "localhost", "127.0.0.1"}
+
+def _docker_url(url: str) -> str:
+    """Replace loopback/unspecified hosts with host.docker.internal."""
+    parsed = urlparse(url)
+    if parsed.hostname in _LOCAL_HOSTS:
+        netloc = f"host.docker.internal:{parsed.port}" if parsed.port else "host.docker.internal"
+        parsed = parsed._replace(netloc=netloc)
+    return urlunparse(parsed)
 
 
 # ── Job claiming ─────────────────────────────────────────────────────────────
@@ -80,15 +92,14 @@ def _transcript_path(video_id: str) -> str:
 
 
 async def _get_transcript_settings(pool: asyncpg.Pool) -> dict:
-    row = await pool.fetchrow(
-        "SELECT transcript_service_url, transcript_service_api_key, transcript_model FROM forge_settings WHERE is_active = true LIMIT 1"
-    )
+    row = await pool.fetchrow("SELECT value FROM app_settings WHERE key = 'transcript_config'")
     if not row:
         return {"url": None, "api_key": None, "model": "large-v3"}
+    cfg = json.loads(row["value"])
     return {
-        "url": row.get("transcript_service_url"),
-        "api_key": row.get("transcript_service_api_key"),
-        "model": row.get("transcript_model") or "large-v3",
+        "url": cfg.get("url"),
+        "api_key": cfg.get("api_key"),
+        "model": cfg.get("model") or "large-v3",
     }
 
 
@@ -169,6 +180,68 @@ def _append_ops_log(video_id: str, entry: dict):
         json.dump(ops, f, ensure_ascii=False)
 
 
+# ── Mock transcript (for testing without GPU) ─────────────────────────────────
+
+def _mock_transcript(duration_secs: float = 600.0) -> dict:
+    """Generate a realistic-looking 10-minute transcript for offline testing."""
+    lines = [
+        "Welcome to this tutorial on machine learning fundamentals.",
+        "Today we will explore the core concepts behind neural networks and deep learning.",
+        "Let's start with the basics. A neural network is composed of layers of interconnected nodes.",
+        "Each node, also called a neuron, applies a mathematical transformation to its inputs.",
+        "The first layer is the input layer, which receives raw data such as images or text.",
+        "Hidden layers sit between the input and output and learn increasingly abstract features.",
+        "The final layer is the output layer, which produces the model's prediction.",
+        "Training a neural network involves feeding it examples and adjusting the weights.",
+        "This adjustment process is called backpropagation, and it uses gradient descent.",
+        "Gradient descent minimizes the loss function by iteratively updating the parameters.",
+        "One of the most common loss functions is cross-entropy loss, used for classification tasks.",
+        "Activation functions like ReLU, sigmoid, and softmax introduce non-linearity into the model.",
+        "Without non-linearity, a neural network would simply be a linear transformation.",
+        "Convolutional neural networks, or CNNs, are particularly well suited for image data.",
+        "They use convolutional filters to detect local patterns such as edges and textures.",
+        "Pooling layers reduce the spatial dimensions, helping the network generalize.",
+        "Recurrent neural networks, or RNNs, are designed for sequential data like text and audio.",
+        "The LSTM architecture solves the vanishing gradient problem in long sequences.",
+        "Transformers have largely replaced RNNs for natural language processing tasks.",
+        "The attention mechanism allows the model to weigh the relevance of different tokens.",
+        "BERT and GPT are two influential transformer-based models trained on large corpora.",
+        "Transfer learning allows us to fine-tune pre-trained models on domain-specific data.",
+        "This dramatically reduces the amount of labelled data and compute required.",
+        "Overfitting occurs when a model learns the training data too well and fails to generalize.",
+        "Regularization techniques such as dropout and weight decay help prevent overfitting.",
+        "Data augmentation artificially expands the training set by applying transformations.",
+        "Batch normalization stabilizes training by normalizing the inputs to each layer.",
+        "Hyperparameter tuning involves finding the best learning rate, batch size, and architecture.",
+        "Tools like Weights and Biases and MLflow help track experiments and compare runs.",
+        "Model evaluation should always be done on a held-out test set to avoid data leakage.",
+        "Precision, recall, and F1 score are important metrics for imbalanced classification tasks.",
+        "ROC curves and AUC provide a comprehensive view of a classifier's performance.",
+        "In regression tasks, mean squared error and mean absolute error are common metrics.",
+        "Deploying a model to production requires packaging it as a REST API or batch pipeline.",
+        "Docker and Kubernetes are widely used for containerizing and orchestrating ML services.",
+        "Model monitoring tracks data drift and performance degradation over time.",
+        "Retraining pipelines can be triggered automatically when performance drops below a threshold.",
+        "Responsible AI practices include fairness auditing, explainability, and privacy preservation.",
+        "Thank you for watching. In the next session we will implement a model from scratch.",
+    ]
+
+    segments = []
+    t = 0.0
+    seg_duration = duration_secs / len(lines)
+    for line in lines:
+        end = round(t + seg_duration, 2)
+        segments.append({"start": round(t, 2), "end": end, "text": line})
+        t = end
+
+    return {
+        "language": "en",
+        "duration": duration_secs,
+        "full_text": " ".join(s["text"] for s in segments),
+        "segments": segments,
+    }
+
+
 # ── Job handlers ──────────────────────────────────────────────────────────────
 
 async def run_transcript_job(pool: asyncpg.Pool, job: asyncpg.Record):
@@ -176,59 +249,61 @@ async def run_transcript_job(pool: asyncpg.Pool, job: asyncpg.Record):
     video_id = str(job["video_id"])
     log.info("Transcript job | video_id={}", video_id)
 
-    ts_cfg = await _get_transcript_settings(pool)
-    if not ts_cfg["url"]:
-        raise RuntimeError("Transcript service URL not configured. Set it in Admin → Settings.")
-
-    raw_dir = _video_raw_dir(video_id)
-    input_path = os.path.join(raw_dir, "original.mp4")
-    if not os.path.isfile(input_path):
-        raise RuntimeError(f"Source video not found: {input_path}")
-
-    # Update status
     await pool.execute(
         "UPDATE videos SET transcript_status = 'processing' WHERE id = $1", video_id
     )
 
-    # Extract audio to temp WAV
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        audio_path = tmp.name
+    if TRANSCRIPT_MOCK:
+        log.warning("TRANSCRIPT_MOCK=true — using synthetic 10-minute transcript (no GPU needed)")
+        transcript = _mock_transcript(duration_secs=600.0)
+    else:
+        ts_cfg = await _get_transcript_settings(pool)
+        if not ts_cfg["url"]:
+            raise RuntimeError("Transcript service URL not configured. Set it in Admin → Settings.")
 
-    try:
-        cmd = [
-            settings.FFMPEG_PATH, "-y", "-i", input_path,
-            "-vn", "-ac", "1", "-ar", "16000", "-f", "wav", audio_path,
-        ]
-        log.debug("Extracting audio | cmd={}", " ".join(cmd))
-        result = subprocess.run(cmd, capture_output=True, timeout=600)
-        if result.returncode != 0:
-            raise RuntimeError(f"ffmpeg audio extract failed: {result.stderr.decode()[:500]}")
+        raw_dir = _video_raw_dir(video_id)
+        input_path = os.path.join(raw_dir, "original.mp4")
+        if not os.path.isfile(input_path):
+            raise RuntimeError(f"Source video not found: {input_path}")
 
-        # POST audio to transcript service
-        service_url = ts_cfg["url"].rstrip("/")
-        api_key = ts_cfg["api_key"] or ""
-        model = ts_cfg["model"] or "large-v3"
+        # Extract audio to temp WAV
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            audio_path = tmp.name
 
-        log.info("Sending audio to transcript service | url={}", service_url)
-        async with httpx.AsyncClient(timeout=600.0) as client:
-            with open(audio_path, "rb") as audio_file:
-                resp = await client.post(
-                    f"{service_url}/transcribe",
-                    headers={"X-API-Key": api_key},
-                    data={"model": model},
-                    files={"audio": ("audio.wav", audio_file, "audio/wav")},
-                )
-            if resp.status_code == 401:
-                raise RuntimeError("Transcript service rejected API key (401)")
-            if resp.status_code != 200:
-                raise RuntimeError(f"Transcript service error: HTTP {resp.status_code} — {resp.text[:300]}")
-            transcript = resp.json()
-
-    finally:
         try:
-            os.unlink(audio_path)
-        except OSError:
-            pass
+            cmd = [
+                settings.FFMPEG_PATH, "-y", "-i", input_path,
+                "-vn", "-ac", "1", "-ar", "16000", "-f", "wav", audio_path,
+            ]
+            log.debug("Extracting audio | cmd={}", " ".join(cmd))
+            result = subprocess.run(cmd, capture_output=True, timeout=600)
+            if result.returncode != 0:
+                raise RuntimeError(f"ffmpeg audio extract failed: {result.stderr.decode()[:500]}")
+
+            service_url = _docker_url(ts_cfg["url"].rstrip("/"))
+            api_key = ts_cfg["api_key"] or ""
+            model = ts_cfg["model"] or "large-v3"
+
+            log.info("Sending audio to transcript service | url={}", service_url)
+            async with httpx.AsyncClient(timeout=600.0) as client:
+                with open(audio_path, "rb") as audio_file:
+                    resp = await client.post(
+                        f"{service_url}/transcribe",
+                        headers={"X-API-Key": api_key},
+                        data={"model": model},
+                        files={"audio": ("audio.wav", audio_file, "audio/wav")},
+                    )
+                if resp.status_code == 401:
+                    raise RuntimeError("Transcript service rejected API key (401)")
+                if resp.status_code != 200:
+                    raise RuntimeError(f"Transcript service error: HTTP {resp.status_code} — {resp.text[:300]}")
+                transcript = resp.json()
+
+        finally:
+            try:
+                os.unlink(audio_path)
+            except OSError:
+                pass
 
     # Save transcript JSON
     t_path = _transcript_path(video_id)

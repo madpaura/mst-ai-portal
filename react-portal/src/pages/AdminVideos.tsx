@@ -1421,6 +1421,7 @@ export const AdminVideos: React.FC = () => {
                     ref={playerRef}
                     hlsPath={selected.hls_path}
                     chapters={chapters}
+                    captionsUrl={transcriptData?.segments?.length ? `${API_BASE}/video/videos/${selected.id}/captions.vtt` : undefined}
                     onTimeUpdate={(t, d) => { setPlayerTime(t); setPlayerDuration(d); }}
                     className="rounded-xl border border-white/10"
                   />
@@ -1506,6 +1507,45 @@ export const AdminVideos: React.FC = () => {
                   {selected.job_error && <span className="ml-1 opacity-80">— {selected.job_error}</span>}
                 </div>
               )}
+              {/* Auto-processing pipeline progress — shown whenever jobs are active */}
+              {autoStatus && (() => {
+                const STAGES = ['transcript', 'metadata', 'chapters', 'howto'] as const;
+                const hasAny = STAGES.some(k => autoStatus.jobs?.[k]);
+                const allDone = hasAny && STAGES.every(k => autoStatus.jobs?.[k]?.status === 'completed');
+                const hasFailed = STAGES.some(k => autoStatus.jobs?.[k]?.status === 'failed');
+                if (!hasAny) return null;
+                return (
+                  <div className="mt-3 p-3 rounded-lg bg-slate-800/50 border border-white/8">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-xs text-primary">auto_awesome</span>
+                        Auto-Processing Pipeline
+                      </p>
+                      {allDone && <span className="text-[10px] font-bold text-green-400">All done — check Transcript tab</span>}
+                      {hasFailed && !allDone && <span className="text-[10px] font-bold text-red-400">Some steps failed — see Transcript tab</span>}
+                      {!allDone && !hasFailed && <span className="text-[10px] text-amber-400 flex items-center gap-1"><span className="material-symbols-outlined text-xs animate-spin">autorenew</span>Running…</span>}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {STAGES.map((kind, i) => {
+                        const job = autoStatus.jobs?.[kind];
+                        const done = job?.status === 'completed';
+                        const failed = job?.status === 'failed';
+                        const running = job?.status === 'processing' || job?.status === 'pending';
+                        return (
+                          <React.Fragment key={kind}>
+                            <div className={`flex-1 flex flex-col items-center gap-0.5`}>
+                              <div className={`w-full h-1.5 rounded-full ${done ? 'bg-green-500' : failed ? 'bg-red-500' : running ? 'bg-amber-400 animate-pulse' : 'bg-slate-700'}`} />
+                              <span className={`text-[9px] font-bold capitalize ${done ? 'text-green-400' : failed ? 'text-red-400' : running ? 'text-amber-400' : 'text-slate-600'}`}>{kind}</span>
+                            </div>
+                            {i < STAGES.length - 1 && <span className="text-slate-700 text-xs mb-3">›</span>}
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {opsLog.length > 0 && (
                 <div className="mt-3 border-t border-slate-200 dark:border-white/5 pt-3">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Operations</p>
@@ -1881,32 +1921,35 @@ export const AdminVideos: React.FC = () => {
                         {transcriptSaving ? 'Saving…' : 'Save'}
                       </button>
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Full Transcript</label>
-                      <textarea
-                        value={transcriptData.full_text || ''}
-                        onChange={(e) => setTranscriptData((d: any) => ({ ...d, full_text: e.target.value }))}
-                        rows={18}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none resize-none font-mono leading-relaxed"
-                        placeholder="Transcript text..."
-                      />
-                    </div>
-                    {(transcriptData.segments?.length > 0) && (
-                      <details className="rounded-lg bg-slate-800/30 border border-white/5">
-                        <summary className="px-4 py-2 text-xs font-bold text-slate-400 cursor-pointer hover:text-white">
-                          Timestamped Segments ({transcriptData.segments.length})
-                        </summary>
-                        <div className="px-4 pb-4 space-y-1 max-h-64 overflow-y-auto">
+                    {(transcriptData.segments?.length > 0) ? (
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                          Timestamped Transcript ({transcriptData.segments.length} segments)
+                        </label>
+                        <div className="rounded-lg bg-slate-900 border border-white/10 max-h-96 overflow-y-auto divide-y divide-white/5">
                           {transcriptData.segments.map((seg: any, i: number) => (
-                            <div key={i} className="flex gap-3 text-xs">
-                              <span className="font-mono text-primary min-w-[80px]">
-                                {Math.floor(seg.start / 60)}:{String(Math.floor(seg.start % 60)).padStart(2, '0')} → {Math.floor(seg.end / 60)}:{String(Math.floor(seg.end % 60)).padStart(2, '0')}
+                            <div key={i} className="flex gap-3 px-3 py-1.5 hover:bg-white/3 text-xs">
+                              <span className="font-mono text-primary shrink-0 w-[90px]">
+                                {Math.floor(seg.start / 60)}:{String(Math.floor(seg.start % 60)).padStart(2, '0')}
+                                {' → '}
+                                {Math.floor(seg.end / 60)}:{String(Math.floor(seg.end % 60)).padStart(2, '0')}
                               </span>
-                              <span className="text-slate-300">{seg.text}</span>
+                              <span className="text-slate-300 leading-relaxed">{seg.text}</span>
                             </div>
                           ))}
                         </div>
-                      </details>
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Full Transcript</label>
+                        <textarea
+                          value={transcriptData.full_text || ''}
+                          onChange={(e) => setTranscriptData((d: any) => ({ ...d, full_text: e.target.value }))}
+                          rows={14}
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none resize-none font-mono leading-relaxed"
+                          placeholder="Transcript text..."
+                        />
+                      </div>
                     )}
                   </div>
                 ) : (
@@ -2369,11 +2412,11 @@ export const AdminVideos: React.FC = () => {
                           className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
                       </div>
                       <div className="flex gap-2">
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Episode</label>
                           <div className="flex gap-1">
                             <input value={bannerForm.episode} onChange={(e) => setBannerForm((f) => ({ ...f, episode: e.target.value }))}
-                              className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                              className="min-w-0 flex-1 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
                             <button
                               onClick={() => {
                                 if (!selected?.course_id) return;
@@ -2382,18 +2425,18 @@ export const AdminVideos: React.FC = () => {
                                 const idx = courseVids.findIndex(v => v.id === selected.id);
                                 setBannerForm((f) => ({ ...f, episode: `EP ${String(idx >= 0 ? idx + 1 : 1).padStart(2, '0')}` }));
                               }}
-                              className="px-2 py-1.5 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary text-xs font-bold transition-colors border border-primary/30"
+                              className="shrink-0 p-1.5 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary transition-colors border border-primary/30"
                               title="Sync episode number from video position in course"
                             >
                               <span className="material-symbols-outlined text-sm">sync</span>
                             </button>
                           </div>
                         </div>
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Duration</label>
                           <div className="flex gap-1">
                             <input value={bannerForm.duration} onChange={(e) => setBannerForm((f) => ({ ...f, duration: e.target.value }))}
-                              className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                              className="min-w-0 flex-1 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
                             <button
                               onClick={() => {
                                 const dur = playerDuration > 0 ? playerDuration : (selected?.duration_s || 0);
@@ -2403,7 +2446,7 @@ export const AdminVideos: React.FC = () => {
                                   setBannerForm((f) => ({ ...f, duration: `${m}:${String(s).padStart(2, '0')}` }));
                                 }
                               }}
-                              className="px-2 py-1.5 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary text-xs font-bold transition-colors border border-primary/30"
+                              className="shrink-0 p-1.5 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary transition-colors border border-primary/30"
                               title="Sync duration from video"
                             >
                               <span className="material-symbols-outlined text-sm">sync</span>

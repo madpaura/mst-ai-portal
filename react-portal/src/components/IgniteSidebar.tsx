@@ -14,6 +14,7 @@ export interface Video {
   thumbnail: string | null;
   course_id?: string | null;
   sort_order: number;
+  transcript_status?: string | null;
 }
 
 interface ApiVideo {
@@ -29,6 +30,7 @@ interface ApiVideo {
   is_published: boolean;
   sort_order: number;
   created_at: string;
+  transcript_status?: string | null;
 }
 
 export interface Course {
@@ -101,6 +103,7 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
         thumbnail: v.thumbnail,
         course_id: course.id,
         sort_order: v.sort_order,
+        transcript_status: v.transcript_status,
       }));
     } catch {
       return [];

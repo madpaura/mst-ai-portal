@@ -53,8 +53,8 @@ CREATE TABLE videos (
     description     TEXT,
     category        TEXT NOT NULL,
     duration_s      INTEGER,
-    status          TEXT DEFAULT 'processing'
-                    CHECK (status IN ('processing', 'ready', 'error', 'uploaded')),
+    status          TEXT DEFAULT 'draft'
+                    CHECK (status IN ('draft', 'processing', 'uploaded', 'ready', 'error')),
     hls_path        TEXT,
     thumbnail       TEXT,
     custom_thumbnail TEXT,

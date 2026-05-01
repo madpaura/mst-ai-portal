@@ -1,7 +1,12 @@
+import json
+import os
+
 from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi.responses import PlainTextResponse
 from typing import Optional
 from pydantic import BaseModel
 
+from config import settings
 from video.schemas import (
     CourseResponse, VideoResponse, ChapterResponse, ProgressResponse,
     ProgressUpdate, OverallProgressResponse, NoteResponse, NoteCreate,
@@ -11,6 +16,36 @@ from auth.dependencies import get_current_user, get_optional_user
 from database import get_db
 
 router = APIRouter()
+
+
+def _secs_to_vtt(s: float) -> str:
+    h = int(s // 3600)
+    m = int((s % 3600) // 60)
+    sec = s % 60
+    return f"{h:02d}:{m:02d}:{sec:06.3f}"
+
+
+@router.get("/videos/{video_id}/captions.vtt", response_class=PlainTextResponse)
+async def get_captions_vtt(video_id: str):
+    """Return WebVTT captions generated from the stored transcript segments."""
+    path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "transcript.json")
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="No transcript available")
+    with open(path) as f:
+        data = json.load(f)
+    segments = data.get("segments", [])
+    if not segments:
+        raise HTTPException(status_code=404, detail="Transcript has no segments")
+
+    lines = ["WEBVTT", ""]
+    for i, seg in enumerate(segments, 1):
+        start = _secs_to_vtt(float(seg["start"]))
+        end = _secs_to_vtt(float(seg["end"]))
+        text = seg.get("text", "").strip()
+        if text:
+            lines += [str(i), f"{start} --> {end}", text, ""]
+
+    return PlainTextResponse("\n".join(lines), media_type="text/vtt")
 
 
 class CourseProgressResponse(BaseModel):
@@ -80,6 +115,7 @@ async def get_course(slug: str):
                 status=v["status"], hls_path=v.get("hls_path"),
                 thumbnail=v.get("thumbnail"), is_published=v["is_published"],
                 sort_order=v["sort_order"], created_at=v["created_at"],
+                transcript_status=v.get("transcript_status"),
             )
             for v in videos
         ],
@@ -102,6 +138,7 @@ async def get_video(slug: str):
         status=row["status"], hls_path=row.get("hls_path"),
         thumbnail=row.get("thumbnail"), is_published=row["is_published"],
         sort_order=row["sort_order"], created_at=row["created_at"],
+        transcript_status=row.get("transcript_status"),
     )
 
 

@@ -90,19 +90,23 @@ export const AdminSettings: React.FC = () => {
     setTimeout(() => setMessage(null), 3000);
   };
 
+  const fetchTranscriptConfig = useCallback(async () => {
+    try {
+      const cfg = await api.get<{ url?: string; api_key?: string; model?: string } | null>('/settings/transcript_config');
+      if (cfg) {
+        setTranscriptForm({
+          url: cfg.url || '',
+          api_key: '',  // server returns masked value; never pre-fill
+          model: cfg.model || 'large-v3',
+        });
+      }
+    } catch { /* no saved config yet */ }
+  }, []);
+
   const fetchSettings = useCallback(async () => {
     try {
       const data = await api.get<ForgeSetting[]>('/admin/forge/settings');
       setSettings(data);
-      // Pre-fill transcript settings from the first active forge setting
-      const active = data.find((s) => s.is_active) || data[0];
-      if (active) {
-        setTranscriptForm({
-          url: (active as any).transcript_service_url || '',
-          api_key: '',  // never show stored key
-          model: (active as any).transcript_model || 'large-v3',
-        });
-      }
     } catch (err: any) {
       showMsg('error', err.message);
     } finally {
@@ -137,7 +141,7 @@ export const AdminSettings: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => { fetchSettings(); fetchSmtpSettings(); }, [fetchSettings, fetchSmtpSettings]);
+  useEffect(() => { fetchSettings(); fetchSmtpSettings(); fetchTranscriptConfig(); }, [fetchSettings, fetchSmtpSettings, fetchTranscriptConfig]);
 
   useEffect(() => {
     if (selectedSettingId) fetchJobs(selectedSettingId);
@@ -280,16 +284,11 @@ export const AdminSettings: React.FC = () => {
   };
 
   const handleTranscriptSave = async () => {
-    const active = settings.find((s) => s.is_active) || settings[0];
-    if (!active) { showMsg('error', 'No forge setting found. Create one first.'); return; }
     setTranscriptSaving(true);
     try {
-      const payload: any = {
-        transcript_service_url: transcriptForm.url || null,
-        transcript_model: transcriptForm.model,
-      };
-      if (transcriptForm.api_key) payload.transcript_service_api_key = transcriptForm.api_key;
-      await api.put(`/admin/forge/settings/${active.id}`, payload);
+      const payload: any = { url: transcriptForm.url || null, model: transcriptForm.model };
+      if (transcriptForm.api_key) payload.api_key = transcriptForm.api_key;
+      await api.put('/settings/admin/transcript_config', { value: payload });
       showMsg('success', 'Transcript service settings saved');
       setTranscriptForm((f) => ({ ...f, api_key: '' }));
     } catch (err: any) {
