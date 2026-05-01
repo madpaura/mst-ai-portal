@@ -390,9 +390,13 @@ export const AdminSettings: React.FC = () => {
                 <input
                   value={transcriptForm.url}
                   onChange={(e) => setTranscriptForm((f) => ({ ...f, url: e.target.value }))}
-                  placeholder="http://gpu-host:9100"
+                  placeholder="http://transcript-service:9100"
                   className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
                 />
+                <p className="text-xs text-slate-500 mt-1">
+                  Same machine (Docker): <button type="button" className="text-primary hover:underline font-mono" onClick={() => setTranscriptForm((f) => ({ ...f, url: 'http://transcript-service:9100' }))}>http://transcript-service:9100</button>
+                  {' · '}External server: <span className="font-mono">http://&lt;host-ip&gt;:9100</span>
+                </p>
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">API Key</label>
