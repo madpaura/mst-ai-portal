@@ -40,12 +40,21 @@ async function request<T>(
   });
 
   if (!res.ok) {
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      throw new Error(`Server error (HTTP ${res.status}). Check API connectivity.`);
+    }
     const body = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(body.detail || `HTTP ${res.status}`);
   }
 
   if (res.status === 204 || res.headers.get('content-length') === '0') {
     return {} as T;
+  }
+
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) {
+    throw new Error('Server returned an unexpected response. Check API connectivity.');
   }
 
   return res.json();
