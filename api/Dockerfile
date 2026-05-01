@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ffmpeg \
     curl \
+    gosu \
     # Chromium deps required by Remotion's headless browser
     libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxcomposite1 \
     libxdamage1 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 \
@@ -28,9 +29,10 @@ RUN mkdir -p storage/videos storage/thumbnails storage/media \
     && adduser --system --ingroup appgroup --no-create-home appuser \
     && chown -R appuser:appgroup /app
 
-USER appuser
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
+# Entrypoint runs as root, fixes mounted-volume ownership, then drops to appuser
 EXPOSE 8000
-
-# Default: run the API server on the internal service port
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

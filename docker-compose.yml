@@ -113,6 +113,7 @@ services:
       FFMPEG_PATH: ffmpeg
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       AUTO_POLL_INTERVAL: "5"
+      TRANSCRIPT_MOCK: ${TRANSCRIPT_MOCK:-false}
       PYTHONUNBUFFERED: "1"
     volumes:
       - "${VIDEO_DATA_VOLUME}:/data/videos"
@@ -134,6 +135,7 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:${BACKEND_PORT:-8000}}
         VITE_AUTH_MODE: ${AUTH_MODE:-open}
+        VITE_BETA_TAG: ${VITE_BETA_TAG:-}
     restart: unless-stopped
     depends_on:
       - backend

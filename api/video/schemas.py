@@ -41,6 +41,7 @@ class VideoResponse(BaseModel):
     is_published: bool
     sort_order: int
     created_at: datetime
+    transcript_status: Optional[str] = None
 
 
 class VideoCreate(BaseModel):
