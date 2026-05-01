@@ -31,6 +31,9 @@ def _row_to_setting(r) -> ForgeSettingResponse:
         llm_model=r["llm_model"],
         llm_api_key=_mask_token(r.get("llm_api_key")),
         auto_update_release_tag=r["auto_update_release_tag"],
+        transcript_service_url=r.get("transcript_service_url"),
+        transcript_service_api_key=_mask_token(r.get("transcript_service_api_key")),
+        transcript_model=r.get("transcript_model") or "large-v3",
         is_active=r["is_active"],
         created_at=r["created_at"],
         updated_at=r["updated_at"],
@@ -53,13 +56,15 @@ async def create_setting(req: ForgeSettingCreate, admin: dict = Depends(require_
         """
         INSERT INTO forge_settings
             (git_url, git_token, git_branch, scan_paths, update_frequency,
-             llm_provider, llm_model, llm_api_key, auto_update_release_tag)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+             llm_provider, llm_model, llm_api_key, auto_update_release_tag,
+             transcript_service_url, transcript_service_api_key, transcript_model)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
         RETURNING *
         """,
         req.git_url, req.git_token, req.git_branch, req.scan_paths,
         req.update_frequency, req.llm_provider, req.llm_model,
         req.llm_api_key, req.auto_update_release_tag,
+        req.transcript_service_url, req.transcript_service_api_key, req.transcript_model,
     )
     return _row_to_setting(row)
 
@@ -86,6 +91,7 @@ async def update_setting(
     for field in [
         "git_url", "git_token", "git_branch", "scan_paths", "update_frequency",
         "llm_provider", "llm_model", "llm_api_key", "auto_update_release_tag", "is_active",
+        "transcript_service_url", "transcript_service_api_key", "transcript_model",
     ]:
         val = getattr(req, field, None)
         if val is not None:

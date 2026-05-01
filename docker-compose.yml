@@ -95,6 +95,36 @@ services:
       timeout: 5s
       retries: 3
 
+  # ── Auto-Mode Processor ─────────────────────────────────
+  # Handles transcript → LLM metadata/chapters/howto pipeline.
+  # Uses the same image as the main worker (no separate Dockerfile needed).
+  auto-processor:
+    image: mst-portal-worker:latest
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-portal}:${POSTGRES_PASSWORD:-portal123}@db:5432/${POSTGRES_DB:-mst_portal}
+      VIDEO_STORAGE_PATH: /data/videos
+      FFMPEG_PATH: ffmpeg
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      AUTO_POLL_INTERVAL: "5"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - "${VIDEO_DATA_VOLUME}:/data/videos"
+    command: ["python", "worker/auto_processor.py"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h db -U ${POSTGRES_USER:-portal} -d ${POSTGRES_DB:-mst_portal} || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   # ── React Frontend (nginx) ───────────────────────────────
   frontend:
     image: mst-portal-frontend:latest

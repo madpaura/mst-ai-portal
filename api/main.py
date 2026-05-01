@@ -45,6 +45,7 @@ from forge.admin_router import router as forge_admin_router
 from forge.settings_router import router as forge_settings_router
 from video.router import router as video_router
 from video.admin_router import router as video_admin_router
+from video.auto_router import router as video_auto_router
 from video.course_admin_router import router as course_admin_router
 from analytics.router import router as analytics_router
 from analytics.admin_router import router as analytics_admin_router
@@ -136,6 +137,7 @@ app.include_router(forge_admin_router, prefix="/admin/forge", tags=["admin-forge
 app.include_router(forge_settings_router, prefix="/admin/forge", tags=["admin-forge-settings"])
 app.include_router(video_router, prefix="/video", tags=["video"])
 app.include_router(video_admin_router, prefix="/admin", tags=["admin-video"])
+app.include_router(video_auto_router, prefix="/admin", tags=["admin-auto"])
 app.include_router(course_admin_router, prefix="/admin", tags=["admin-courses"])
 app.include_router(analytics_router, prefix="/analytics", tags=["analytics"])
 app.include_router(analytics_admin_router, prefix="/admin/analytics", tags=["admin-analytics"])

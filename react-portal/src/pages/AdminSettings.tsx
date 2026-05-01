@@ -67,6 +67,13 @@ export const AdminSettings: React.FC = () => {
   const logEndRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Transcript service settings
+  const [transcriptForm, setTranscriptForm] = useState({ url: '', api_key: '', model: 'large-v3' });
+  const [transcriptTesting, setTranscriptTesting] = useState(false);
+  const [transcriptSaving, setTranscriptSaving] = useState(false);
+  const [transcriptTestResult, setTranscriptTestResult] = useState<{ ok: boolean; detail: any } | null>(null);
+  const [showTranscriptModal, setShowTranscriptModal] = useState(false);
+
   // SMTP settings
   const [smtpConfig, setSmtpConfig] = useState<Record<string, string> | null>(null);
   const [showSmtpModal, setShowSmtpModal] = useState(false);
@@ -87,6 +94,15 @@ export const AdminSettings: React.FC = () => {
     try {
       const data = await api.get<ForgeSetting[]>('/admin/forge/settings');
       setSettings(data);
+      // Pre-fill transcript settings from the first active forge setting
+      const active = data.find((s) => s.is_active) || data[0];
+      if (active) {
+        setTranscriptForm({
+          url: (active as any).transcript_service_url || '',
+          api_key: '',  // never show stored key
+          model: (active as any).transcript_model || 'large-v3',
+        });
+      }
     } catch (err: any) {
       showMsg('error', err.message);
     } finally {
@@ -263,6 +279,43 @@ export const AdminSettings: React.FC = () => {
     }
   };
 
+  const handleTranscriptSave = async () => {
+    const active = settings.find((s) => s.is_active) || settings[0];
+    if (!active) { showMsg('error', 'No forge setting found. Create one first.'); return; }
+    setTranscriptSaving(true);
+    try {
+      const payload: any = {
+        transcript_service_url: transcriptForm.url || null,
+        transcript_model: transcriptForm.model,
+      };
+      if (transcriptForm.api_key) payload.transcript_service_api_key = transcriptForm.api_key;
+      await api.put(`/admin/forge/settings/${active.id}`, payload);
+      showMsg('success', 'Transcript service settings saved');
+      setTranscriptForm((f) => ({ ...f, api_key: '' }));
+    } catch (err: any) {
+      showMsg('error', err.message);
+    } finally {
+      setTranscriptSaving(false);
+    }
+  };
+
+  const handleTranscriptTest = async () => {
+    if (!transcriptForm.url) { showMsg('error', 'Enter the service URL first'); return; }
+    setTranscriptTesting(true);
+    setTranscriptTestResult(null);
+    try {
+      const res = await api.post<{ ok: boolean; detail: any }>('/admin/transcript-service/test', {
+        url: transcriptForm.url,
+        api_key: transcriptForm.api_key,
+      });
+      setTranscriptTestResult(res);
+    } catch (err: any) {
+      setTranscriptTestResult({ ok: false, detail: err.message });
+    } finally {
+      setTranscriptTesting(false);
+    }
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center h-full text-slate-400 p-20">Loading settings...</div>;
   }
@@ -285,6 +338,113 @@ export const AdminSettings: React.FC = () => {
         <h1 className="text-xl font-bold text-white">Admin Settings</h1>
         <p className="text-sm text-slate-400 mt-1">Configure SMTP email and marketplace repository scanning</p>
       </div>
+
+      {/* ── Transcript Service Card ─────────────────────────────── */}
+      <div className="bg-card-dark rounded-xl border border-white/5 p-6 mb-8">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-primary">mic</span>
+            <div>
+              <h2 className="text-base font-bold text-white">Transcript Service</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Configure the remote GPU-hosted speech-to-text service for Auto Mode video processing</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowTranscriptModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm">settings</span>
+            Configure
+          </button>
+        </div>
+        {transcriptForm.url && (
+          <div className="mt-4 pt-4 border-t border-white/5">
+            <div className="flex flex-wrap gap-4 text-xs text-slate-400">
+              <span className="flex items-center gap-1">
+                <span className="material-symbols-outlined text-xs">link</span>
+                {transcriptForm.url}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="material-symbols-outlined text-xs">model_training</span>
+                Model: {transcriptForm.model}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Transcript Service Modal */}
+      {showTranscriptModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowTranscriptModal(false)} />
+          <div className="relative w-full max-w-md bg-background-dark border border-white/10 rounded-xl shadow-2xl p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-base font-bold text-white">Transcript Service</h2>
+              <button onClick={() => setShowTranscriptModal(false)} className="text-slate-400 hover:text-white">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Service URL</label>
+                <input
+                  value={transcriptForm.url}
+                  onChange={(e) => setTranscriptForm((f) => ({ ...f, url: e.target.value }))}
+                  placeholder="http://gpu-host:9100"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">API Key</label>
+                <input
+                  type="password"
+                  value={transcriptForm.api_key}
+                  onChange={(e) => setTranscriptForm((f) => ({ ...f, api_key: e.target.value }))}
+                  placeholder="(leave blank to keep existing)"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Whisper Model</label>
+                <select
+                  value={transcriptForm.model}
+                  onChange={(e) => setTranscriptForm((f) => ({ ...f, model: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                >
+                  <option value="large-v3">large-v3 (best quality, needs ≥10 GB VRAM)</option>
+                  <option value="medium">medium (good quality, ~5 GB VRAM)</option>
+                  <option value="small">small (fast, ~2 GB VRAM)</option>
+                  <option value="base">base (fastest, ~1 GB VRAM)</option>
+                </select>
+              </div>
+              {transcriptTestResult && (
+                <div className={`p-3 rounded-lg text-xs border ${transcriptTestResult.ok ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-red-500/10 text-red-400 border-red-500/30'}`}>
+                  {transcriptTestResult.ok ? '✓ Connected — ' : '✗ Failed — '}
+                  {typeof transcriptTestResult.detail === 'object' ? JSON.stringify(transcriptTestResult.detail) : String(transcriptTestResult.detail)}
+                </div>
+              )}
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={handleTranscriptTest}
+                  disabled={transcriptTesting || !transcriptForm.url}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-slate-200 text-sm font-bold rounded-lg transition-colors border border-white/10"
+                >
+                  <span className="material-symbols-outlined text-sm">{transcriptTesting ? 'autorenew' : 'wifi_tethering'}</span>
+                  {transcriptTesting ? 'Testing…' : 'Test Connection'}
+                </button>
+                <button
+                  onClick={async () => { await handleTranscriptSave(); setShowTranscriptModal(false); }}
+                  disabled={transcriptSaving}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-bold rounded-lg transition-colors"
+                >
+                  <span className="material-symbols-outlined text-sm">save</span>
+                  {transcriptSaving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── SMTP Settings Card ──────────────────────────────────── */}
       <div className="bg-card-dark rounded-xl border border-white/5 p-6 mb-8">

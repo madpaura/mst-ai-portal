@@ -1,0 +1,36 @@
+# Transcript Service — deploy this on a GPU host separately from the main portal.
+#
+# Usage (on GPU machine):
+#   TRANSCRIPT_API_KEY=<secret> docker compose -f docker-compose.transcript.yml up -d
+#
+# Then in Admin → Settings → Transcript Service, set:
+#   URL:     http://<gpu-host-ip>:9100
+#   API Key: <same secret>
+
+services:
+  transcript-service:
+    build:
+      context: ./transcript-service
+      dockerfile: Dockerfile
+    image: mst-transcript-service:latest
+    restart: unless-stopped
+    runtime: nvidia
+    environment:
+      TRANSCRIPT_API_KEY: ${TRANSCRIPT_API_KEY:-change-me}
+      TRANSCRIPT_MODEL: ${TRANSCRIPT_MODEL:-large-v3}
+      TRANSCRIPT_DEVICE: ${TRANSCRIPT_DEVICE:-cuda}
+      TRANSCRIPT_COMPUTE: ${TRANSCRIPT_COMPUTE:-float16}
+    ports:
+      - "${TRANSCRIPT_PORT:-9100}:9100"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-H", "X-API-Key: ${TRANSCRIPT_API_KEY:-change-me}", "http://localhost:9100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

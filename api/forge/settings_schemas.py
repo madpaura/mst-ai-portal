@@ -14,6 +14,10 @@ class ForgeSettingResponse(BaseModel):
     llm_model: str = "gpt-4o-mini"
     llm_api_key: Optional[str] = None
     auto_update_release_tag: bool = True
+    # Transcript service
+    transcript_service_url: Optional[str] = None
+    transcript_service_api_key: Optional[str] = None
+    transcript_model: str = "large-v3"
     is_active: bool = True
     created_at: datetime
     updated_at: datetime
@@ -29,6 +33,9 @@ class ForgeSettingCreate(BaseModel):
     llm_model: str = "gpt-4o-mini"
     llm_api_key: Optional[str] = None
     auto_update_release_tag: bool = True
+    transcript_service_url: Optional[str] = None
+    transcript_service_api_key: Optional[str] = None
+    transcript_model: str = "large-v3"
 
 
 class ForgeSettingUpdate(BaseModel):
@@ -41,6 +48,9 @@ class ForgeSettingUpdate(BaseModel):
     llm_model: Optional[str] = None
     llm_api_key: Optional[str] = None
     auto_update_release_tag: Optional[bool] = None
+    transcript_service_url: Optional[str] = None
+    transcript_service_api_key: Optional[str] = None
+    transcript_model: Optional[str] = None
     is_active: Optional[bool] = None
 
 
