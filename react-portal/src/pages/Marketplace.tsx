@@ -63,10 +63,14 @@ export const Marketplace: React.FC = () => {
   const [downloading, setDownloading] = useState<Record<string, boolean>>({});
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
   const [contributingGuide, setContributingGuide] = useState<ContributingGuide | null>(null);
+  const [underConstruction, setUnderConstruction] = useState<{ under_construction: boolean; message: string } | null>(null);
 
   useEffect(() => {
     api.get<ForgeComponent[]>('/forge/components').then(setComponents).catch(() => {});
     api.get<ContributingGuide>('/forge/contributing-guide').then(setContributingGuide).catch(() => {});
+    api.get<{ under_construction: boolean; message: string } | null>('/settings/marketplace_status')
+      .then(setUnderConstruction)
+      .catch(() => {});
   }, []);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -137,6 +141,47 @@ export const Marketplace: React.FC = () => {
       (openSource && c.badge === 'open_source');
     return matchesSearch && matchesType && matchesBadge;
   });
+
+  if (underConstruction?.under_construction) {
+    return (
+      <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-sans">
+        <Navbar variant="solutions" />
+        <main className="flex flex-col items-center justify-center min-h-screen px-6 pt-16 text-center">
+          <div className="relative mb-8">
+            <div className="absolute inset-0 w-32 h-32 bg-amber-400/20 rounded-full blur-2xl mx-auto" />
+            <div className="relative w-32 h-32 mx-auto rounded-3xl bg-gradient-to-br from-amber-500/20 to-amber-600/10 border border-amber-500/20 flex items-center justify-center">
+              <span className="material-symbols-outlined text-6xl text-amber-400">construction</span>
+            </div>
+          </div>
+          <h1 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4">
+            Marketplace Under Construction
+          </h1>
+          <p className="text-base text-slate-500 dark:text-slate-400 max-w-md leading-relaxed mb-8">
+            {underConstruction.message ||
+              "We're upgrading the marketplace with new features. Check back soon — great things are coming!"}
+          </p>
+          <div className="flex items-center gap-4">
+            <a
+              href="/"
+              className="px-6 py-2.5 bg-primary text-white font-bold rounded-lg text-sm hover:bg-blue-500 transition-colors"
+            >
+              Back to Solutions
+            </a>
+            <a
+              href="/ignite"
+              className="px-6 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-lg text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors border border-slate-200 dark:border-slate-700"
+            >
+              Explore Learning
+            </a>
+          </div>
+          <div className="mt-12 flex items-center gap-2 text-xs text-slate-400">
+            <span className="material-symbols-outlined text-amber-400 text-sm">info</span>
+            Admins can manage this status from Admin Settings → Marketplace Status
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-sans">

@@ -7,6 +7,26 @@ _MONO = "font-family:'IBM Plex Mono',Courier New,Courier,monospace;"
 _SERIF = "font-family:'Playfair Display',Georgia,'Times New Roman',serif;"
 _SANS = "font-family:Arial,Helvetica,sans-serif;"
 
+# Email-safe inline logo block (HTML table, no SVG required)
+_LOGO_HTML = """
+<table cellpadding="0" cellspacing="0" border="0" style="margin-bottom:24px;">
+  <tr>
+    <td style="vertical-align:middle;padding-right:10px;">
+      <table cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="width:36px;height:36px;background:#0D1F35;border-radius:8px;text-align:center;vertical-align:middle;border:1.5px solid #258CF4;">
+            <span style="font-family:Arial,sans-serif;font-size:16px;font-weight:900;color:#258CF4;letter-spacing:-1px;">M</span>
+          </td>
+        </tr>
+      </table>
+    </td>
+    <td style="vertical-align:middle;">
+      <div style="font-family:Arial,sans-serif;font-size:15px;font-weight:700;color:#1a1614;letter-spacing:-0.3px;line-height:1;">MST AI</div>
+      <div style="font-family:'IBM Plex Mono',Courier New,monospace;font-size:9px;color:#999;letter-spacing:0.12em;text-transform:uppercase;margin-top:2px;">Internal Portal</div>
+    </td>
+  </tr>
+</table>"""
+
 
 def generate_editorial_email(
     issue_title: str,
@@ -195,6 +215,7 @@ def generate_editorial_email(
 
   <!-- HEADER -->
   <div style="padding:48px 56px 40px;background:#faf8f5;border-bottom:2px solid #1a1614;">
+    {_LOGO_HTML}
     <table cellpadding="0" cellspacing="0" border="0" style="width:100%;">
       <tr>
         <td style="vertical-align:top;">
@@ -440,6 +461,7 @@ def generate_digest_email(
   <div style="{CARD_STYLE}">
     <div style="{STRIPE_RED}"></div>
     <div style="padding:44px 52px 36px;">
+      {_LOGO_HTML}
       <table cellpadding="0" cellspacing="0" border="0" style="width:100%;">
         <tr>
           <td style="vertical-align:top;">

@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { api } from '../api/client';
 import { usePageView } from '../hooks/usePageView';
 import { HlsPlayer } from '../components/HlsPlayer';
-
-
 
 interface SolutionCard {
   id: string;
@@ -35,129 +33,116 @@ interface LandingConfig {
 export const Solutions: React.FC = () => {
   usePageView('/');
   const navigate = useNavigate();
-  const scrollRef = useRef<HTMLDivElement>(null);
   const [solutionCards, setSolutionCards] = useState<SolutionCard[]>([]);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-
   const [landingConfig, setLandingConfig] = useState<LandingConfig | null>(null);
+  const [cardSearch, setCardSearch] = useState('');
+  const [contactEmail, setContactEmail] = useState('ai-tools@mst.internal');
 
   useEffect(() => {
-    api.get<SolutionCard[]>('/api/solutions/cards')
-      .then(setSolutionCards)
-      .catch(() => { });
-    api.get<LandingConfig>('/api/solutions/landing_page')
-      .then(setLandingConfig)
-      .catch(() => { });
+    api.get<SolutionCard[]>('/api/solutions/cards').then(setSolutionCards).catch(() => {});
+    api.get<LandingConfig>('/api/solutions/landing_page').then(setLandingConfig).catch(() => {});
+    api.get<string | null>('/settings/contact_email').then((v) => { if (v) setContactEmail(v); }).catch(() => {});
   }, []);
 
-  const updateScrollButtons = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    setCanScrollLeft(el.scrollLeft > 0);
-    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
-  };
-
-  useEffect(() => {
-    updateScrollButtons();
-  }, [solutionCards]);
-
-  const scrollBy = (dir: number) => {
-    scrollRef.current?.scrollBy({ left: dir * 340, behavior: 'smooth' });
-    setTimeout(updateScrollButtons, 400);
-  };
-
   const handleGetStarted = () => navigate('/ignite');
-  const handleViewDocs = () => navigate('/howto');
   const handleWatchDemos = () => navigate('/ignite');
-  const handleEnterDashboard = () => navigate('/ignite');
-  const handleSpeakWithTeam = () => alert('Contact the tools team at ai-tools@mst.internal');
   const handlePlayVideo = () => navigate('/ignite');
+  const handleContact = () => window.open(`mailto:${contactEmail}`, '_blank');
   const handleCardClick = (card: SolutionCard) => {
-    if (card.link_url) {
-      navigate(card.link_url);
-    } else {
-      navigate(`/solutions/${card.id}`);
-    }
+    if (card.link_url) navigate(card.link_url);
+    else navigate(`/solutions/${card.id}`);
   };
+
+  const filteredCards = cardSearch.trim()
+    ? solutionCards.filter((c) => {
+        const q = cardSearch.toLowerCase();
+        return (
+          c.title.toLowerCase().includes(q) ||
+          (c.subtitle ?? '').toLowerCase().includes(q) ||
+          c.description.toLowerCase().includes(q)
+        );
+      })
+    : solutionCards;
 
   return (
     <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-sans">
       <Navbar variant="solutions" />
 
       <main className="relative pt-16">
-        {/* Hero Section */}
-        <section className="relative py-10 flex flex-col items-center justify-center px-6 overflow-hidden circuit-bg pt-12">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-[120px]" />
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-primary/5 rounded-full blur-[100px]" />
 
-          <div className="relative z-10 text-center max-w-2xl mx-auto">
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight text-slate-900 dark:text-white mb-4 leading-[1.1]">
-              Transform your workflows <br />
-              with <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-400 dark:glow-text">AI Assisted</span> solutions
+        {/* ── Hero — compact, centered ────────────────────────────── */}
+        <section className="relative py-6 flex flex-col items-center justify-center px-6 overflow-hidden circuit-bg pt-8">
+          <div className="absolute inset-0 bg-primary/5 rounded-full blur-[120px] pointer-events-none opacity-40" />
+
+          <div className="relative z-10 text-center max-w-xl mx-auto">
+            <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-slate-900 dark:text-white mb-4 leading-snug">
+              Transform your workflows with{' '}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-400 dark:glow-text">
+                AI Assisted
+              </span>{' '}
+              solutions
             </h1>
-
-            <p className="text-base md:text-lg text-slate-500 dark:text-slate-400 max-w-xl mx-auto mb-6 leading-relaxed font-light">
-              Accelerate RTL design, automate verification and failure analysis, enhance code reviews with AI assistance, and maximize coverage through automatic unit test generation.
-            </p>
-
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
                 onClick={handleGetStarted}
-                className="w-full sm:w-auto px-6 py-2.5 bg-primary text-white font-bold rounded-lg text-base hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/20"
+                className="w-full sm:w-auto px-6 py-2.5 bg-primary text-white font-bold rounded-lg text-sm hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/20"
               >
                 Get Started
               </button>
               <button
-                onClick={handleViewDocs}
-                className="w-full sm:w-auto px-6 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/50 dark:hover:bg-slate-800 text-slate-900 dark:text-white font-bold rounded-lg text-base border border-slate-300 dark:border-slate-700 transition-all"
+                onClick={handleContact}
+                className="w-full sm:w-auto px-6 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/50 dark:hover:bg-slate-800 text-slate-900 dark:text-white font-bold rounded-lg text-sm border border-slate-300 dark:border-slate-700 transition-all"
               >
-                View Docs
+                Contact Us
               </button>
             </div>
           </div>
-
         </section>
 
-        {/* Solution Cards — scrollable up to 8 */}
+        {/* ── Our Solutions ────────────────────────────────────────── */}
         {solutionCards.length > 0 && (
-          <section className="max-w-7xl mx-auto px-6 py-24 border-t border-slate-200 dark:border-primary/10">
-            <div className="flex items-end justify-between mb-10">
+          <section className="max-w-7xl mx-auto px-6 py-16 border-t border-slate-200 dark:border-primary/10">
+            <div className="flex items-center justify-between mb-8 gap-4">
               <div>
-                <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-4">Our Solutions</h2>
-                <div className="h-1 w-20 bg-primary rounded-full" />
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Our Solutions</h2>
+                <div className="h-1 w-16 bg-primary rounded-full mt-2" />
               </div>
-              {solutionCards.length > 4 && (
-                <div className="flex gap-2">
+              <label className="relative block shrink-0">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none">
+                  <span className="material-symbols-outlined text-[18px]">search</span>
+                </span>
+                <input
+                  type="text"
+                  value={cardSearch}
+                  onChange={(e) => setCardSearch(e.target.value)}
+                  placeholder="Search solutions…"
+                  className="w-52 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-lg py-2 pl-9 pr-3 text-sm placeholder:text-slate-400 focus:ring-2 focus:ring-primary outline-none transition-all"
+                />
+                {cardSearch && (
                   <button
-                    onClick={() => scrollBy(-1)}
-                    disabled={!canScrollLeft}
-                    className="w-10 h-10 rounded-full border border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-primary hover:border-primary disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    onClick={() => setCardSearch('')}
+                    className="absolute inset-y-0 right-2 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-white"
                   >
-                    <span className="material-symbols-outlined">chevron_left</span>
+                    <span className="material-symbols-outlined text-[16px]">close</span>
                   </button>
-                  <button
-                    onClick={() => scrollBy(1)}
-                    disabled={!canScrollRight}
-                    className="w-10 h-10 rounded-full border border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-primary hover:border-primary disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                  >
-                    <span className="material-symbols-outlined">chevron_right</span>
-                  </button>
-                </div>
-              )}
+                )}
+              </label>
             </div>
 
             <div
-              ref={scrollRef}
-              onScroll={updateScrollButtons}
-              className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide snap-x snap-mandatory"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+              className="grid gap-6 overflow-y-auto pr-1"
+              style={{
+                gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                maxHeight: '640px',
+                scrollbarWidth: 'thin',
+                scrollbarColor: 'rgba(37,140,244,0.25) transparent',
+              }}
             >
-              {solutionCards.map((card) => (
+              {filteredCards.length > 0 ? filteredCards.map((card) => (
                 <div
                   key={card.id}
                   onClick={() => handleCardClick(card)}
-                  className="min-w-[320px] max-w-[320px] snap-start glass-card p-8 rounded-2xl flex flex-col gap-6 group cursor-pointer hover:border-primary/30 transition-all shrink-0"
+                  className="glass-card p-8 rounded-2xl flex flex-col gap-6 group cursor-pointer hover:border-primary/30 transition-all"
                 >
                   <div className="flex items-center justify-between">
                     <div className={`w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center ${card.icon_color} group-hover:bg-primary group-hover:text-white transition-all duration-300`}>
@@ -195,12 +180,18 @@ export const Solutions: React.FC = () => {
                     )}
                   </div>
                 </div>
-              ))}
+              )) : (
+                <div className="col-span-full flex flex-col items-center justify-center py-16 text-slate-400">
+                  <span className="material-symbols-outlined text-4xl mb-3">search_off</span>
+                  <p className="text-sm">No solutions match <span className="font-semibold text-slate-500">"{cardSearch}"</span></p>
+                  <button onClick={() => setCardSearch('')} className="mt-3 text-xs text-primary hover:underline">Clear search</button>
+                </div>
+              )}
             </div>
           </section>
         )}
 
-        {/* Demo Section */}
+        {/* ── See it in Action ─────────────────────────────────────── */}
         <section className="max-w-7xl mx-auto px-6 py-24 border-t border-slate-200 dark:border-primary/10">
           <div className="flex flex-col lg:flex-row gap-16 items-center">
             <div className="w-full lg:w-2/3">
@@ -213,56 +204,27 @@ export const Solutions: React.FC = () => {
                 <div className="absolute -inset-1 bg-gradient-to-r from-primary/50 to-blue-500/50 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200" />
                 <div className="relative bg-black rounded-2xl overflow-hidden neon-border-glow aspect-video flex-1 flex items-center justify-center">
                   {landingConfig?.video?.hls_path ? (
-                    <HlsPlayer
-                      hlsPath={landingConfig.video.hls_path}
-                      className="w-full h-full object-cover"
-                    />
+                    <HlsPlayer hlsPath={landingConfig.video.hls_path} className="w-full h-full object-cover" />
                   ) : (
                     <div className="absolute inset-0 bg-slate-900 flex flex-col">
-                      {/* IDE Header */}
                       <div className="h-8 bg-slate-800 border-b border-white/5 flex items-center px-4 gap-2">
                         <div className="w-2 h-2 rounded-full bg-red-500" />
                         <div className="w-2 h-2 rounded-full bg-yellow-500" />
                         <div className="w-2 h-2 rounded-full bg-green-500" />
                         <span className="text-[10px] text-slate-400 ml-4 font-mono">top_module.v — CodeAgent IDE</span>
                       </div>
-
-                      {/* Code Content */}
                       <div className="flex-1 p-6 font-mono text-sm overflow-hidden">
-                        <div className="flex gap-4">
-                          <span className="text-slate-600 select-none">1</span>
-                          <span className="text-blue-400">module</span>
-                          <span className="text-white">top_module(</span>
-                        </div>
-                        <div className="flex gap-4">
-                          <span className="text-slate-600 select-none">2</span>
-                          <span className="text-slate-400 ml-4">input wire clk,</span>
-                        </div>
-                        <div className="flex gap-4">
-                          <span className="text-slate-600 select-none">3</span>
-                          <span className="text-slate-400 ml-4">input wire rst_n,</span>
-                        </div>
+                        <div className="flex gap-4"><span className="text-slate-600 select-none">1</span><span className="text-blue-400">module</span><span className="text-white">top_module(</span></div>
+                        <div className="flex gap-4"><span className="text-slate-600 select-none">2</span><span className="text-slate-400 ml-4">input wire clk,</span></div>
+                        <div className="flex gap-4"><span className="text-slate-600 select-none">3</span><span className="text-slate-400 ml-4">input wire rst_n,</span></div>
                         <div className="flex gap-4 items-center animate-pulse">
                           <span className="text-slate-600 select-none">4</span>
-                          <span className="text-primary bg-primary/10 px-1 rounded border border-primary/20">
-                            Agent: Generating RTL logic for AXI Bridge...
-                          </span>
+                          <span className="text-primary bg-primary/10 px-1 rounded border border-primary/20">Agent: Generating RTL logic for AXI Bridge...</span>
                         </div>
-                        <div className="flex gap-4 mt-2">
-                          <span className="text-slate-600 select-none">5</span>
-                          <span className="text-slate-400 ml-4">reg [31:0] data_reg;</span>
-                        </div>
-                        <div className="flex gap-4">
-                          <span className="text-slate-600 select-none">6</span>
-                          <span className="text-slate-400 ml-4">always @(posedge clk or negedge rst_n) begin</span>
-                        </div>
-                        <div className="flex gap-4">
-                          <span className="text-slate-600 select-none">7</span>
-                          <span className="text-slate-400 ml-8">if (!rst_n) data_reg &lt;= 32&apos;h0;</span>
-                        </div>
+                        <div className="flex gap-4 mt-2"><span className="text-slate-600 select-none">5</span><span className="text-slate-400 ml-4">reg [31:0] data_reg;</span></div>
+                        <div className="flex gap-4"><span className="text-slate-600 select-none">6</span><span className="text-slate-400 ml-4">always @(posedge clk or negedge rst_n) begin</span></div>
+                        <div className="flex gap-4"><span className="text-slate-600 select-none">7</span><span className="text-slate-400 ml-8">if (!rst_n) data_reg &lt;= 32&apos;h0;</span></div>
                       </div>
-
-                      {/* Video Controls */}
                       <div className="h-12 bg-slate-900/80 backdrop-blur-sm border-t border-white/5 flex items-center px-6 gap-6">
                         <button onClick={handlePlayVideo} className="text-white/80 cursor-pointer hover:text-primary transition-colors">
                           <span className="material-symbols-outlined">play_arrow</span>
@@ -318,30 +280,6 @@ export const Solutions: React.FC = () => {
           </div>
         </section>
 
-        {/* CTA Section */}
-        <section className="max-w-7xl mx-auto px-6 py-24">
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-100 to-slate-50 dark:from-slate-900 dark:to-background-dark border border-slate-200 dark:border-primary/20 p-12 text-center">
-            <div className="absolute top-0 right-0 p-8 opacity-20">
-              <span className="material-symbols-outlined text-[120px] text-primary rotate-12">settings_input_component</span>
-            </div>
-            <h2 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-6">Ready to transform your workflow?</h2>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
-              <button
-                onClick={handleEnterDashboard}
-                className="bg-primary text-white font-bold py-3 px-8 rounded-lg hover:scale-105 transition-transform flex items-center gap-2 shadow-lg shadow-primary/20"
-              >
-                Enter Dashboard
-                <span className="material-symbols-outlined text-sm">arrow_forward</span>
-              </button>
-              <button
-                onClick={handleSpeakWithTeam}
-                className="text-primary font-bold hover:underline"
-              >
-                Talk to Task Force Team
-              </button>
-            </div>
-          </div>
-        </section>
       </main>
 
       <Footer />
