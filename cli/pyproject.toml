@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "mst-ingest"
+version = "0.1.0"
+description = "MST AI Portal — video ingest CLI"
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1",
+    "rich>=13.0",
+    "requests>=2.28",
+    "requests-toolbelt>=0.10",
+]
+
+[project.scripts]
+mst-ingest = "cli.ingest:cli"
+
+[tool.setuptools.packages.find]
+where = [".."]
+include = ["cli*"]
