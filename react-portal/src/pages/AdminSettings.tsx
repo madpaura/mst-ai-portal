@@ -74,6 +74,16 @@ export const AdminSettings: React.FC = () => {
   const [transcriptTestResult, setTranscriptTestResult] = useState<{ ok: boolean; detail: any } | null>(null);
   const [showTranscriptModal, setShowTranscriptModal] = useState(false);
 
+  // Contact email
+  const [contactEmail, setContactEmail] = useState('');
+  const [contactEmailSaved, setContactEmailSaved] = useState('');
+  const [contactEmailSaving, setContactEmailSaving] = useState(false);
+
+  // Marketplace status
+  const [marketplaceStatus, setMarketplaceStatus] = useState<{ under_construction: boolean; message: string } | null>(null);
+  const [marketplaceSaving, setMarketplaceSaving] = useState(false);
+  const [marketplaceForm, setMarketplaceForm] = useState({ under_construction: false, message: '' });
+
   // SMTP settings
   const [smtpConfig, setSmtpConfig] = useState<Record<string, string> | null>(null);
   const [showSmtpModal, setShowSmtpModal] = useState(false);
@@ -114,6 +124,49 @@ export const AdminSettings: React.FC = () => {
     }
   }, []);
 
+  const fetchContactEmail = useCallback(async () => {
+    try {
+      const data = await api.get<string | null>('/settings/contact_email');
+      if (data) { setContactEmail(data); setContactEmailSaved(data); }
+    } catch { /* not set yet */ }
+  }, []);
+
+  const handleContactEmailSave = async () => {
+    setContactEmailSaving(true);
+    try {
+      await api.put('/settings/admin/contact_email', { value: contactEmail });
+      setContactEmailSaved(contactEmail);
+      showMsg('success', 'Contact email saved');
+    } catch (err: any) {
+      showMsg('error', err.message);
+    } finally {
+      setContactEmailSaving(false);
+    }
+  };
+
+  const fetchMarketplaceStatus = useCallback(async () => {
+    try {
+      const data = await api.get<{ under_construction: boolean; message: string } | null>('/settings/marketplace_status');
+      if (data) {
+        setMarketplaceStatus(data);
+        setMarketplaceForm({ under_construction: data.under_construction, message: data.message || '' });
+      }
+    } catch { /* no saved status yet */ }
+  }, []);
+
+  const handleMarketplaceSave = async () => {
+    setMarketplaceSaving(true);
+    try {
+      await api.put('/settings/admin/marketplace_status', { value: marketplaceForm });
+      setMarketplaceStatus(marketplaceForm);
+      showMsg('success', 'Marketplace status saved');
+    } catch (err: any) {
+      showMsg('error', err.message);
+    } finally {
+      setMarketplaceSaving(false);
+    }
+  };
+
   const fetchSmtpSettings = useCallback(async () => {
     try {
       const data = await api.get<Record<string, string> | null>('/settings/smtp_config');
@@ -141,7 +194,7 @@ export const AdminSettings: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => { fetchSettings(); fetchSmtpSettings(); fetchTranscriptConfig(); }, [fetchSettings, fetchSmtpSettings, fetchTranscriptConfig]);
+  useEffect(() => { fetchSettings(); fetchSmtpSettings(); fetchTranscriptConfig(); fetchMarketplaceStatus(); fetchContactEmail(); }, [fetchSettings, fetchSmtpSettings, fetchTranscriptConfig, fetchMarketplaceStatus, fetchContactEmail]);
 
   useEffect(() => {
     if (selectedSettingId) fetchJobs(selectedSettingId);
@@ -338,6 +391,40 @@ export const AdminSettings: React.FC = () => {
         <p className="text-sm text-slate-400 mt-1">Configure SMTP email and marketplace repository scanning</p>
       </div>
 
+      {/* ── Contact Email Card ──────────────────────────────────── */}
+      <div className="bg-card-dark rounded-xl border border-white/5 p-6 mb-8">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="material-symbols-outlined text-primary">contact_mail</span>
+          <div>
+            <h2 className="text-base font-bold text-white">Contact Email</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Email address shown when users click "Contact" in the navigation</p>
+          </div>
+        </div>
+        <div className="flex gap-3 items-center">
+          <input
+            type="email"
+            value={contactEmail}
+            onChange={(e) => setContactEmail(e.target.value)}
+            placeholder="ai-tools@mst.internal"
+            className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
+          />
+          <button
+            onClick={handleContactEmailSave}
+            disabled={contactEmailSaving || contactEmail === contactEmailSaved}
+            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-bold rounded-lg transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm">save</span>
+            {contactEmailSaving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+        {contactEmailSaved && (
+          <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
+            <span className="material-symbols-outlined text-[13px] text-green-400">check_circle</span>
+            Currently set to <span className="text-slate-400 font-mono ml-1">{contactEmailSaved}</span>
+          </p>
+        )}
+      </div>
+
       {/* ── Transcript Service Card ─────────────────────────────── */}
       <div className="bg-card-dark rounded-xl border border-white/5 p-6 mb-8">
         <div className="flex items-center justify-between">
@@ -483,6 +570,83 @@ export const AdminSettings: React.FC = () => {
                 Auth: {smtpConfig.smtp_user ? 'Yes' : 'No'}
               </span>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Marketplace Status Card ─────────────────────────── */}
+      <div className="bg-card-dark rounded-xl border border-white/5 p-6 mb-8">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-primary">store</span>
+            <div>
+              <h2 className="text-base font-bold text-white">Marketplace Status</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Control marketplace visibility — set under construction to show users a friendly notice</p>
+            </div>
+          </div>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <span className="text-xs text-slate-400">Under Construction</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={marketplaceForm.under_construction}
+              onClick={() => setMarketplaceForm((f) => ({ ...f, under_construction: !f.under_construction }))}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                marketplaceForm.under_construction ? 'bg-amber-500' : 'bg-slate-700'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  marketplaceForm.under_construction ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </label>
+        </div>
+
+        {marketplaceForm.under_construction && (
+          <div className="mt-4 pt-4 border-t border-white/5 space-y-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Message shown to users</label>
+              <textarea
+                rows={2}
+                value={marketplaceForm.message}
+                onChange={(e) => setMarketplaceForm((f) => ({ ...f, message: e.target.value }))}
+                placeholder="We're upgrading the marketplace with new features — check back soon!"
+                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none resize-none"
+              />
+            </div>
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <span className="material-symbols-outlined text-amber-400 text-sm">warning</span>
+              <p className="text-xs text-amber-400">Marketplace will be hidden from all users until this is turned off.</p>
+            </div>
+          </div>
+        )}
+
+        {(marketplaceStatus?.under_construction !== marketplaceForm.under_construction ||
+          (marketplaceStatus?.message || '') !== marketplaceForm.message) && (
+          <div className="mt-4 pt-4 border-t border-white/5 flex gap-2">
+            <button
+              onClick={handleMarketplaceSave}
+              disabled={marketplaceSaving}
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-bold rounded-lg transition-colors"
+            >
+              <span className="material-symbols-outlined text-sm">save</span>
+              {marketplaceSaving ? 'Saving…' : 'Save Status'}
+            </button>
+            <button
+              onClick={() => setMarketplaceForm({ under_construction: marketplaceStatus?.under_construction ?? false, message: marketplaceStatus?.message ?? '' })}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg transition-colors"
+            >
+              Discard
+            </button>
+          </div>
+        )}
+
+        {marketplaceStatus && (
+          <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+            <span className={`w-1.5 h-1.5 rounded-full ${marketplaceStatus.under_construction ? 'bg-amber-400' : 'bg-green-400'}`} />
+            {marketplaceStatus.under_construction ? 'Currently under construction' : 'Marketplace is live'}
           </div>
         )}
       </div>

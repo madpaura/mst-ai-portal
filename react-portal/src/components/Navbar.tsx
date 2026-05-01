@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../api/auth';
 import { useTheme } from '../context/theme';
+import { PortalLogo } from './PortalLogo';
+import { api } from '../api/client';
 
 const BETA_TAG = import.meta.env.VITE_BETA_TAG as string | undefined;
 
@@ -15,9 +17,18 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
   const { user, isAdmin, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
+  const [contactEmail, setContactEmail] = useState('');
+
+  useEffect(() => {
+    api.get<string | null>('/settings/contact_email').then((v) => { if (v) setContactEmail(v); }).catch(() => {});
+  }, []);
+
   const handleSignIn = () => navigate('/login');
   const handleAdmin = () => navigate('/admin/videos');
   const handleLogout = () => { logout(); navigate('/'); };
+  const handleContact = () => {
+    window.open(`mailto:${contactEmail || 'ai-tools@mst.internal'}`, '_blank');
+  };
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -26,10 +37,10 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
       <nav className="fixed top-0 w-full z-50 border-b border-slate-200 dark:border-primary/10 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md font-sans">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="text-primary">
-              <span className="material-symbols-outlined text-3xl font-bold">memory</span>
-            </div>
-            <Link to="/" className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">MST AI</Link>
+            <Link to="/" className="flex items-center gap-2.5">
+              <PortalLogo size={34} />
+              <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">MST AI</span>
+            </Link>
             {BETA_TAG && (
               <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded bg-amber-400/15 text-amber-500 border border-amber-400/30">
                 {BETA_TAG}
@@ -61,6 +72,12 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
             >
               Articles
             </Link>
+            <button
+              onClick={handleContact}
+              className="text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-primary transition-colors"
+            >
+              Contact
+            </button>
           </div>
           <div className="flex items-center gap-4">
             <button
