@@ -1,0 +1,17 @@
+# GPU overlay for the transcript service — layered on top of docker-compose.transcript.yml.
+# Adds nvidia runtime and switches to CUDA compute mode.
+# setup.sh includes this automatically when an NVIDIA GPU is detected.
+
+services:
+  transcript-service:
+    runtime: nvidia
+    environment:
+      TRANSCRIPT_DEVICE: ${TRANSCRIPT_DEVICE:-cuda}
+      TRANSCRIPT_COMPUTE: ${TRANSCRIPT_COMPUTE:-float16}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

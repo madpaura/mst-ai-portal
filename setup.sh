@@ -48,9 +48,9 @@ compose_cmd() {
 compose_files() {
     detect_gpu
     if [ "$GPU_AVAILABLE" = true ]; then
-        echo "-f docker-compose.yml -f docker-compose.gpu.yml"
+        echo "-f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.transcript.yml -f docker-compose.transcript.gpu.yml"
     else
-        echo "-f docker-compose.yml"
+        echo "-f docker-compose.yml -f docker-compose.transcript.yml"
     fi
 }
 
@@ -77,6 +77,9 @@ ensure_runtime_env() {
     ensure_env_var "VIDEO_DATA_VOLUME" "./volumes/storage/videos"
     ensure_env_var "MEDIA_DATA_VOLUME" "./volumes/storage/media"
     ensure_env_var "PG_DATA_VOLUME" "./volumes/pg-data"
+    ensure_env_var "TRANSCRIPT_PORT" "9100"
+    ensure_env_var "TRANSCRIPT_API_KEY" "$(openssl rand -hex 24 2>/dev/null || echo 'change-me-please')"
+    ensure_env_var "TRANSCRIPT_MODEL" "large-v3"
 }
 
 # ── Prerequisite checks ───────────────────────────────────
@@ -155,7 +158,7 @@ check_prereqs() {
 
     # Port conflicts
     header "Port Availability"
-    for port_var in "80:FRONTEND_PORT" "8000:BACKEND_PORT" "5432:DB_PORT"; do
+    for port_var in "80:FRONTEND_PORT" "8000:BACKEND_PORT" "5432:DB_PORT" "9100:TRANSCRIPT_PORT"; do
         port="${port_var%%:*}"
         name="${port_var##*:}"
         if [ -f .env ]; then
@@ -206,8 +209,10 @@ deploy() {
 
     if [ "$GPU_AVAILABLE" = true ]; then
         ok "GPU detected — worker will use NVIDIA NVENC acceleration"
+        ok "GPU detected — transcript service will use CUDA (faster-whisper)"
     else
         warn "No GPU — worker will use CPU encoding (libx264)"
+        warn "No GPU — transcript service will use CPU (slower transcription)"
     fi
 
     echo "Building and starting containers..."
@@ -227,21 +232,29 @@ deploy() {
 
     echo ""
     header "Deployment Complete"
-    echo -e "  Frontend:    ${GREEN}http://localhost:${FRONTEND_PORT:-80}${NC}"
+    echo -e "  Frontend:    ${GREEN}http://localhost:${FRONTEND_PORT:-9800}${NC}"
     echo -e "  Backend API: ${GREEN}http://localhost:${BACKEND_PORT:-8000}${NC}"
     echo -e "  API Docs:    ${GREEN}http://localhost:${BACKEND_PORT:-8000}/docs${NC}"
-    echo -e "  Admin Panel: ${GREEN}http://localhost:${FRONTEND_PORT:-80}/admin/videos${NC}"
+    echo -e "  Admin Panel: ${GREEN}http://localhost:${FRONTEND_PORT:-9800}/admin/videos${NC}"
+    echo -e "  Transcript:  ${GREEN}http://localhost:${TRANSCRIPT_PORT:-9100}${NC}"
     echo -e "  Default Login: admin / admin"
     if [ "$GPU_AVAILABLE" = true ]; then
         echo -e "  GPU Encode:  ${GREEN}NVIDIA NVENC (h264_nvenc)${NC}"
+        echo -e "  Transcript:  ${GREEN}CUDA / faster-whisper${NC}"
     else
         echo -e "  GPU Encode:  ${YELLOW}CPU fallback (libx264)${NC}"
+        echo -e "  Transcript:  ${YELLOW}CPU mode (int8 / faster-whisper)${NC}"
     fi
     echo ""
+    _tkey=$(grep '^TRANSCRIPT_API_KEY=' .env 2>/dev/null | cut -d= -f2)
+    echo -e "  ${YELLOW}Transcript API key:${NC} ${_tkey:-change-me-please}"
+    echo -e "  Set this in Admin → Settings → Transcript Service (URL: http://localhost:${TRANSCRIPT_PORT:-9100})"
+    echo ""
     echo "  Useful commands:"
-    echo "    ./setup.sh logs backend    # Backend logs"
-    echo "    ./setup.sh logs worker     # Worker logs"
-    echo "    ./setup.sh down            # Stop all containers"
+    echo "    ./setup.sh logs backend             # Backend logs"
+    echo "    ./setup.sh logs worker              # Worker logs"
+    echo "    ./setup.sh logs transcript-service  # Transcript service logs"
+    echo "    ./setup.sh down                     # Stop all containers"
 }
 
 # ── Down ──────────────────────────────────────────────────
@@ -336,7 +349,7 @@ case "${1:-check}" in
         echo "  deploy     Build and start all containers"
         echo "  migrate    Run Alembic migrations inside the running backend"
         echo "  down       Stop all containers"
-        echo "  logs       Show logs: ./setup.sh logs [backend|worker|frontend|db]"
+        echo "  logs       Show logs: ./setup.sh logs [backend|worker|auto-processor|transcript-service|frontend|db]"
         echo "  setup-gpu  Install NVIDIA container toolkit for GPU transcoding"
         ;;
 esac
