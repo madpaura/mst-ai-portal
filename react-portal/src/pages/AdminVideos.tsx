@@ -306,14 +306,21 @@ export const AdminVideos: React.FC = () => {
         });
         setBannerGenerating(banner.status === 'generating');
       } else {
-        // Auto-populate duration from video metadata
+        // Auto-populate duration and episode number from video metadata
         const autoDuration = video.duration_s
           ? `${Math.floor(video.duration_s / 60)}:${String(video.duration_s % 60).padStart(2, '0')}`
           : '0:00';
+        const autoEpisode = (() => {
+          if (!video.course_id) return 'EP 01';
+          const courseVids = [...videos.filter(v => v.course_id === video.course_id)]
+            .sort((a, b) => a.sort_order - b.sort_order || new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+          const idx = courseVids.findIndex(v => v.id === video.id);
+          return `EP ${String(idx >= 0 ? idx + 1 : 1).padStart(2, '0')}`;
+        })();
         setBannerForm({
           variant: 'A', company_logo: 'SAMSUNG', series_tag: 'KNOWLEDGE SERIES',
           brand_title: 'AI Ignite',
-          topic: video.title, subtopic: '', episode: 'EP 01', duration: autoDuration,
+          topic: video.title, subtopic: '', episode: autoEpisode, duration: autoDuration,
           presenter: '', presenter_initial: '', banner_duration_s: 3,
         });
         setBannerGenerating(false);
@@ -2151,8 +2158,23 @@ export const AdminVideos: React.FC = () => {
                       <div className="flex gap-2">
                         <div className="flex-1">
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Episode</label>
-                          <input value={bannerForm.episode} onChange={(e) => setBannerForm((f) => ({ ...f, episode: e.target.value }))}
-                            className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                          <div className="flex gap-1">
+                            <input value={bannerForm.episode} onChange={(e) => setBannerForm((f) => ({ ...f, episode: e.target.value }))}
+                              className="flex-1 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                            <button
+                              onClick={() => {
+                                if (!selected?.course_id) return;
+                                const courseVids = [...videos.filter(v => v.course_id === selected.course_id)]
+                                  .sort((a, b) => a.sort_order - b.sort_order || new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+                                const idx = courseVids.findIndex(v => v.id === selected.id);
+                                setBannerForm((f) => ({ ...f, episode: `EP ${String(idx >= 0 ? idx + 1 : 1).padStart(2, '0')}` }));
+                              }}
+                              className="px-2 py-1.5 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary text-xs font-bold transition-colors border border-primary/30"
+                              title="Sync episode number from video position in course"
+                            >
+                              <span className="material-symbols-outlined text-sm">sync</span>
+                            </button>
+                          </div>
                         </div>
                         <div className="flex-1">
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Duration</label>
