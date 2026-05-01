@@ -86,7 +86,7 @@ interface Attachment {
   created_at: string;
 }
 
-type Tab = 'metadata' | 'chapters' | 'howto' | 'quality' | 'seed-notes' | 'banner' | 'trim' | 'attachments' | 'email';
+type Tab = 'metadata' | 'chapters' | 'howto' | 'transcript' | 'quality' | 'seed-notes' | 'banner' | 'trim' | 'attachments' | 'email';
 
 const DEFAULT_CATEGORIES = ['Code-mate', 'RAG', 'Agents', 'Deep Dive'];
 
@@ -132,6 +132,16 @@ export const AdminVideos: React.FC = () => {
   const [newChapter, setNewChapter] = useState({ title: '', start_time: 0 });
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
   const [editChapterForm, setEditChapterForm] = useState({ title: '', start_time: 0 });
+
+  // Auto mode
+  const [autoMode, setAutoMode] = useState(false);
+  const [autoStatus, setAutoStatus] = useState<Record<string, any> | null>(null);
+  const autoStatusPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Transcript tab
+  const [transcriptData, setTranscriptData] = useState<any | null>(null);
+  const [transcriptLoading, setTranscriptLoading] = useState(false);
+  const [transcriptSaving, setTranscriptSaving] = useState(false);
 
   // How-to
   const [howtoTitle, setHowtoTitle] = useState('');
@@ -342,6 +352,19 @@ export const AdminVideos: React.FC = () => {
     } catch {
       setOpsLog([]);
     }
+    // Load auto-processing status
+    try {
+      const status = await api.get<any>(`/admin/videos/${video.id}/auto-status`);
+      setAutoStatus(status);
+      // Resume polling if any job is still in-progress
+      const jobs = status?.jobs || {};
+      const anyRunning = Object.values(jobs).some(
+        (j: any) => j.status === 'pending' || j.status === 'processing'
+      ) || status?.transcript_status === 'processing';
+      if (anyRunning) startAutoStatusPoll(video.id);
+    } catch {
+      setAutoStatus(null);
+    }
   };
 
   const refreshOpsLog = async (videoId: string) => {
@@ -430,11 +453,75 @@ export const AdminVideos: React.FC = () => {
       await fetchVideos();
       markEdited(selected.id);
       refreshOpsLog(selected.id);
-      showMsg('success', 'Video uploaded successfully');
+      if (autoMode) {
+        showMsg('success', 'Video uploaded — queuing auto-processing...');
+        await api.post(`/admin/videos/${selected.id}/auto-process`, {});
+        startAutoStatusPoll(selected.id);
+        showMsg('success', 'Auto-processing started: transcript → metadata → chapters → how-to');
+      } else {
+        showMsg('success', 'Video uploaded successfully');
+      }
     } catch (err: any) {
       showMsg('error', err.message);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const startAutoStatusPoll = (videoId: string) => {
+    if (autoStatusPollRef.current) clearInterval(autoStatusPollRef.current);
+    const poll = async () => {
+      try {
+        const status = await api.get<any>(`/admin/videos/${videoId}/auto-status`);
+        setAutoStatus(status);
+        const jobs = status.jobs || {};
+        const allDone = ['transcript', 'metadata', 'chapters', 'howto'].every(
+          k => jobs[k] && ['completed', 'failed', 'cancelled'].includes(jobs[k].status)
+        );
+        if (allDone && status.transcript_status !== 'processing') {
+          if (autoStatusPollRef.current) clearInterval(autoStatusPollRef.current);
+          autoStatusPollRef.current = null;
+          await fetchVideos();
+        }
+      } catch { /* ignore */ }
+    };
+    poll();
+    autoStatusPollRef.current = setInterval(poll, 4000);
+  };
+
+  const fetchTranscript = async (videoId: string) => {
+    setTranscriptLoading(true);
+    try {
+      const data = await api.get<any>(`/admin/videos/${videoId}/transcript`);
+      setTranscriptData(data);
+    } catch {
+      setTranscriptData(null);
+    } finally {
+      setTranscriptLoading(false);
+    }
+  };
+
+  const handleSaveTranscript = async () => {
+    if (!selected || !transcriptData) return;
+    setTranscriptSaving(true);
+    try {
+      await api.put(`/admin/videos/${selected.id}/transcript`, transcriptData);
+      showMsg('success', 'Transcript saved');
+    } catch (err: any) {
+      showMsg('error', err.message);
+    } finally {
+      setTranscriptSaving(false);
+    }
+  };
+
+  const handleRetryAutoJob = async (kind: string) => {
+    if (!selected) return;
+    try {
+      await api.post(`/admin/videos/${selected.id}/auto-process/retry`, { kind });
+      startAutoStatusPoll(selected.id);
+      showMsg('success', `Retrying ${kind}...`);
+    } catch (err: any) {
+      showMsg('error', err.message);
     }
   };
 
@@ -706,6 +793,7 @@ export const AdminVideos: React.FC = () => {
     return () => {
       if (bannerPollRef.current) clearInterval(bannerPollRef.current);
       if (processingPollRef.current) clearInterval(processingPollRef.current);
+      if (autoStatusPollRef.current) clearInterval(autoStatusPollRef.current);
     };
   }, []);
 
@@ -1376,24 +1464,40 @@ export const AdminVideos: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-4">
-                  <label className="flex-1 flex items-center justify-center gap-2 px-4 py-6 rounded-lg border-2 border-dashed border-slate-300 dark:border-white/10 hover:border-primary/50 cursor-pointer transition-colors">
-                    <span className="material-symbols-outlined text-slate-500">cloud_upload</span>
-                    <span className="text-sm text-slate-400">{uploadFile ? uploadFile.name : 'Choose video file or drag & drop'}</span>
+                <div className="space-y-3">
+                  {/* Auto Mode toggle */}
+                  <label className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-primary/5 border border-primary/20 cursor-pointer hover:bg-primary/10 transition-colors">
                     <input
-                      type="file"
-                      accept="video/*"
-                      className="hidden"
-                      onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                      type="checkbox"
+                      checked={autoMode}
+                      onChange={(e) => setAutoMode(e.target.checked)}
+                      className="w-4 h-4 accent-primary"
                     />
+                    <span className="material-symbols-outlined text-primary text-sm">auto_awesome</span>
+                    <div>
+                      <span className="text-sm font-bold text-white">Auto Mode</span>
+                      <span className="text-xs text-slate-400 ml-2">— transcribe + auto-generate metadata, chapters &amp; how-to guide</span>
+                    </div>
                   </label>
-                  <button
-                    onClick={handleUpload}
-                    disabled={!uploadFile || uploading}
-                    className="px-6 py-3 bg-primary hover:bg-blue-500 disabled:opacity-30 text-white text-sm font-bold rounded-lg transition-colors"
-                  >
-                    {uploading ? 'Uploading...' : 'Upload'}
-                  </button>
+                  <div className="flex items-center gap-4">
+                    <label className="flex-1 flex items-center justify-center gap-2 px-4 py-6 rounded-lg border-2 border-dashed border-slate-300 dark:border-white/10 hover:border-primary/50 cursor-pointer transition-colors">
+                      <span className="material-symbols-outlined text-slate-500">cloud_upload</span>
+                      <span className="text-sm text-slate-400">{uploadFile ? uploadFile.name : 'Choose video file or drag & drop'}</span>
+                      <input
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                      />
+                    </label>
+                    <button
+                      onClick={handleUpload}
+                      disabled={!uploadFile || uploading}
+                      className="px-6 py-3 bg-primary hover:bg-blue-500 disabled:opacity-30 text-white text-sm font-bold rounded-lg transition-colors"
+                    >
+                      {uploading ? 'Uploading...' : 'Upload'}
+                    </button>
+                  </div>
                 </div>
               )}
               {selected.job_status === 'failed' && (
@@ -1468,17 +1572,20 @@ export const AdminVideos: React.FC = () => {
 
             {/* Tabs */}
             <div className="flex items-center gap-1 border-b border-slate-200 dark:border-white/10 mb-4 shrink-0">
-              {(['metadata', 'banner', 'trim', 'chapters', 'howto', 'quality', 'seed-notes', 'attachments', 'email'] as Tab[]).map((tab) => (
+              {(['metadata', 'banner', 'trim', 'chapters', 'howto', 'transcript', 'quality', 'seed-notes', 'attachments', 'email'] as Tab[]).map((tab) => (
                 <button
                   key={tab}
-                  onClick={() => setActiveTab(tab)}
+                  onClick={() => {
+                    setActiveTab(tab);
+                    if (tab === 'transcript' && selected) fetchTranscript(selected.id);
+                  }}
                   className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-all capitalize ${
                     activeTab === tab
                       ? 'text-white border-primary bg-primary/5'
                       : 'text-slate-400 hover:text-white border-transparent'
                   }`}
                 >
-                  {tab === 'seed-notes' ? 'Seed Notes' : tab === 'howto' ? 'How-To' : tab === 'banner' ? '🎬 Banner' : tab === 'trim' ? '✂️ Trim' : tab === 'attachments' ? 'Attachments' : tab === 'email' ? '📧 Email' : tab}
+                  {tab === 'seed-notes' ? 'Seed Notes' : tab === 'howto' ? 'How-To' : tab === 'transcript' ? '🎙 Transcript' : tab === 'banner' ? '🎬 Banner' : tab === 'trim' ? '✂️ Trim' : tab === 'attachments' ? 'Attachments' : tab === 'email' ? '📧 Email' : tab}
                 </button>
               ))}
             </div>
@@ -1703,6 +1810,112 @@ export const AdminVideos: React.FC = () => {
                 <button onClick={handleSaveHowto} className="px-6 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
                   Save How-To Guide
                 </button>
+              </div>
+            )}
+
+            {activeTab === 'transcript' && (
+              <div className="space-y-4">
+                {/* Auto-processing status */}
+                {autoStatus && (
+                  <div className="p-3 rounded-lg bg-slate-800/40 border border-white/5 space-y-2">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Auto-Processing Status</p>
+                    <div className="flex flex-wrap gap-2">
+                      {(['transcript', 'metadata', 'chapters', 'howto'] as const).map((kind) => {
+                        const job = autoStatus.jobs?.[kind];
+                        const colors = !job ? 'bg-slate-700/40 text-slate-500' :
+                          job.status === 'completed' ? 'bg-green-500/15 text-green-400' :
+                          job.status === 'failed' ? 'bg-red-500/15 text-red-400' :
+                          job.status === 'processing' || job.status === 'pending' ? 'bg-amber-500/15 text-amber-400' :
+                          'bg-slate-700/40 text-slate-500';
+                        return (
+                          <div key={kind} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${colors}`}>
+                            <span className="material-symbols-outlined text-xs">
+                              {!job ? 'radio_button_unchecked' :
+                               job.status === 'completed' ? 'check_circle' :
+                               job.status === 'failed' ? 'error' :
+                               'hourglass_top'}
+                            </span>
+                            {kind}
+                            {job?.status === 'failed' && (
+                              <button onClick={() => handleRetryAutoJob(kind)} className="ml-1 hover:text-white transition-colors" title="Retry">
+                                <span className="material-symbols-outlined text-xs">refresh</span>
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {!autoStatus.jobs?.transcript && (
+                      <button
+                        onClick={async () => {
+                          if (!selected) return;
+                          await api.post(`/admin/videos/${selected.id}/auto-process`, {});
+                          startAutoStatusPoll(selected.id);
+                          showMsg('success', 'Auto-processing started');
+                        }}
+                        className="mt-1 flex items-center gap-1.5 px-3 py-1.5 bg-primary/20 hover:bg-primary/30 text-primary text-xs font-bold rounded-lg transition-colors border border-primary/30"
+                      >
+                        <span className="material-symbols-outlined text-sm">auto_awesome</span>
+                        Start Auto-Processing
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Transcript content */}
+                {transcriptLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-slate-400 py-8 justify-center">
+                    <span className="material-symbols-outlined animate-spin">autorenew</span>
+                    Loading transcript...
+                  </div>
+                ) : transcriptData ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex gap-3 text-xs text-slate-400">
+                        {transcriptData.language && <span>Language: <span className="text-slate-200 font-bold">{transcriptData.language}</span></span>}
+                        {transcriptData.duration && <span>Duration: <span className="text-slate-200 font-bold">{Math.floor(transcriptData.duration / 60)}:{String(Math.floor(transcriptData.duration % 60)).padStart(2, '0')}</span></span>}
+                        {transcriptData.segments?.length && <span>Segments: <span className="text-slate-200 font-bold">{transcriptData.segments.length}</span></span>}
+                      </div>
+                      <button onClick={handleSaveTranscript} disabled={transcriptSaving} className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors">
+                        <span className="material-symbols-outlined text-sm">save</span>
+                        {transcriptSaving ? 'Saving…' : 'Save'}
+                      </button>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Full Transcript</label>
+                      <textarea
+                        value={transcriptData.full_text || ''}
+                        onChange={(e) => setTranscriptData((d: any) => ({ ...d, full_text: e.target.value }))}
+                        rows={18}
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none resize-none font-mono leading-relaxed"
+                        placeholder="Transcript text..."
+                      />
+                    </div>
+                    {(transcriptData.segments?.length > 0) && (
+                      <details className="rounded-lg bg-slate-800/30 border border-white/5">
+                        <summary className="px-4 py-2 text-xs font-bold text-slate-400 cursor-pointer hover:text-white">
+                          Timestamped Segments ({transcriptData.segments.length})
+                        </summary>
+                        <div className="px-4 pb-4 space-y-1 max-h-64 overflow-y-auto">
+                          {transcriptData.segments.map((seg: any, i: number) => (
+                            <div key={i} className="flex gap-3 text-xs">
+                              <span className="font-mono text-primary min-w-[80px]">
+                                {Math.floor(seg.start / 60)}:{String(Math.floor(seg.start % 60)).padStart(2, '0')} → {Math.floor(seg.end / 60)}:{String(Math.floor(seg.end % 60)).padStart(2, '0')}
+                              </span>
+                              <span className="text-slate-300">{seg.text}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-slate-500">
+                    <span className="material-symbols-outlined text-4xl mb-3 block">mic_off</span>
+                    <p className="text-sm">No transcript yet.</p>
+                    <p className="text-xs mt-1">Upload a video and enable Auto Mode, or start auto-processing above.</p>
+                  </div>
+                )}
               </div>
             )}
 
