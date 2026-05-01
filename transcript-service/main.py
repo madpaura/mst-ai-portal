@@ -1,9 +1,6 @@
 """
 Transcript Service — GPU-hosted speech-to-text via faster-whisper.
 
-Deploy on a machine with a CUDA GPU. The main portal's auto-processor
-worker calls this service over HTTP.
-
 Environment:
   TRANSCRIPT_API_KEY   — shared secret (X-API-Key header)
   TRANSCRIPT_MODEL     — faster-whisper model size (default: large-v3)
@@ -13,6 +10,7 @@ Environment:
 
 import os
 import tempfile
+import threading
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -25,16 +23,34 @@ DEVICE = os.environ.get("TRANSCRIPT_DEVICE", "cuda")
 COMPUTE_TYPE = os.environ.get("TRANSCRIPT_COMPUTE", "float16")
 
 _model = None
+_model_loading = False
+_model_error: Optional[str] = None
+
+
+def _load_model():
+    global _model, _model_loading, _model_error
+    try:
+        from faster_whisper import WhisperModel
+        print(f"[model] Loading faster-whisper model={MODEL_SIZE} device={DEVICE} compute={COMPUTE_TYPE}", flush=True)
+        _model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE)
+        print("[model] Model ready", flush=True)
+    except Exception as exc:
+        _model_error = str(exc)
+        print(f"[model] ERROR loading model: {exc}", flush=True)
+    finally:
+        _model_loading = False
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _model
-    from faster_whisper import WhisperModel
-    print(f"[startup] Loading faster-whisper model={MODEL_SIZE} device={DEVICE} compute={COMPUTE_TYPE}")
-    _model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE)
-    print("[startup] Model ready")
+    global _model_loading
+    _model_loading = True
+    # Load model in a background thread so the server starts immediately
+    t = threading.Thread(target=_load_model, daemon=True)
+    t.start()
     yield
+    # Cleanup
+    global _model
     _model = None
 
 
@@ -43,15 +59,30 @@ app = FastAPI(title="MST Transcript Service", lifespan=lifespan)
 
 def _check_api_key(request: Request):
     if not API_KEY:
-        return  # no key configured → open (not recommended for production)
+        return
     provided = request.headers.get("X-API-Key", "")
     if provided != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
 
 
 @app.get("/health")
-async def health(request: Request):
-    _check_api_key(request)
+async def health():
+    """Public health endpoint — no API key required."""
+    if _model_loading:
+        return JSONResponse(status_code=503, content={
+            "status": "loading",
+            "model": MODEL_SIZE,
+            "device": DEVICE,
+            "compute": COMPUTE_TYPE,
+            "gpu": DEVICE == "cuda",
+        })
+    if _model_error:
+        return JSONResponse(status_code=503, content={
+            "status": "error",
+            "error": _model_error,
+            "model": MODEL_SIZE,
+            "device": DEVICE,
+        })
     return {
         "status": "ok",
         "model": MODEL_SIZE,
@@ -81,10 +112,11 @@ async def transcribe(
     """
     _check_api_key(request)
 
+    if _model_loading:
+        raise HTTPException(status_code=503, detail="Model is still loading, try again shortly")
     if _model is None:
-        raise HTTPException(status_code=503, detail="Model not loaded")
+        raise HTTPException(status_code=503, detail=f"Model not loaded: {_model_error or 'unknown error'}")
 
-    # Save upload to temp file
     suffix = os.path.splitext(audio.filename or "audio.wav")[1] or ".wav"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp_path = tmp.name
