@@ -24,8 +24,14 @@ services:
       TRANSCRIPT_COMPUTE: ${TRANSCRIPT_COMPUTE:-int8}
     ports:
       - "${TRANSCRIPT_PORT:-9100}:9100"
+    volumes:
+      - transcript-model-cache:/root/.cache/huggingface
     healthcheck:
-      test: ["CMD", "curl", "-f", "-H", "X-API-Key: ${TRANSCRIPT_API_KEY:-change-me}", "http://localhost:9100/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9100/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 10
+      start_period: 300s
+
+volumes:
+  transcript-model-cache:
