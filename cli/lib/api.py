@@ -69,6 +69,26 @@ class APIClient:
     def get_video(self, video_id: str) -> dict:
         return self._get(f"/admin/videos/{video_id}").json()
 
+    def resolve_video_id(self, slug_or_id: str) -> str:
+        """Return the UUID for a slug-or-id string.
+
+        Tries the value as a UUID path first; if that 404s it searches
+        the video list for a matching slug.
+        """
+        import re
+        _UUID_RE = re.compile(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I
+        )
+        if _UUID_RE.match(slug_or_id):
+            return slug_or_id
+        # Slug — search the admin list
+        videos = self._get("/admin/videos").json()
+        for v in videos:
+            if v.get("slug") == slug_or_id:
+                return v["id"]
+        raise APIError(404, f"No video found with slug {slug_or_id!r}")
+
+
     def upload_video(
         self,
         video_id: str,
@@ -95,5 +115,6 @@ class APIClient:
     def trigger_auto_process(self, video_id: str) -> None:
         self._post(f"/admin/videos/{video_id}/auto-process")
 
-    def get_auto_status(self, video_id: str) -> dict:
-        return self._get(f"/admin/videos/{video_id}/auto-status").json()
+    def get_auto_status(self, slug_or_id: str) -> dict:
+        vid = self.resolve_video_id(slug_or_id)
+        return self._get(f"/admin/videos/{vid}/auto-status").json()
