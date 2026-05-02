@@ -93,6 +93,10 @@ def _transcript_path(video_id: str) -> str:
     return os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "transcript.json")
 
 
+def _transcript_progress_path(video_id: str) -> str:
+    return os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "transcript.progress")
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/videos/{video_id}/auto-process")
@@ -137,6 +141,63 @@ async def get_auto_status(video_id: str, admin: dict = Depends(require_admin)):
         "transcript_error": video["transcript_error"] if video else None,
         "jobs": result,
     }
+
+
+@router.get("/videos/{video_id}/transcript/progress")
+async def get_transcript_progress(video_id: str, admin: dict = Depends(require_admin)):
+    """Return current transcript generation progress: elapsed time, estimated duration, partial segments."""
+    import time as _time
+    db = await get_db()
+    video = await db.fetchrow(
+        "SELECT transcript_status, transcript_error, duration_s FROM videos WHERE id = $1", video_id
+    )
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    status = video["transcript_status"] or "pending"
+    result: dict = {
+        "status": status,
+        "elapsed_s": None,
+        "video_duration_s": video["duration_s"],
+        "estimated_remaining_s": None,
+        "segments": [],
+        "error": video["transcript_error"],
+    }
+
+    # Read progress marker if present
+    prog_path = _transcript_progress_path(video_id)
+    if os.path.isfile(prog_path):
+        try:
+            with open(prog_path) as f:
+                prog = json.load(f)
+            started_at = prog.get("started_at")
+            if started_at:
+                elapsed = _time.time() - started_at
+                result["elapsed_s"] = round(elapsed, 1)
+                # Rough estimate: Whisper large-v3 on GPU ≈ 10× realtime
+                dur = video["duration_s"] or prog.get("video_duration_s")
+                if dur:
+                    result["video_duration_s"] = dur
+                    estimated_total = dur / 10.0
+                    result["estimated_remaining_s"] = max(0, round(estimated_total - elapsed, 1))
+            result["segments"] = prog.get("segments", [])
+        except Exception:
+            pass
+
+    # If transcript.json already exists and we have partial/full data, return segments
+    if status == "ready":
+        t_path = _transcript_path(video_id)
+        if os.path.isfile(t_path):
+            try:
+                with open(t_path) as f:
+                    t = json.load(f)
+                result["segments"] = t.get("segments", [])
+                result["language"] = t.get("language")
+                result["duration"] = t.get("duration")
+            except Exception:
+                pass
+
+    return result
 
 
 @router.get("/videos/{video_id}/transcript")

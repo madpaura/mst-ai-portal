@@ -6,6 +6,7 @@ from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import smtplib
+import socket
 import asyncpg
 
 from auth.dependencies import require_admin
@@ -396,4 +397,100 @@ async def test_smtp(req: SmtpTestRequest, admin: dict = Depends(require_admin)):
         elif "ssl" in error_str or "tls" in error_str:
             return {"success": False, "message": f"SSL/TLS error. Try port 587 with STARTTLS or port 465 with SSL"}
         else:
-            return {"success": False, "message": f"SMTP error: {str(e)}"}
+            return {"success": False, "message": f"SMTP error: {type(e).__name__}: {str(e) or '(no detail)'}"}
+
+
+class SmtpProbeRequest(BaseModel):
+    smtp_server: str
+    smtp_port: int
+
+
+@router.post("/probe-smtp")
+async def probe_smtp(req: SmtpProbeRequest, admin: dict = Depends(require_admin)):
+    """Step-by-step SMTP connectivity probe — TCP → banner → EHLO/STARTTLS.
+    Does NOT authenticate or send mail. Use this to diagnose connectivity
+    before troubleshooting credentials."""
+    steps: list[dict] = []
+
+    # ── Step 1: DNS resolution ─────────────────────────────────────────────
+    try:
+        ip = socket.gethostbyname(req.smtp_server)
+        steps.append({"step": "DNS", "ok": True, "detail": f"{req.smtp_server} → {ip}"})
+    except socket.gaierror as e:
+        steps.append({"step": "DNS", "ok": False, "detail": f"Cannot resolve hostname: {e}"})
+        return {"steps": steps, "reachable": False}
+
+    # ── Step 2: TCP connect ────────────────────────────────────────────────
+    try:
+        sock = socket.create_connection((req.smtp_server, req.smtp_port), timeout=10)
+        sock.close()
+        steps.append({"step": "TCP connect", "ok": True,
+                      "detail": f"Port {req.smtp_port} open"})
+    except (ConnectionRefusedError, socket.timeout, OSError) as e:
+        steps.append({"step": "TCP connect", "ok": False,
+                      "detail": f"Port {req.smtp_port} unreachable from container: {e}"})
+        return {"steps": steps, "reachable": False}
+
+    # ── Step 3: SMTP banner + EHLO ─────────────────────────────────────────
+    banner = ""
+    extensions: list[str] = []
+    try:
+        if req.smtp_port == 465:
+            import ssl
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            server = smtplib.SMTP_SSL(req.smtp_server, req.smtp_port, timeout=10, context=ctx)
+        else:
+            server = smtplib.SMTP(req.smtp_server, req.smtp_port, timeout=10)
+        banner = server.getwelcome().decode(errors="replace")
+        steps.append({"step": "SMTP banner", "ok": True, "detail": banner})
+    except Exception as e:
+        steps.append({"step": "SMTP banner", "ok": False,
+                      "detail": f"{type(e).__name__}: {e}"})
+        return {"steps": steps, "reachable": False}
+
+    # ── Step 4: EHLO ──────────────────────────────────────────────────────
+    try:
+        code, resp = server.ehlo()
+        extensions = resp.decode(errors="replace").splitlines()
+        steps.append({"step": "EHLO", "ok": code == 250,
+                      "detail": f"Code {code} — extensions: {', '.join(e.split()[0] for e in extensions if e.strip())}"})
+    except Exception as e:
+        steps.append({"step": "EHLO", "ok": False, "detail": str(e)})
+
+    # ── Step 5: STARTTLS availability ──────────────────────────────────────
+    if req.smtp_port != 465:
+        has_tls = server.has_extn("starttls")
+        steps.append({"step": "STARTTLS", "ok": has_tls,
+                      "detail": "Supported" if has_tls else "Not advertised — plain SMTP or check port"})
+        if has_tls:
+            try:
+                server.starttls()
+                server.ehlo()
+                steps.append({"step": "TLS handshake", "ok": True, "detail": "TLS negotiated successfully"})
+            except Exception as e:
+                steps.append({"step": "TLS handshake", "ok": False,
+                              "detail": f"{type(e).__name__}: {e}"})
+
+    # ── Step 6: AUTH methods ───────────────────────────────────────────────
+    try:
+        auth_exts = [e for e in (server.esmtp_features or {}) if "auth" in e.lower()]
+        auth_methods = []
+        for a in auth_exts:
+            auth_methods += a.split()[1:]
+        if auth_methods:
+            steps.append({"step": "AUTH methods", "ok": True,
+                          "detail": f"Supported: {', '.join(auth_methods)}"})
+        else:
+            steps.append({"step": "AUTH methods", "ok": True, "detail": "None advertised (may be ok for internal relay)"})
+    except Exception:
+        pass
+
+    try:
+        server.quit()
+    except Exception:
+        pass
+
+    all_ok = all(s["ok"] for s in steps)
+    return {"steps": steps, "reachable": all_ok}

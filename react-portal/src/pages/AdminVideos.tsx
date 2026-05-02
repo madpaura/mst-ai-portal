@@ -142,6 +142,11 @@ export const AdminVideos: React.FC = () => {
   const [transcriptData, setTranscriptData] = useState<any | null>(null);
   const [transcriptLoading, setTranscriptLoading] = useState(false);
   const [transcriptSaving, setTranscriptSaving] = useState(false);
+  const [transcriptProgress, setTranscriptProgress] = useState<{
+    status: string; elapsed_s: number | null; video_duration_s: number | null;
+    estimated_remaining_s: number | null; segments: any[]; error: string | null;
+  } | null>(null);
+  const transcriptProgressPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // How-to
   const [howtoTitle, setHowtoTitle] = useState('');
@@ -271,6 +276,9 @@ export const AdminVideos: React.FC = () => {
   }, [fetchVideos, fetchCourses]);
 
   const selectVideo = async (video: Video) => {
+    stopTranscriptProgressPoll();
+    setTranscriptData(null);
+    setTranscriptProgress(null);
     setSelected(video);
     setActiveTab('metadata');
     setEditForm({
@@ -498,11 +506,46 @@ export const AdminVideos: React.FC = () => {
     autoStatusPollRef.current = setInterval(poll, 4000);
   };
 
+  const stopTranscriptProgressPoll = () => {
+    if (transcriptProgressPollRef.current) {
+      clearInterval(transcriptProgressPollRef.current);
+      transcriptProgressPollRef.current = null;
+    }
+  };
+
+  const startTranscriptProgressPoll = (videoId: string) => {
+    stopTranscriptProgressPoll();
+    const poll = async () => {
+      try {
+        const prog = await api.get<any>(`/admin/videos/${videoId}/transcript/progress`);
+        setTranscriptProgress(prog);
+        if (prog.status === 'ready') {
+          stopTranscriptProgressPoll();
+          // Auto-load the full transcript
+          const data = await api.get<any>(`/admin/videos/${videoId}/transcript`);
+          setTranscriptData(data);
+        } else if (prog.status === 'failed') {
+          stopTranscriptProgressPoll();
+        }
+      } catch { /* ignore */ }
+    };
+    poll();
+    transcriptProgressPollRef.current = setInterval(poll, 3000);
+  };
+
   const fetchTranscript = async (videoId: string) => {
     setTranscriptLoading(true);
+    setTranscriptProgress(null);
     try {
-      const data = await api.get<any>(`/admin/videos/${videoId}/transcript`);
-      setTranscriptData(data);
+      // First check progress/status so we know whether to show the live view
+      const prog = await api.get<any>(`/admin/videos/${videoId}/transcript/progress`);
+      setTranscriptProgress(prog);
+      if (prog.status === 'processing' || prog.status === 'pending') {
+        startTranscriptProgressPoll(videoId);
+      } else if (prog.status === 'ready') {
+        const data = await api.get<any>(`/admin/videos/${videoId}/transcript`);
+        setTranscriptData(data);
+      }
     } catch {
       setTranscriptData(null);
     } finally {
@@ -803,6 +846,7 @@ export const AdminVideos: React.FC = () => {
       if (bannerPollRef.current) clearInterval(bannerPollRef.current);
       if (processingPollRef.current) clearInterval(processingPollRef.current);
       if (autoStatusPollRef.current) clearInterval(autoStatusPollRef.current);
+      if (transcriptProgressPollRef.current) clearInterval(transcriptProgressPollRef.current);
     };
   }, []);
 
@@ -1924,6 +1968,82 @@ export const AdminVideos: React.FC = () => {
                   </div>
                 )}
 
+                {/* Progress panel — shown while transcript is generating */}
+                {transcriptProgress && (transcriptProgress.status === 'processing' || transcriptProgress.status === 'pending') && (
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5 space-y-4">
+                    <div className="flex items-center gap-3">
+                      <span className="material-symbols-outlined text-amber-400 animate-pulse text-xl">graphic_eq</span>
+                      <div>
+                        <p className="text-sm font-bold text-amber-300">
+                          {transcriptProgress.status === 'pending' ? 'Queued — waiting for worker…' : 'Transcribing audio…'}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {transcriptProgress.status === 'processing'
+                            ? 'Audio is being processed by the speech-to-text service'
+                            : 'The transcription job is queued and will start shortly'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Progress bar */}
+                    {transcriptProgress.status === 'processing' && (
+                      <div className="space-y-2">
+                        {(() => {
+                          const { elapsed_s, video_duration_s } = transcriptProgress;
+                          const pct = elapsed_s && video_duration_s
+                            ? Math.min(95, Math.round((elapsed_s / (video_duration_s / 10)) * 100))
+                            : null;
+                          return (
+                            <div className="h-1.5 w-full rounded-full bg-slate-700 overflow-hidden relative">
+                              {pct != null ? (
+                                <div className="h-full rounded-full bg-amber-400 transition-[width] duration-1000"
+                                     style={{ width: `${pct}%` }} />
+                              ) : (
+                                <div className="h-full w-1/3 rounded-full bg-amber-400 absolute"
+                                     style={{ animation: 'progress-slide 2s ease-in-out infinite' }} />
+                              )}
+                            </div>
+                          );
+                        })()}
+
+                        <div className="flex justify-between text-[11px] text-slate-400">
+                          <span>
+                            {transcriptProgress.elapsed_s != null
+                              ? `Elapsed: ${Math.floor(transcriptProgress.elapsed_s / 60)}m ${Math.floor(transcriptProgress.elapsed_s % 60)}s`
+                              : 'Elapsed: —'}
+                          </span>
+                          <span>
+                            {transcriptProgress.estimated_remaining_s != null && transcriptProgress.estimated_remaining_s > 0
+                              ? `~${Math.ceil(transcriptProgress.estimated_remaining_s / 60)}m remaining`
+                              : transcriptProgress.elapsed_s ? 'Finishing up…' : ''}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Partial segments (if transcript service streams partial results in future) */}
+                    {transcriptProgress.segments?.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                          Partial transcript — {transcriptProgress.segments.length} segments so far
+                        </p>
+                        <div className="rounded-lg bg-slate-900 border border-white/10 max-h-48 overflow-y-auto divide-y divide-white/5">
+                          {transcriptProgress.segments.map((seg: any, i: number) => (
+                            <div key={i} className="flex gap-3 px-3 py-1.5 text-xs">
+                              <span className="font-mono text-primary shrink-0 w-[90px]">
+                                {Math.floor(seg.start / 60)}:{String(Math.floor(seg.start % 60)).padStart(2, '0')}
+                                {' → '}
+                                {Math.floor(seg.end / 60)}:{String(Math.floor(seg.end % 60)).padStart(2, '0')}
+                              </span>
+                              <span className="text-slate-300 leading-relaxed">{seg.text}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Transcript content */}
                 {transcriptLoading ? (
                   <div className="flex items-center gap-2 text-sm text-slate-400 py-8 justify-center">
@@ -1974,13 +2094,25 @@ export const AdminVideos: React.FC = () => {
                       </div>
                     )}
                   </div>
-                ) : (
+                ) : transcriptProgress?.status === 'failed' ? (
+                  <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-5">
+                    <div className="flex items-start gap-3">
+                      <span className="material-symbols-outlined text-red-400 text-xl">error</span>
+                      <div>
+                        <p className="text-sm font-bold text-red-300">Transcript generation failed</p>
+                        {transcriptProgress.error && (
+                          <p className="text-xs text-slate-400 mt-1 font-mono">{transcriptProgress.error}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : transcriptProgress?.status !== 'processing' && transcriptProgress?.status !== 'pending' ? (
                   <div className="text-center py-12 text-slate-500">
                     <span className="material-symbols-outlined text-4xl mb-3 block">mic_off</span>
                     <p className="text-sm">No transcript yet.</p>
                     <p className="text-xs mt-1">Upload a video and enable Auto Mode, or start auto-processing above.</p>
                   </div>
-                )}
+                ) : null}
               </div>
             )}
 

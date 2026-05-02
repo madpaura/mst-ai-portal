@@ -95,6 +95,8 @@ export const AdminSettings: React.FC = () => {
   const [smtpTesting, setSmtpTesting] = useState(false);
   const [smtpSaving, setSmtpSaving] = useState(false);
   const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [smtpProbing, setSmtpProbing] = useState(false);
+  const [smtpProbeResult, setSmtpProbeResult] = useState<{ steps: { step: string; ok: boolean; detail: string }[]; reachable: boolean } | null>(null);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
@@ -1026,6 +1028,31 @@ export const AdminSettings: React.FC = () => {
                   className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
               </div>
 
+              {smtpProbeResult && (
+                <div className="rounded-lg border border-white/10 overflow-hidden">
+                  <div className={`flex items-center gap-2 px-3 py-2 text-xs font-bold ${smtpProbeResult.reachable ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                    <span className="material-symbols-outlined text-sm">{smtpProbeResult.reachable ? 'check_circle' : 'error'}</span>
+                    {smtpProbeResult.reachable ? 'Server reachable' : 'Server not reachable'}
+                    <button onClick={() => setSmtpProbeResult(null)} className="ml-auto text-slate-400 hover:text-white">
+                      <span className="material-symbols-outlined text-sm">close</span>
+                    </button>
+                  </div>
+                  <div className="divide-y divide-white/5">
+                    {smtpProbeResult.steps.map((s) => (
+                      <div key={s.step} className="flex items-start gap-3 px-3 py-2 bg-slate-900/40">
+                        <span className={`material-symbols-outlined text-sm mt-0.5 ${s.ok ? 'text-green-400' : 'text-red-400'}`}>
+                          {s.ok ? 'check' : 'close'}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-[11px] font-bold text-slate-300">{s.step}</span>
+                          <p className="text-[11px] text-slate-500 truncate">{s.detail}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {smtpTestResult && (
                 <div className={`p-3 rounded-lg border text-sm ${smtpTestResult.success
                   ? 'bg-green-500/10 text-green-400 border-green-500/30'
@@ -1039,6 +1066,26 @@ export const AdminSettings: React.FC = () => {
               )}
 
               <div className="flex gap-3 pt-4 border-t border-white/5">
+                <button
+                  onClick={async () => {
+                    if (!smtpForm.smtp_server) { showMsg('error', 'Enter SMTP server first'); return; }
+                    setSmtpProbing(true); setSmtpProbeResult(null);
+                    try {
+                      const res = await api.post<{ steps: { step: string; ok: boolean; detail: string }[]; reachable: boolean }>('/settings/probe-smtp', {
+                        smtp_server: smtpForm.smtp_server,
+                        smtp_port: parseInt(smtpForm.smtp_port) || 587,
+                      });
+                      setSmtpProbeResult(res);
+                    } catch (err: any) {
+                      showMsg('error', `Probe failed: ${err.message}`);
+                    } finally { setSmtpProbing(false); }
+                  }}
+                  disabled={smtpProbing}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-bold rounded-lg transition-colors border border-white/10 disabled:opacity-50"
+                >
+                  <span className={`material-symbols-outlined text-sm ${smtpProbing ? 'animate-spin' : ''}`}>{smtpProbing ? 'progress_activity' : 'network_check'}</span>
+                  {smtpProbing ? 'Probing...' : 'Check Connectivity'}
+                </button>
                 <button
                   onClick={async () => {
                     if (!smtpForm.smtp_server || !smtpForm.test_recipient) {
@@ -1063,7 +1110,7 @@ export const AdminSettings: React.FC = () => {
                   className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-sm font-bold rounded-lg transition-colors border border-amber-500/20 disabled:opacity-50"
                 >
                   <span className={`material-symbols-outlined text-sm ${smtpTesting ? 'animate-spin' : ''}`}>{smtpTesting ? 'progress_activity' : 'send'}</span>
-                  {smtpTesting ? 'Testing...' : 'Test'}
+                  {smtpTesting ? 'Testing...' : 'Send Test'}
                 </button>
                 <button
                   onClick={async () => {

@@ -91,6 +91,10 @@ def _transcript_path(video_id: str) -> str:
     return os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "transcript.json")
 
 
+def _transcript_progress_path(video_id: str) -> str:
+    return os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "transcript.progress")
+
+
 async def _get_transcript_settings(pool: asyncpg.Pool) -> dict:
     row = await pool.fetchrow("SELECT value FROM app_settings WHERE key = 'transcript_config'")
     if not row:
@@ -246,12 +250,25 @@ def _mock_transcript(duration_secs: float = 600.0) -> dict:
 
 async def run_transcript_job(pool: asyncpg.Pool, job: asyncpg.Record):
     """Extract audio and send to transcript-service."""
+    import time as _time
     video_id = str(job["video_id"])
     log.info("Transcript job | video_id={}", video_id)
 
     await pool.execute(
         "UPDATE videos SET transcript_status = 'processing' WHERE id = $1", video_id
     )
+
+    # Write progress marker so the frontend can show elapsed time + estimated duration
+    video_row = await pool.fetchrow("SELECT duration_s FROM videos WHERE id = $1", video_id)
+    progress_data = {
+        "started_at": _time.time(),
+        "video_duration_s": video_row["duration_s"] if video_row and video_row["duration_s"] else None,
+        "segments": [],
+    }
+    prog_path = _transcript_progress_path(video_id)
+    os.makedirs(os.path.dirname(prog_path), exist_ok=True)
+    with open(prog_path, "w") as _pf:
+        json.dump(progress_data, _pf)
 
     if TRANSCRIPT_MOCK:
         log.warning("TRANSCRIPT_MOCK=true — using synthetic 10-minute transcript (no GPU needed)")
@@ -305,11 +322,15 @@ async def run_transcript_job(pool: asyncpg.Pool, job: asyncpg.Record):
             except OSError:
                 pass
 
-    # Save transcript JSON
+    # Save transcript JSON and remove progress marker
     t_path = _transcript_path(video_id)
     os.makedirs(os.path.dirname(t_path), exist_ok=True)
     with open(t_path, "w") as f:
         json.dump(transcript, f, ensure_ascii=False, indent=2)
+    try:
+        os.unlink(_transcript_progress_path(video_id))
+    except OSError:
+        pass
 
     duration = transcript.get("duration")
     language = transcript.get("language", "")

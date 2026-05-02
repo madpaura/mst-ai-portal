@@ -21,6 +21,12 @@
     }
 }
 
+@keyframes progress-slide {
+    0%   { transform: translateX(-100%); }
+    50%  { transform: translateX(0%); }
+    100% { transform: translateX(100%); }
+}
+
 @layer utilities {
     .glass-card {
         background: rgba(37, 140, 244, 0.04);
