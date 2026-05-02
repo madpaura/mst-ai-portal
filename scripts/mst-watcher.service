@@ -1,0 +1,35 @@
+# systemd unit for the MST AI Portal folder watcher
+#
+# Install:
+#   sudo cp scripts/mst-watcher.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now mst-watcher
+#
+# Logs:
+#   journalctl -u mst-watcher -f
+
+[Unit]
+Description=MST AI Portal — Folder Watcher
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=vishwa
+WorkingDirectory=/home/vishwa/mst-ai-portal
+
+# Activate the venv and run the watcher
+ExecStart=/home/vishwa/mst-ai-portal/venv/bin/python watch.py --config watcher.json
+
+Restart=on-failure
+RestartSec=15s
+
+# Give the process time to finish any in-progress upload on shutdown
+TimeoutStopSec=120s
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mst-watcher
+
+[Install]
+WantedBy=multi-user.target

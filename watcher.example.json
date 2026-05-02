@@ -1,0 +1,24 @@
+{
+  "_comment": "Copy to watcher.json and edit. Run: python watch.py [--config watcher.json]",
+
+  "watch_root":   "/mnt/samba/videos",
+  "api_url":      "http://localhost:9800",
+  "token":        "",
+  "username":     "",
+  "password":     "",
+
+  "max_size_mb":  100,
+  "allowed_ext":  [".mp4", ".webm"],
+
+  "mode":         "always",
+  "_mode_help":   "'always' = daemon (watchdog), 'scan' = one-shot for cron, 'HH:MM' = daily at that time",
+
+  "auto_process": true,
+  "transcode":    false,
+
+  "stabilize_s":  15,
+  "_stabilize_help": "Seconds a file must be unchanged before ingestion starts (guards against partial Samba uploads)",
+
+  "log_file":     "watch.log",
+  "_log_help":    "Main watcher log (rotated). Each category folder also gets its own .ingest-log.csv"
+}
