@@ -40,7 +40,7 @@ services:
       FFMPEG_PATH: ffmpeg
       REMOTION_BANNER_PATH: /remotion-banner
       OLLAMA_BASE_URL: http://host.docker.internal:11434
-      PORTAL_URL: ${PORTAL_URL:-http://localhost:9800}
+      PORTAL_URL: ${PORTAL_URL:-http://localhost:9810}
       CORS_ORIGINS: ${CORS_ORIGINS:-["*"]}
       CORS_ALLOW_ORIGIN_REGEX: ${CORS_ALLOW_ORIGIN_REGEX:-}
       SAML_SP_ENTITY_ID: ${SAML_SP_ENTITY_ID:-}
@@ -140,7 +140,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "${FRONTEND_PORT:-9800}:80"
+      - "${FRONTEND_PORT:-9810}:80"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:80/ >/dev/null 2>&1 || exit 1"]
       interval: 30s

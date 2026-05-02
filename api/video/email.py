@@ -5,6 +5,19 @@ from config import settings
 from typing import Optional
 
 
+def _fmt_duration(seconds: int) -> str:
+    """Format a duration in seconds as '1h 23m', '45m', etc."""
+    if not seconds:
+        return "—"
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    if h and m:
+        return f"{h}h {m}m"
+    if h:
+        return f"{h}h"
+    return f"{m}m"
+
+
 async def generate_email_preview(video_id: str, custom_content: Optional[str] = None) -> dict:
     """
     Generate email preview for a video using LLM formatting.
@@ -68,17 +81,19 @@ Return ONLY the summary text, nothing else."""
     # Build related items (chapters or similar content)
     related_items = []
     for ch in chapters[:3]:
+        start = int(ch.get("start_time", 0) or 0)
         related_items.append({
             "title": ch['title'][:40],
             "category": video["category"],
             "tag": "Chapter",
-            "duration": f"{ch.get('start_time', 0) // 60}:{ch.get('start_time', 0) % 60:02d}",
+            "duration": f"{start // 60}:{start % 60:02d}",
             "level": "Intermediate",
+            "link": f"{settings.PORTAL_URL}/ignite/{video['slug']}?t={start}",
         })
 
     # Build stats
     stats = {
-        "duration": f"{video.get('duration_s', 0) // 3600}h",
+        "duration": _fmt_duration(video.get("duration_s") or 0),
         "category": video["category"],
         "chapters": str(len(chapters)),
         "attachments": "View now",
