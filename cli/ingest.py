@@ -1,6 +1,7 @@
 """mst-ingest — CLI entry point."""
 import click
 
+from .commands.login import login, logout, whoami
 from .commands.run import run
 from .commands.status import status
 from .commands.template import template
@@ -17,6 +18,9 @@ def cli() -> None:
     """
 
 
+cli.add_command(login)
+cli.add_command(logout)
+cli.add_command(whoami)
 cli.add_command(run)
 cli.add_command(validate)
 cli.add_command(status)
