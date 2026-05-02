@@ -15,14 +15,18 @@ _RUNNING  = {"queued", "processing"}
 
 @click.command("status")
 @click.argument("video_ids", nargs=-1, required=True)
-@click.option("--api-url", envvar="MST_API_URL", default=None, hidden=True)
-@click.option("--token", envvar="MST_TOKEN", default=None, hidden=True)
+@click.option("--api-url", envvar="MST_API_URL", default=None, help="Portal API base URL")
+@click.option("--token", envvar="MST_TOKEN", default=None, help="JWT token (skips login)")
+@click.option("--username", "-u", envvar="MST_USERNAME", default=None, help="Username")
+@click.option("--password", "-p", envvar="MST_PASSWORD", default=None, help="Password")
 @click.option("--watch", is_flag=True, help="Poll every 10 s until all jobs finish")
 @click.option("--interval", type=int, default=10, show_default=True, help="Poll interval in seconds")
 def status(
     video_ids: tuple[str, ...],
     api_url: str | None,
     token: str | None,
+    username: str | None,
+    password: str | None,
     watch: bool,
     interval: int,
 ) -> None:
@@ -34,7 +38,7 @@ def status(
       mst-ingest status abc123 def456 --watch
     """
     try:
-        url, tok = resolve(api_url=api_url, token=token)
+        url, tok = resolve(api_url=api_url, token=token, username=username, password=password)
     except APIError as exc:
         ui.error(str(exc))
         raise SystemExit(1)
