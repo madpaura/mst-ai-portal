@@ -430,14 +430,13 @@ export const AdminVideos: React.FC = () => {
     });
   };
 
-  const allCourseIds = groupedVideos.map(g => g.course?.id || '__uncategorized__');
-  const allCollapsed = allCourseIds.length > 0 && allCourseIds.every(id => collapsedCourses.has(id));
   const toggleCollapseAll = () => {
-    if (allCollapsed) {
-      setCollapsedCourses(new Set());
-    } else {
-      setCollapsedCourses(new Set(allCourseIds));
-    }
+    // Build IDs at call time so groupedVideos (declared later) isn't needed here
+    setCollapsedCourses(prev => {
+      const ids = [...courses.map(c => c.id), '__uncategorized__'];
+      const allAreCollapsed = ids.every(id => prev.has(id));
+      return allAreCollapsed ? new Set<string>() : new Set<string>(ids);
+    });
   };
 
   const handleUpdateMetadata = async () => {
@@ -1224,13 +1223,19 @@ export const AdminVideos: React.FC = () => {
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-slate-900 dark:text-white">Videos</h2>
             <div className="flex items-center gap-1">
-              <button
-                onClick={toggleCollapseAll}
-                className="flex items-center text-xs text-slate-400 hover:text-slate-200 transition-colors"
-                title={allCollapsed ? 'Expand all' : 'Collapse all'}
-              >
-                <span className="material-symbols-outlined text-sm">{allCollapsed ? 'unfold_more' : 'unfold_less'}</span>
-              </button>
+              {(() => {
+                const ids = groupedVideos.map(g => g.course?.id || '__uncategorized__');
+                const allCollapsed = ids.length > 0 && ids.every(id => collapsedCourses.has(id));
+                return (
+                  <button
+                    onClick={toggleCollapseAll}
+                    className="flex items-center text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                    title={allCollapsed ? 'Expand all' : 'Collapse all'}
+                  >
+                    <span className="material-symbols-outlined text-sm">{allCollapsed ? 'unfold_more' : 'unfold_less'}</span>
+                  </button>
+                );
+              })()}
               <button
                 onClick={() => setShowCourseCreate(true)}
                 className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 transition-colors"
