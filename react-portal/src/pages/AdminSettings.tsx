@@ -41,6 +41,7 @@ interface SettingForm {
   llm_provider: string;
   llm_model: string;
   llm_api_key: string;
+  ollama_url: string;
   auto_update_release_tag: boolean;
 }
 
@@ -48,7 +49,7 @@ const EMPTY_FORM: SettingForm = {
   git_url: '', git_token: '', git_branch: 'main',
   scan_paths: '.', update_frequency: 'nightly',
   llm_provider: 'openai', llm_model: 'gpt-4o-mini',
-  llm_api_key: '', auto_update_release_tag: true,
+  llm_api_key: '', ollama_url: '', auto_update_release_tag: true,
 };
 
 export const AdminSettings: React.FC = () => {
@@ -218,6 +219,7 @@ export const AdminSettings: React.FC = () => {
       llm_provider: s.llm_provider,
       llm_model: s.llm_model,
       llm_api_key: '',
+      ollama_url: (s as any).ollama_url || '',
       auto_update_release_tag: s.auto_update_release_tag,
     });
   };
@@ -240,6 +242,7 @@ export const AdminSettings: React.FC = () => {
     };
     if (form.git_token) payload.git_token = form.git_token;
     if (form.llm_api_key) payload.llm_api_key = form.llm_api_key;
+    if (form.llm_provider === 'ollama') payload.ollama_url = form.ollama_url || null;
 
     try {
       if (creating) {
@@ -915,6 +918,19 @@ export const AdminSettings: React.FC = () => {
                       className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
                   </div>
                 </div>
+
+                {form.llm_provider === 'ollama' && (
+                  <div className="mt-3">
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Ollama URL</label>
+                    <input
+                      value={form.ollama_url}
+                      onChange={(e) => setForm((f) => ({ ...f, ollama_url: e.target.value }))}
+                      placeholder="http://localhost:11434"
+                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none font-mono"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">Leave blank to use the OLLAMA_BASE_URL environment variable</p>
+                  </div>
+                )}
               </div>
 
               <div>

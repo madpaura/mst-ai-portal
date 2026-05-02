@@ -30,6 +30,7 @@ def _row_to_setting(r) -> ForgeSettingResponse:
         llm_provider=r["llm_provider"],
         llm_model=r["llm_model"],
         llm_api_key=_mask_token(r.get("llm_api_key")),
+        ollama_url=r.get("ollama_url"),
         auto_update_release_tag=r["auto_update_release_tag"],
         transcript_service_url=r.get("transcript_service_url"),
         transcript_service_api_key=_mask_token(r.get("transcript_service_api_key")),
@@ -56,14 +57,14 @@ async def create_setting(req: ForgeSettingCreate, admin: dict = Depends(require_
         """
         INSERT INTO forge_settings
             (git_url, git_token, git_branch, scan_paths, update_frequency,
-             llm_provider, llm_model, llm_api_key, auto_update_release_tag,
+             llm_provider, llm_model, llm_api_key, ollama_url, auto_update_release_tag,
              transcript_service_url, transcript_service_api_key, transcript_model)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
         RETURNING *
         """,
         req.git_url, req.git_token, req.git_branch, req.scan_paths,
         req.update_frequency, req.llm_provider, req.llm_model,
-        req.llm_api_key, req.auto_update_release_tag,
+        req.llm_api_key, req.ollama_url, req.auto_update_release_tag,
         req.transcript_service_url, req.transcript_service_api_key, req.transcript_model,
     )
     return _row_to_setting(row)
@@ -90,7 +91,7 @@ async def update_setting(
     fields = {}
     for field in [
         "git_url", "git_token", "git_branch", "scan_paths", "update_frequency",
-        "llm_provider", "llm_model", "llm_api_key", "auto_update_release_tag", "is_active",
+        "llm_provider", "llm_model", "llm_api_key", "ollama_url", "auto_update_release_tag", "is_active",
         "transcript_service_url", "transcript_service_api_key", "transcript_model",
     ]:
         val = getattr(req, field, None)
@@ -200,7 +201,7 @@ async def verify_setting(setting_id: str, admin: dict = Depends(require_admin)):
 
     if llm_provider == "ollama":
         import httpx
-        ollama_base_url = app_settings.OLLAMA_BASE_URL.rstrip("/")
+        ollama_base_url = (row.get("ollama_url") or app_settings.OLLAMA_BASE_URL).rstrip("/")
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.get(f"{ollama_base_url}/api/tags")

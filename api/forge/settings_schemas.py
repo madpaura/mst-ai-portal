@@ -13,6 +13,7 @@ class ForgeSettingResponse(BaseModel):
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o-mini"
     llm_api_key: Optional[str] = None
+    ollama_url: Optional[str] = None
     auto_update_release_tag: bool = True
     # Transcript service
     transcript_service_url: Optional[str] = None
@@ -32,6 +33,7 @@ class ForgeSettingCreate(BaseModel):
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o-mini"
     llm_api_key: Optional[str] = None
+    ollama_url: Optional[str] = None
     auto_update_release_tag: bool = True
     transcript_service_url: Optional[str] = None
     transcript_service_api_key: Optional[str] = None
@@ -47,6 +49,7 @@ class ForgeSettingUpdate(BaseModel):
     llm_provider: Optional[str] = None
     llm_model: Optional[str] = None
     llm_api_key: Optional[str] = None
+    ollama_url: Optional[str] = None
     auto_update_release_tag: Optional[bool] = None
     transcript_service_url: Optional[str] = None
     transcript_service_api_key: Optional[str] = None

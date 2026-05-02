@@ -106,7 +106,7 @@ async def _get_transcript_settings(pool: asyncpg.Pool) -> dict:
 async def _call_llm(pool: asyncpg.Pool, prompt: str) -> str:
     """Call the configured LLM provider."""
     row = await pool.fetchrow(
-        "SELECT llm_provider, llm_model, llm_api_key FROM forge_settings WHERE is_active = true LIMIT 1"
+        "SELECT llm_provider, llm_model, llm_api_key, ollama_url FROM forge_settings WHERE is_active = true LIMIT 1"
     )
     if not row:
         raise RuntimeError("No active LLM settings found. Configure in Admin → Settings.")
@@ -139,7 +139,7 @@ async def _call_llm(pool: asyncpg.Pool, prompt: str) -> str:
             return resp.json()["choices"][0]["message"]["content"]
 
         elif provider == "ollama":
-            ollama_url = settings.OLLAMA_BASE_URL.rstrip("/")
+            ollama_url = (row.get("ollama_url") or settings.OLLAMA_BASE_URL).rstrip("/")
             if not model:
                 tags = await client.get(f"{ollama_url}/api/tags")
                 tags.raise_for_status()

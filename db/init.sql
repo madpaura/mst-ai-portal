@@ -597,6 +597,12 @@ ALTER TABLE forge_settings
     ADD COLUMN IF NOT EXISTS transcript_model           TEXT DEFAULT 'large-v3';
 
 ---------------------------------------------------
+-- OLLAMA URL (Migration 0004)
+---------------------------------------------------
+ALTER TABLE forge_settings
+    ADD COLUMN IF NOT EXISTS ollama_url TEXT;
+
+---------------------------------------------------
 -- VIDEOS STATUS FIX (Migration 0003)
 ---------------------------------------------------
 

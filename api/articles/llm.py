@@ -8,14 +8,15 @@ async def get_llm_settings() -> dict:
     """Read LLM settings from forge_settings table."""
     db = await get_db()
     row = await db.fetchrow(
-        "SELECT llm_provider, llm_model, llm_api_key FROM forge_settings WHERE is_active = true LIMIT 1"
+        "SELECT llm_provider, llm_model, llm_api_key, ollama_url FROM forge_settings WHERE is_active = true LIMIT 1"
     )
     if not row:
-        return {"provider": "ollama", "model": "", "api_key": None}
+        return {"provider": "ollama", "model": "", "api_key": None, "ollama_url": None}
     return {
         "provider": row["llm_provider"],
         "model": row["llm_model"],
         "api_key": row.get("llm_api_key"),
+        "ollama_url": row.get("ollama_url"),
     }
 
 
@@ -28,7 +29,7 @@ async def call_llm(prompt: str) -> str:
 
     try:
         if provider == "ollama":
-            return await _call_ollama(prompt, model)
+            return await _call_ollama(prompt, model, llm.get("ollama_url"))
         elif provider == "openai":
             if not api_key:
                 raise HTTPException(status_code=502, detail="OpenAI API key not configured in Settings > Marketplace")
@@ -47,8 +48,8 @@ async def call_llm(prompt: str) -> str:
         raise HTTPException(status_code=502, detail=f"LLM error ({provider}): {str(e)}")
 
 
-async def _call_ollama(prompt: str, model: str) -> str:
-    ollama_url = settings.OLLAMA_BASE_URL.rstrip("/")
+async def _call_ollama(prompt: str, model: str, ollama_url_override: str | None = None) -> str:
+    ollama_url = (ollama_url_override or settings.OLLAMA_BASE_URL).rstrip("/")
     async with httpx.AsyncClient(timeout=120.0) as client:
         # Auto-detect model if not configured
         if not model:
