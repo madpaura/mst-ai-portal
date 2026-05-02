@@ -10,6 +10,7 @@ _ENTRY = {
     "course_id": None,
     "sort_order": 0,
     "video_file": "/absolute/path/to/video.mp4",
+    "transcode": False,
     "auto_process": True,
 }
 

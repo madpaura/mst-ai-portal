@@ -56,15 +56,28 @@ def _ingest_one(client: APIClient, entry: dict, idx: int, total: int) -> dict:
             ui.error(f"Upload failed: {exc}")
             raise
 
-    # ── 5/5  Trigger auto-process ──────────────────────────────────────────
-    if entry.get("auto_process", True):
-        ui.step(5, _STEPS, f"{prefix} Triggering auto-process")
+    # ── 5/5  Transcode and/or auto-process ────────────────────────────────
+    transcode = entry.get("transcode", False)
+    auto_proc = entry.get("auto_process", True)
+
+    if transcode:
+        ui.step(5, _STEPS, f"{prefix} Queuing transcode")
+        try:
+            client.trigger_transcode(video_id)
+        except APIError as exc:
+            ui.warn(f"Transcode trigger failed (video was uploaded): {exc}")
+
+    if auto_proc:
+        label = f"{prefix} Triggering auto-process"
+        if not transcode:
+            ui.step(5, _STEPS, label)
         try:
             client.trigger_auto_process(video_id)
         except APIError as exc:
             ui.warn(f"Auto-process trigger failed (video was uploaded): {exc}")
-    else:
-        ui.step(5, _STEPS, f"{prefix} Skipping auto-process (auto_process=false)", ok=False)
+
+    if not transcode and not auto_proc:
+        ui.step(5, _STEPS, f"{prefix} Skipping transcode and auto-process", ok=False)
 
     return client.get_video(video_id)
 
@@ -79,6 +92,8 @@ def _ingest_one(client: APIClient, entry: dict, idx: int, total: int) -> dict:
 @click.option("--slug", default="", help="URL slug (auto-generated if omitted)")
 @click.option("--sort-order", "sort_order", type=int, default=0)
 @click.option("--course-id", "course_id", default=None, help="Course UUID to attach to")
+@click.option("--transcode", is_flag=True, default=False,
+              help="Queue HLS transcode after upload (disabled by default)")
 @click.option("--no-auto-process", "no_auto_process", is_flag=True,
               help="Skip auto-processing after upload")
 @click.option("--api-url", envvar="MST_API_URL", default=None, hidden=True)
@@ -94,6 +109,7 @@ def run(
     slug: str,
     sort_order: int,
     course_id: str | None,
+    transcode: bool,
     no_auto_process: bool,
     api_url: str | None,
     token: str | None,
@@ -103,11 +119,15 @@ def run(
     """Ingest one or more videos into the MST AI portal.
 
     \b
-    Single video (flags):
+    Single video:
       mst-ingest run --title "Session 1" --video-file /path/video.mp4 --category "AI Foundations"
 
     \b
-    From JSON file:
+    With HLS transcode queued immediately after upload:
+      mst-ingest run --title "Session 1" --video-file /path/video.mp4 --category "AI Foundations" --transcode
+
+    \b
+    From JSON file (set "transcode": true per entry to override):
       mst-ingest run --file videos.json
 
     Videos are created as drafts and never published automatically.
@@ -133,6 +153,7 @@ def run(
             "slug": slug,
             "sort_order": sort_order,
             "course_id": course_id,
+            "transcode": transcode,
             "auto_process": not no_auto_process,
         }]
 

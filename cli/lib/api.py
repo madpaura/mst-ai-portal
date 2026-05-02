@@ -112,6 +112,9 @@ class APIClient:
         fh.close()
         self._check(resp)
 
+    def trigger_transcode(self, video_id: str) -> None:
+        self._post(f"/admin/videos/{video_id}/transcode")
+
     def trigger_auto_process(self, video_id: str) -> None:
         self._post(f"/admin/videos/{video_id}/auto-process")
 
