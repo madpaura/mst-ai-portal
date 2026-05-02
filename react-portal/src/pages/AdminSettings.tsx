@@ -1071,7 +1071,7 @@ export const AdminSettings: React.FC = () => {
                     if (!smtpForm.smtp_server) { showMsg('error', 'Enter SMTP server first'); return; }
                     setSmtpProbing(true); setSmtpProbeResult(null);
                     try {
-                      const res = await api.post<{ steps: { step: string; ok: boolean; detail: string }[]; reachable: boolean }>('/settings/probe-smtp', {
+                      const res = await api.post<{ steps: { step: string; ok: boolean; detail: string }[]; reachable: boolean }>('/admin/probe-smtp', {
                         smtp_server: smtpForm.smtp_server,
                         smtp_port: parseInt(smtpForm.smtp_port) || 587,
                       });

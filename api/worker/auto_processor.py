@@ -301,20 +301,82 @@ async def run_transcript_job(pool: asyncpg.Pool, job: asyncpg.Record):
             api_key = ts_cfg["api_key"] or ""
             model = ts_cfg["model"] or "large-v3"
 
-            log.info("Sending audio to transcript service | url={}", service_url)
-            async with httpx.AsyncClient(timeout=600.0) as client:
+            log.info("Sending audio to transcript service (SSE) | url={}", service_url)
+            segments: list[dict] = []
+            language_out: str = ""
+            duration_out: float | None = None
+            seg_count_log = 0
+
+            async with httpx.AsyncClient(timeout=None) as client:
                 with open(audio_path, "rb") as audio_file:
-                    resp = await client.post(
+                    async with client.stream(
+                        "POST",
                         f"{service_url}/transcribe",
                         headers={"X-API-Key": api_key},
                         data={"model": model},
                         files={"audio": ("audio.wav", audio_file, "audio/wav")},
-                    )
-                if resp.status_code == 401:
-                    raise RuntimeError("Transcript service rejected API key (401)")
-                if resp.status_code != 200:
-                    raise RuntimeError(f"Transcript service error: HTTP {resp.status_code} — {resp.text[:300]}")
-                transcript = resp.json()
+                        timeout=httpx.Timeout(connect=30.0, read=900.0, write=300.0, pool=30.0),
+                    ) as resp:
+                        if resp.status_code == 401:
+                            raise RuntimeError("Transcript service rejected API key (401)")
+                        if resp.status_code != 200:
+                            body = await resp.aread()
+                            raise RuntimeError(f"Transcript service error: HTTP {resp.status_code} — {body.decode()[:300]}")
+
+                        async for raw_line in resp.aiter_lines():
+                            if not raw_line.startswith("data: "):
+                                continue
+                            try:
+                                event = json.loads(raw_line[6:])
+                            except json.JSONDecodeError:
+                                log.warning("Bad SSE line | {}", raw_line[:120])
+                                continue
+
+                            etype = event.get("type")
+
+                            if etype == "queued":
+                                log.info("Job queued at transcript service | position={} request_id={}",
+                                         event.get("position"), event.get("request_id"))
+
+                            elif etype == "info":
+                                language_out = event.get("language", "")
+                                duration_out = event.get("duration")
+                                log.info("Transcript stream started | language={} duration={}s",
+                                         language_out, duration_out)
+
+                            elif etype == "segment":
+                                seg = {"start": event["start"], "end": event["end"], "text": event["text"]}
+                                segments.append(seg)
+                                seg_count_log += 1
+                                # Write partial progress every 10 segments so the UI can show live output
+                                if seg_count_log % 10 == 0:
+                                    progress_data["segments"] = segments
+                                    try:
+                                        with open(prog_path, "w") as _pf:
+                                            json.dump(progress_data, _pf)
+                                    except OSError:
+                                        pass
+                                    log.debug("Partial transcript flushed | {} segments so far", seg_count_log)
+
+                            elif etype == "complete":
+                                language_out = event.get("language") or language_out
+                                duration_out = event.get("duration") or duration_out
+                                log.info("Transcript stream complete | segments={} language={} duration={}s",
+                                         event.get("segment_count"), language_out, duration_out)
+
+                            elif etype == "error":
+                                raise RuntimeError(f"Transcript service reported error: {event.get('message', '?')}")
+
+            if not segments:
+                raise RuntimeError("Transcript service returned no segments")
+
+            transcript = {
+                "language": language_out,
+                "duration": duration_out,
+                "full_text": " ".join(s["text"] for s in segments),
+                "segments": segments,
+            }
+            log.info("Transcript assembled | video_id={} segments={} language={}", video_id, len(segments), language_out)
 
         finally:
             try:
