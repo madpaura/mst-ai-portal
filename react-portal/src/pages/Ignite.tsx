@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -66,6 +66,7 @@ const fmtTime = (s: number): string => {
 
 export const Ignite: React.FC = () => {
   const { videoSlug } = useParams<{ videoSlug?: string }>();
+  const [searchParams] = useSearchParams();
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const playerRef = useRef<HlsPlayerHandle>(null);
@@ -157,19 +158,18 @@ export const Ignite: React.FC = () => {
     if (activeVideo?.slug) loadVideoData(activeVideo);
   }, [activeVideo, loadVideoData]);
 
-  // Resume from local cached position when video changes
+  // Resume from ?t= param or local cached position when video changes
   useEffect(() => {
     if (!activeVideo?.slug) return;
-    // Clear any pending save timers from previous video
     if (progressSaveRef.current) {
       clearTimeout(progressSaveRef.current);
       progressSaveRef.current = null;
     }
-    const savedPos = getLocalPosition(activeVideo.slug);
-    if (savedPos > 5) {
-      // Delay seek until player is ready (HLS manifest parsed)
+    const tParam = searchParams.get('t');
+    const seekTo = tParam !== null ? parseInt(tParam, 10) : getLocalPosition(activeVideo.slug);
+    if (seekTo > 0) {
       const timer = setTimeout(() => {
-        playerRef.current?.seekTo(savedPos);
+        playerRef.current?.seekTo(seekTo);
       }, 1200);
       return () => clearTimeout(timer);
     }
