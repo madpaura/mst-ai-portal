@@ -61,6 +61,27 @@ class APIClient:
             raise APIError(resp.status_code, "Login failed — check username/password")
         return resp.json()["access_token"]
 
+    # ── course CRUD ──────────────────────────────────────────────────────────
+
+    def list_courses(self) -> list[dict]:
+        return self._get("/admin/courses").json()
+
+    def create_course(self, payload: dict) -> dict:
+        return self._post("/admin/courses", json=payload).json()
+
+    def get_or_create_course(self, title: str, slug: str, sort_order: int = 0) -> dict:
+        """Return existing course by slug, or create it.  Never raises on 409."""
+        try:
+            return self.create_course({"title": title, "slug": slug,
+                                       "description": "", "sort_order": sort_order})
+        except APIError as exc:
+            if exc.status_code == 409:
+                courses = self.list_courses()
+                match = next((c for c in courses if c["slug"] == slug), None)
+                if match:
+                    return match
+            raise
+
     # ── video CRUD ───────────────────────────────────────────────────────────
 
     def create_video(self, payload: dict) -> dict:
