@@ -222,6 +222,16 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
     });
   }, [handleExpandCourse]);
 
+  const allCourseIds = courses.map(c => c.id);
+  const allCollapsed = allCourseIds.length > 0 && allCourseIds.every(id => collapsedCourses.has(id));
+  const toggleCollapseAll = useCallback(() => {
+    if (allCollapsed) {
+      setCollapsedCourses(new Set());
+    } else {
+      setCollapsedCourses(new Set(allCourseIds));
+    }
+  }, [allCollapsed, allCourseIds]);
+
   // Notify parent when courses load
   useEffect(() => {
     if (courses.length > 0 && onCoursesLoaded) {
@@ -294,16 +304,25 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
             Browse Courses
           </button>
         )}
-        {/* Search */}
-        <div className="relative">
-          <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-500 text-lg">search</span>
-          <input
-            className="w-full bg-slate-100 dark:bg-slate-900/50 border border-slate-300 dark:border-slate-700 rounded-lg py-2 pl-10 pr-4 text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:ring-1 focus:ring-primary focus:border-primary transition-all"
-            placeholder="Search videos..."
-            type="text"
-            value={searchQuery}
-            onChange={handleSearch}
-          />
+        {/* Search + collapse-all */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-500 text-lg">search</span>
+            <input
+              className="w-full bg-slate-100 dark:bg-slate-900/50 border border-slate-300 dark:border-slate-700 rounded-lg py-2 pl-10 pr-4 text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+              placeholder="Search videos..."
+              type="text"
+              value={searchQuery}
+              onChange={handleSearch}
+            />
+          </div>
+          <button
+            onClick={toggleCollapseAll}
+            title={allCollapsed ? 'Expand all' : 'Collapse all'}
+            className="shrink-0 text-slate-400 hover:text-slate-200 transition-colors"
+          >
+            <span className="material-symbols-outlined text-xl">{allCollapsed ? 'unfold_more' : 'unfold_less'}</span>
+          </button>
         </div>
       </div>
 
