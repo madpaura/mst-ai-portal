@@ -9,4 +9,13 @@ for dir in /data/videos /data/media /remotion-banner; do
     fi
 done
 
+# Run database migrations before the backend starts.
+# Only run from the backend (uvicorn) container — workers share this entrypoint
+# but should not race to migrate.
+if [[ "$1" == "uvicorn" ]]; then
+    echo "[entrypoint] Running alembic upgrade head..."
+    gosu appuser alembic upgrade head
+    echo "[entrypoint] Migrations complete."
+fi
+
 exec gosu appuser "$@"
