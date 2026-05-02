@@ -96,7 +96,7 @@ export const AdminSettings: React.FC = () => {
   const [smtpSaving, setSmtpSaving] = useState(false);
   const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [smtpProbing, setSmtpProbing] = useState(false);
-  const [smtpProbeResult, setSmtpProbeResult] = useState<{ steps: { step: string; ok: boolean; detail: string }[]; reachable: boolean } | null>(null);
+  const [smtpProbeResult, setSmtpProbeResult] = useState<{ steps: { step: string; ok: boolean; detail: string }[]; reachable: boolean; hint?: string } | null>(null);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
@@ -988,7 +988,7 @@ export const AdminSettings: React.FC = () => {
                 <input value={smtpForm.smtp_port} onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_port: e.target.value }))}
                   placeholder="587"
                   className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
-                <p className="text-xs text-slate-500 mt-1">587 (STARTTLS), 465 (SSL), 25 (unencrypted)</p>
+                <p className="text-xs text-slate-500 mt-1">587 (STARTTLS) · 465 (SSL) · 25 (unencrypted, blocked inside Docker)</p>
               </div>
 
               <div>
@@ -1037,6 +1037,12 @@ export const AdminSettings: React.FC = () => {
                       <span className="material-symbols-outlined text-sm">close</span>
                     </button>
                   </div>
+                  {smtpProbeResult.hint && (
+                    <div className="flex items-start gap-2 px-3 py-2 bg-amber-500/10 border-b border-white/5 text-xs text-amber-300">
+                      <span className="material-symbols-outlined text-sm shrink-0 mt-0.5">tips_and_updates</span>
+                      {smtpProbeResult.hint}
+                    </div>
+                  )}
                   <div className="divide-y divide-white/5">
                     {smtpProbeResult.steps.map((s) => (
                       <div key={s.step} className="flex items-start gap-3 px-3 py-2 bg-slate-900/40">

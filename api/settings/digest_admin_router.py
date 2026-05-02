@@ -427,9 +427,12 @@ async def probe_smtp(req: SmtpProbeRequest, admin: dict = Depends(require_admin)
         steps.append({"step": "TCP connect", "ok": True,
                       "detail": f"Port {req.smtp_port} open"})
     except (ConnectionRefusedError, socket.timeout, OSError) as e:
+        hint = ""
+        if req.smtp_port == 25:
+            hint = " — Port 25 is blocked inside most Docker/cloud environments to prevent spam. Use port 587 (STARTTLS) or 465 (SSL) instead."
         steps.append({"step": "TCP connect", "ok": False,
-                      "detail": f"Port {req.smtp_port} unreachable from container: {e}"})
-        return {"steps": steps, "reachable": False}
+                      "detail": f"Port {req.smtp_port} unreachable: {e}{hint}"})
+        return {"steps": steps, "reachable": False, "hint": hint.strip(" — ") if hint else None}
 
     # ── Step 3: SMTP banner + EHLO ─────────────────────────────────────────
     banner = ""
