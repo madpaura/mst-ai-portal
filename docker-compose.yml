@@ -121,6 +121,7 @@ services:
       FFMPEG_PATH: ffmpeg
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       AUTO_POLL_INTERVAL: "5"
+      AUTO_PROCESSOR_CONCURRENCY: ${AUTO_PROCESSOR_CONCURRENCY:-4}
       TRANSCRIPT_MOCK: ${TRANSCRIPT_MOCK:-false}
       PYTHONUNBUFFERED: "1"
     volumes:

@@ -27,6 +27,10 @@ from config import settings
 
 POLL_INTERVAL = int(os.environ.get("AUTO_POLL_INTERVAL", "5"))
 TRANSCRIPT_MOCK = os.environ.get("TRANSCRIPT_MOCK", "").lower() in ("1", "true", "yes")
+# Number of concurrent job workers. Each worker independently claims and runs one
+# job at a time. Set > 1 so per-video pipelines (transcript→LLM) run in parallel
+# across videos rather than sequencing all transcripts, then all metadata, etc.
+CONCURRENCY = int(os.environ.get("AUTO_PROCESSOR_CONCURRENCY", "4"))
 
 _LOCAL_HOSTS = {"0.0.0.0", "localhost", "127.0.0.1"}
 
@@ -462,6 +466,35 @@ async def run_metadata_job(pool: asyncpg.Pool, job: asyncpg.Record):
         log.info("Metadata updated | video_id={} title={}", video_id, title)
 
 
+def _enforce_chapters(chapters: list[dict], duration: float | None, max_count: int = 10) -> list[dict]:
+    """Sort, deduplicate, cap, and ensure chapter 0 exists."""
+    # Sort by start_time and cast to int
+    chapters = sorted(
+        [{"title": str(c.get("title", "")).strip(), "start_time": int(c.get("start_time", 0))} for c in chapters if str(c.get("title", "")).strip()],
+        key=lambda c: c["start_time"],
+    )
+    # Deduplicate identical start_times (keep first)
+    seen: set[int] = set()
+    deduped = []
+    for ch in chapters:
+        if ch["start_time"] not in seen:
+            seen.add(ch["start_time"])
+            deduped.append(ch)
+    chapters = deduped
+
+    # Ensure chapter at t=0
+    if not chapters or chapters[0]["start_time"] != 0:
+        chapters.insert(0, {"title": "Introduction", "start_time": 0})
+
+    # Cap at max_count — if over, keep first + last + evenly sampled middle
+    if len(chapters) > max_count:
+        step = (len(chapters) - 1) / (max_count - 1)
+        indices = {0, len(chapters) - 1} | {round(i * step) for i in range(1, max_count - 1)}
+        chapters = [chapters[i] for i in sorted(indices)]
+
+    return chapters
+
+
 async def run_chapters_job(pool: asyncpg.Pool, job: asyncpg.Record):
     """Generate chapters from timestamped transcript segments using LLM."""
     from video.llm_prompts import chapters_prompt, parse_json_strict
@@ -480,7 +513,15 @@ async def run_chapters_job(pool: asyncpg.Pool, job: asyncpg.Record):
         log.warning("No segments in transcript | video_id={}", video_id)
         return
 
-    prompt = chapters_prompt(segments)
+    # Get duration from transcript or DB for even-distribution hints in the prompt
+    duration: float | None = transcript.get("duration")
+    if not duration:
+        row = await pool.fetchrow("SELECT duration_s FROM videos WHERE id = $1", video_id)
+        if row and row["duration_s"]:
+            duration = float(row["duration_s"])
+    log.info("Chapters job | video_id={} duration={}s segments={}", video_id, duration, len(segments))
+
+    prompt = chapters_prompt(segments, duration=duration)
     raw = await _call_llm(pool, prompt)
     try:
         chapters = parse_json_strict(raw)
@@ -491,16 +532,16 @@ async def run_chapters_job(pool: asyncpg.Pool, job: asyncpg.Record):
     if not isinstance(chapters, list):
         raise RuntimeError(f"LLM returned unexpected type: {type(chapters)}")
 
+    chapters = _enforce_chapters(chapters, duration=duration, max_count=10)
+    log.info("Chapters after enforcement | video_id={} count={} span=0s-{}s",
+             video_id, len(chapters), chapters[-1]["start_time"] if chapters else 0)
+
     # Replace existing chapters
     await pool.execute("DELETE FROM video_chapters WHERE video_id = $1", video_id)
     for idx, ch in enumerate(chapters):
-        title = str(ch.get("title", "")).strip()
-        start_time = int(ch.get("start_time", 0))
-        if not title:
-            continue
         await pool.execute(
             "INSERT INTO video_chapters (video_id, title, start_time, sort_order) VALUES ($1, $2, $3, $4)",
-            video_id, title, start_time, idx,
+            video_id, ch["title"], ch["start_time"], idx,
         )
     log.info("Chapters written | video_id={} count={}", video_id, len(chapters))
 
@@ -557,11 +598,9 @@ HANDLERS = {
 }
 
 
-async def main():
-    log.info("Auto-processor starting | poll_interval={}s", POLL_INTERVAL)
-    pool = await asyncpg.create_pool(settings.DATABASE_URL, min_size=2, max_size=5)
-    log.info("Database pool established")
-
+async def _worker_loop(pool: asyncpg.Pool, worker_id: int):
+    """Single concurrent worker: claims and runs one job at a time."""
+    log.info("Worker-{} started", worker_id)
     while True:
         job = await claim_job(pool)
         if not job:
@@ -571,7 +610,7 @@ async def main():
         job_id = job["id"]
         kind = job["kind"]
         video_id = str(job["video_id"])
-        log.info("Processing auto_job | id={} kind={} video_id={}", job_id, kind, video_id)
+        log.info("Worker-{} | claimed job | id={} kind={} video_id={}", worker_id, job_id, kind, video_id)
 
         handler = HANDLERS.get(kind)
         if not handler:
@@ -581,15 +620,26 @@ async def main():
         try:
             await handler(pool, job)
             await mark_complete(pool, job_id)
-            log.info("Auto_job complete | id={} kind={} video_id={}", job_id, kind, video_id)
+            log.info("Worker-{} | job done | id={} kind={} video_id={}", worker_id, job_id, kind, video_id)
         except Exception as exc:
-            log.error("Auto_job failed | id={} kind={} error={}", job_id, kind, str(exc))
+            log.error("Worker-{} | job failed | id={} kind={} error={}", worker_id, job_id, kind, str(exc))
             if kind == "transcript":
                 await pool.execute(
                     "UPDATE videos SET transcript_status = 'error', transcript_error = $1 WHERE id = $2",
                     str(exc)[:1000], video_id,
                 )
             await mark_failed(pool, job_id, str(exc)[:2000])
+
+
+async def main():
+    log.info("Auto-processor starting | poll_interval={}s concurrency={}", POLL_INTERVAL, CONCURRENCY)
+    # Pool size: each worker needs its own connection plus headroom for cascaded enqueues
+    pool = await asyncpg.create_pool(settings.DATABASE_URL, min_size=CONCURRENCY + 1, max_size=CONCURRENCY * 2 + 2)
+    log.info("Database pool established | min={} max={}", CONCURRENCY + 1, CONCURRENCY * 2 + 2)
+    # Run N workers concurrently — each independently claims jobs from the queue.
+    # This means video pipelines run in parallel: transcript(v1) and metadata(v2) can
+    # overlap instead of serialising all transcripts before any LLM work starts.
+    await asyncio.gather(*[_worker_loop(pool, i) for i in range(CONCURRENCY)])
 
 
 if __name__ == "__main__":

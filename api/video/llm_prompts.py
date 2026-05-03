@@ -51,11 +51,14 @@ Return ONLY the following JSON object, no prose, no markdown:
 }}"""
 
 
-def chapters_prompt(segments: list[dict]) -> str:
+def chapters_prompt(segments: list[dict], duration: float | None = None) -> str:
     segments_text = _segments_to_text(segments)
-    return f"""Identify 4-10 chapter break points in this video transcript. Pick natural topic shifts where the speaker starts a new concept.
+    duration_line = f"Total video duration: {int(duration)}s ({int(duration)//60}m {int(duration)%60}s)\n" if duration else ""
+    # Tell the LLM the number of windows it should aim for so chapters cover the full video
+    target = min(10, max(4, int(duration / 300) + 1)) if duration else 7  # ~one chapter per 5 min
+    return f"""Identify {target}-10 chapter break points in this video transcript. Chapters MUST be evenly spread across the FULL duration — do not cluster them in the first half.
 
-Transcript with timestamps (seconds):
+{duration_line}Transcript with timestamps (seconds):
 {segments_text}
 
 Return ONLY a JSON array, no prose, no markdown:
@@ -66,10 +69,12 @@ Return ONLY a JSON array, no prose, no markdown:
 ]
 
 Rules:
-- start_time is an integer (seconds).
-- First chapter must have start_time = 0.
-- Titles are max 60 chars, no episode or chapter number prefix.
-- Choose real topic transitions, not arbitrary intervals."""
+- Exactly {target} to 10 chapters total. Never fewer than {target}, never more than 10.
+- start_time is an integer (seconds). First chapter MUST be start_time = 0.
+- The LAST chapter must start within the final 25% of the video (after {int(duration * 0.75) if duration else "the 75% mark"}s).
+- Divide the video into {target} roughly equal time windows; find the strongest topic shift inside each window.
+- Titles are max 60 chars, sentence-case, no episode/chapter number prefix.
+- Prefer real topic transitions over arbitrary intervals — but coverage of the full duration is required."""
 
 
 def howto_prompt(transcript_text: str, video_title: str = "") -> str:

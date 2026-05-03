@@ -1923,48 +1923,83 @@ export const AdminVideos: React.FC = () => {
               <div className="space-y-4">
                 {/* Auto-processing status */}
                 {autoStatus && (
-                  <div className="p-3 rounded-lg bg-slate-800/40 border border-white/5 space-y-2">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Auto-Processing Status</p>
-                    <div className="flex flex-wrap gap-2">
-                      {(['transcript', 'metadata', 'chapters', 'howto'] as const).map((kind) => {
-                        const job = autoStatus.jobs?.[kind];
-                        const colors = !job ? 'bg-slate-700/40 text-slate-500' :
-                          job.status === 'completed' ? 'bg-green-500/15 text-green-400' :
-                          job.status === 'failed' ? 'bg-red-500/15 text-red-400' :
-                          job.status === 'processing' || job.status === 'pending' ? 'bg-amber-500/15 text-amber-400' :
-                          'bg-slate-700/40 text-slate-500';
-                        return (
-                          <div key={kind} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${colors}`}>
-                            <span className="material-symbols-outlined text-xs">
-                              {!job ? 'radio_button_unchecked' :
-                               job.status === 'completed' ? 'check_circle' :
-                               job.status === 'failed' ? 'error' :
-                               'hourglass_top'}
-                            </span>
-                            {kind}
-                            {job?.status === 'failed' && (
-                              <button onClick={() => handleRetryAutoJob(kind)} className="ml-1 hover:text-white transition-colors" title="Retry">
-                                <span className="material-symbols-outlined text-xs">refresh</span>
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
+                  <div className="rounded-lg bg-slate-800/40 border border-white/5 divide-y divide-white/5">
+                    {/* Header row */}
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Auto-Processing</p>
+                      <div className="flex gap-1.5">
+                        {!autoStatus.jobs?.transcript ? (
+                          <button
+                            onClick={async () => {
+                              if (!selected) return;
+                              await api.post(`/admin/videos/${selected.id}/auto-process`, {});
+                              startAutoStatusPoll(selected.id);
+                              showMsg('success', 'Auto-processing started');
+                            }}
+                            className="flex items-center gap-1 px-2.5 py-1 bg-primary/20 hover:bg-primary/30 text-primary text-[11px] font-bold rounded-lg transition-colors border border-primary/30"
+                          >
+                            <span className="material-symbols-outlined text-xs">auto_awesome</span>
+                            Start
+                          </button>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              if (!selected) return;
+                              for (const kind of ['metadata', 'chapters', 'howto'] as const) {
+                                try { await api.post(`/admin/videos/${selected.id}/auto-process/retry`, { kind }); } catch { /* ignore */ }
+                              }
+                              startAutoStatusPoll(selected.id);
+                              showMsg('success', 'LLM jobs re-queued');
+                            }}
+                            className="flex items-center gap-1 px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 text-[11px] font-bold rounded-lg transition-colors border border-white/10"
+                            title="Regenerate metadata, chapters and how-to from existing transcript"
+                          >
+                            <span className="material-symbols-outlined text-xs">refresh</span>
+                            Regenerate All LLM
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    {!autoStatus.jobs?.transcript && (
-                      <button
-                        onClick={async () => {
-                          if (!selected) return;
-                          await api.post(`/admin/videos/${selected.id}/auto-process`, {});
-                          startAutoStatusPoll(selected.id);
-                          showMsg('success', 'Auto-processing started');
-                        }}
-                        className="mt-1 flex items-center gap-1.5 px-3 py-1.5 bg-primary/20 hover:bg-primary/30 text-primary text-xs font-bold rounded-lg transition-colors border border-primary/30"
-                      >
-                        <span className="material-symbols-outlined text-sm">auto_awesome</span>
-                        Start Auto-Processing
-                      </button>
-                    )}
+
+                    {/* Per-kind rows */}
+                    {(['transcript', 'metadata', 'chapters', 'howto'] as const).map((kind) => {
+                      const job = autoStatus.jobs?.[kind];
+                      const isRunning = job?.status === 'processing' || job?.status === 'pending';
+                      const isDone = job?.status === 'completed';
+                      const isFailed = job?.status === 'failed';
+                      const statusColor = !job ? 'text-slate-600' :
+                        isDone ? 'text-green-400' :
+                        isFailed ? 'text-red-400' :
+                        isRunning ? 'text-amber-400' : 'text-slate-500';
+                      const icon = !job ? 'radio_button_unchecked' :
+                        isDone ? 'check_circle' : isFailed ? 'error' : 'progress_activity';
+                      const canRegen = !!job && !isRunning;
+                      const label = { transcript: 'Transcript', metadata: 'Metadata', chapters: 'Chapters', howto: 'How-To' }[kind];
+                      return (
+                        <div key={kind} className="flex items-center gap-2 px-3 py-1.5">
+                          <span className={`material-symbols-outlined text-sm ${statusColor} ${isRunning ? 'animate-spin' : ''}`}>{icon}</span>
+                          <span className={`text-xs font-medium flex-1 ${!job ? 'text-slate-600' : 'text-slate-300'}`}>{label}</span>
+                          {isFailed && job.error && (
+                            <span className="text-[10px] text-red-400/70 truncate max-w-[180px]" title={job.error}>{job.error}</span>
+                          )}
+                          {canRegen && (
+                            <button
+                              onClick={async () => {
+                                if (!selected) return;
+                                await api.post(`/admin/videos/${selected.id}/auto-process/retry`, { kind });
+                                startAutoStatusPoll(selected.id);
+                                showMsg('success', `${label} re-queued`);
+                              }}
+                              className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-slate-400 hover:text-white bg-slate-700/50 hover:bg-slate-700 rounded transition-colors"
+                              title={`Regenerate ${label}`}
+                            >
+                              <span className="material-symbols-outlined text-xs">refresh</span>
+                              Regen
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
