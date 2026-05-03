@@ -1,3 +1,4 @@
+import asyncio
 import os
 import re
 import uuid
@@ -375,87 +376,90 @@ async def admin_trim_video(
     return {"message": "Trim job started", "start": req.start_seconds, "end": req.end_seconds}
 
 
+async def _run_ffmpeg_async(*args: str) -> tuple[int, str]:
+    """Run ffmpeg without blocking the event loop. Returns (returncode, stderr)."""
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr_bytes = await proc.communicate()
+    return proc.returncode, (stderr_bytes or b"").decode(errors="replace")
+
+
+async def _probe_duration_async(path: str) -> int | None:
+    """Return video duration in seconds via ffprobe (non-blocking)."""
+    ffprobe = settings.FFMPEG_PATH.replace("ffmpeg", "ffprobe")
+    rc, out = await _run_ffmpeg_async(
+        ffprobe, "-v", "quiet", "-print_format", "json", "-show_format", path,
+    )
+    if rc == 0:
+        try:
+            return int(float(json.loads(out).get("format", {}).get("duration", 0)))
+        except Exception:
+            pass
+    return None
+
+
 async def _trim_video_task(
     video_id: str, start: float, end: float,
     raw_path: str, backup_path: str, db_url: str,
 ):
-    """Background task to trim a video and queue re-transcoding."""
+    """Trim a video to [start, end] using stream-copy — no re-encode, fast."""
+    import asyncio as _aio
     import asyncpg as apg
+    import time as _time
 
     pool = await apg.create_pool(db_url, min_size=1, max_size=2)
+    trimmed_path = raw_path + ".trimmed.mp4"
     try:
-        # Back up the original (only first time)
         if not os.path.exists(backup_path):
             shutil.copy2(raw_path, backup_path)
-
         source_path = backup_path if os.path.exists(backup_path) else raw_path
-        trimmed_path = raw_path + ".trimmed.mp4"
 
-        # Use ffmpeg to trim (GPU-accelerated if available)
-        duration = end - start
-        trim_cmd = [
+        # -ss BEFORE -i = input seek (GOP-aligned, instant).
+        # -c copy = no re-encode. Keyframe drift ≤ 1-3 s — fine for lecture content.
+        # -avoid_negative_ts make_zero normalises timestamps after the seek.
+        t0 = _time.monotonic()
+        log.info("Trim | video_id={} start={}s end={}s  [stream-copy, no re-encode]", video_id, start, end)
+        rc, stderr = await _run_ffmpeg_async(
             settings.FFMPEG_PATH, "-y",
-            *get_hwaccel_args(),
             "-ss", str(start),
             "-i", source_path,
-            "-t", str(duration),
-            *get_encode_args(crf=18),
-            "-c:a", "aac", "-b:a", "128k",
-            "-pix_fmt", "yuv420p",
+            "-t", str(end - start),
+            "-c", "copy",
+            "-avoid_negative_ts", "make_zero",
             "-movflags", "+faststart",
             trimmed_path,
-        ]
+        )
+        elapsed = round(_time.monotonic() - t0, 2)
 
-        log.info(f"Trimming video {video_id}: {start}s - {end}s")
-        result = subprocess.run(trim_cmd, capture_output=True, text=True, timeout=600)
-
-        if result.returncode != 0:
-            error = f"Trim failed: {result.stderr[-500:]}"
-            log.error(f"Trim failed: {error}")
-            await pool.execute(
-                "UPDATE videos SET status = 'error' WHERE id = $1", video_id,
-            )
+        if rc != 0:
+            log.error("Trim ffmpeg failed | video_id={} rc={} stderr={}", video_id, rc, stderr[-400:])
+            await pool.execute("UPDATE videos SET status = 'error' WHERE id = $1", video_id)
             return
 
         if not os.path.exists(trimmed_path) or os.path.getsize(trimmed_path) == 0:
-            log.error("Trim: output file is empty or missing")
-            await pool.execute(
-                "UPDATE videos SET status = 'error' WHERE id = $1", video_id,
-            )
+            log.error("Trim | output missing or empty | video_id={}", video_id)
+            await pool.execute("UPDATE videos SET status = 'error' WHERE id = $1", video_id)
             return
 
-        # Replace original with trimmed version
         shutil.move(trimmed_path, raw_path)
+        log.info("Trim done | video_id={} elapsed={}s", video_id, elapsed)
 
-        # Probe new duration
-        probe_cmd = [
-            settings.FFMPEG_PATH.replace("ffmpeg", "ffprobe"),
-            "-v", "quiet", "-print_format", "json", "-show_format", raw_path,
-        ]
-        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30)
-        new_duration = None
-        if probe_result.returncode == 0:
-            try:
-                probe_data = json.loads(probe_result.stdout)
-                new_duration = int(float(probe_data.get("format", {}).get("duration", 0)))
-            except Exception:
-                pass
-
+        new_duration = await _probe_duration_async(raw_path)
         if new_duration:
-            await pool.execute(
-                "UPDATE videos SET duration_s = $1 WHERE id = $2", new_duration, video_id,
-            )
+            await pool.execute("UPDATE videos SET duration_s = $1 WHERE id = $2", new_duration, video_id)
 
         await pool.execute("UPDATE videos SET status = 'uploaded' WHERE id = $1", video_id)
         _write_ops_log(os.path.dirname(raw_path), "trim")
-        log.info(f"Video {video_id} trimmed successfully")
 
     except Exception as e:
-        log.error(f"Trim unexpected error: {e}")
+        log.error("Trim unexpected error | video_id={} error={}", video_id, e)
+        if os.path.exists(trimmed_path):
+            os.remove(trimmed_path)
         try:
-            await pool.execute(
-                "UPDATE videos SET status = 'error' WHERE id = $1", video_id,
-            )
+            await pool.execute("UPDATE videos SET status = 'error' WHERE id = $1", video_id)
         except Exception:
             pass
     finally:
@@ -497,129 +501,102 @@ async def _cut_video_task(
     video_id: str, start: float, end: float,
     raw_path: str, backup_path: str, db_url: str,
 ):
-    """Background task to cut (remove) a segment from a video and queue re-transcoding."""
+    """Remove the segment [start, end] from a video using stream-copy — no re-encode, fast."""
     import asyncpg as apg
+    import time as _time
 
     pool = await apg.create_pool(db_url, min_size=1, max_size=2)
+    part_before = raw_path + ".cut_before.mp4"
+    part_after  = raw_path + ".cut_after.mp4"
+    concat_list = raw_path + ".cut_concat.txt"
+    cut_output  = raw_path + ".cut_result.mp4"
+    tmp_files   = [part_before, part_after, concat_list, cut_output]
+
     try:
-        # Back up the original (only first time)
         if not os.path.exists(backup_path):
             shutil.copy2(raw_path, backup_path)
-
         source_path = backup_path if os.path.exists(backup_path) else raw_path
-        part_before = raw_path + ".cut_before.mp4"
-        part_after = raw_path + ".cut_after.mp4"
-        concat_list = raw_path + ".cut_concat.txt"
-        cut_output = raw_path + ".cut_result.mp4"
 
-        encode_opts = [
-            *get_encode_args(crf=18),
-            "-c:a", "aac", "-b:a", "128k",
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-        ]
-
+        t0 = _time.monotonic()
+        log.info("Cut | video_id={} removing={}s-{}s  [stream-copy, no re-encode]", video_id, start, end)
         parts = []
 
-        # Extract part before the cut (0 → start)
-        if start > 0:
-            cmd_before = [
+        # Part 1: 0 → start  (-t is an output option; no -ss needed, starts at 0)
+        if start > 0.5:
+            rc, stderr = await _run_ffmpeg_async(
                 settings.FFMPEG_PATH, "-y",
                 "-i", source_path,
                 "-t", str(start),
-                *encode_opts,
+                "-c", "copy",
+                "-avoid_negative_ts", "make_zero",
                 part_before,
-            ]
-            log.info(f"Cut: extracting before segment 0s - {start}s")
-            r = subprocess.run(cmd_before, capture_output=True, text=True, timeout=600)
-            if r.returncode != 0:
-                raise RuntimeError(f"Cut before-segment failed: {r.stderr[-500:]}")
+            )
+            if rc != 0:
+                raise RuntimeError(f"Cut before-segment failed: {stderr[-400:]}")
+            log.info("Cut | before-segment done (0s → {}s)", start)
             parts.append(part_before)
 
-        # Extract part after the cut (end → EOF)
-        cmd_after = [
+        # Part 2: end → EOF  (-ss before -i = input seek, instant)
+        rc, stderr = await _run_ffmpeg_async(
             settings.FFMPEG_PATH, "-y",
             "-ss", str(end),
             "-i", source_path,
-            *encode_opts,
+            "-c", "copy",
+            "-avoid_negative_ts", "make_zero",
             part_after,
-        ]
-        log.info(f"Cut: extracting after segment {end}s - EOF")
-        r = subprocess.run(cmd_after, capture_output=True, text=True, timeout=600)
-        if r.returncode != 0:
-            raise RuntimeError(f"Cut after-segment failed: {r.stderr[-500:]}")
+        )
+        if rc != 0:
+            raise RuntimeError(f"Cut after-segment failed: {stderr[-400:]}")
         if os.path.exists(part_after) and os.path.getsize(part_after) > 0:
+            log.info("Cut | after-segment done ({}s → EOF)", end)
             parts.append(part_after)
 
         if not parts:
             raise RuntimeError("Cut produced no output segments")
 
         if len(parts) == 1:
-            # Only one segment, just use it directly
             shutil.move(parts[0], cut_output)
         else:
-            # Concatenate the two parts
+            # Concat demuxer re-timestamps each part so there's no discontinuity
             with open(concat_list, "w") as f:
                 for p in parts:
                     f.write(f"file '{p}'\n")
-
-            concat_cmd = [
+            rc, stderr = await _run_ffmpeg_async(
                 settings.FFMPEG_PATH, "-y",
                 "-f", "concat", "-safe", "0",
                 "-i", concat_list,
                 "-c", "copy",
                 "-movflags", "+faststart",
                 cut_output,
-            ]
-            log.info(f"Cut: concatenating {len(parts)} segments")
-            r = subprocess.run(concat_cmd, capture_output=True, text=True, timeout=600)
-            if r.returncode != 0:
-                raise RuntimeError(f"Cut concat failed: {r.stderr[-500:]}")
+            )
+            if rc != 0:
+                raise RuntimeError(f"Cut concat failed: {stderr[-400:]}")
 
         if not os.path.exists(cut_output) or os.path.getsize(cut_output) == 0:
-            raise RuntimeError("Cut output file is empty or missing")
+            raise RuntimeError("Cut output is empty or missing")
 
-        # Replace original with cut version
         shutil.move(cut_output, raw_path)
+        elapsed = round(_time.monotonic() - t0, 2)
+        log.info("Cut done | video_id={} elapsed={}s", video_id, elapsed)
 
-        # Cleanup temp files
         for tmp in [part_before, part_after, concat_list]:
             if os.path.exists(tmp):
                 os.remove(tmp)
 
-        # Probe new duration
-        probe_cmd = [
-            settings.FFMPEG_PATH.replace("ffmpeg", "ffprobe"),
-            "-v", "quiet", "-print_format", "json", "-show_format", raw_path,
-        ]
-        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30)
-        new_duration = None
-        if probe_result.returncode == 0:
-            try:
-                probe_data = json.loads(probe_result.stdout)
-                new_duration = int(float(probe_data.get("format", {}).get("duration", 0)))
-            except Exception:
-                pass
-
+        new_duration = await _probe_duration_async(raw_path)
         if new_duration:
-            await pool.execute(
-                "UPDATE videos SET duration_s = $1 WHERE id = $2", new_duration, video_id,
-            )
+            await pool.execute("UPDATE videos SET duration_s = $1 WHERE id = $2", new_duration, video_id)
 
         await pool.execute("UPDATE videos SET status = 'uploaded' WHERE id = $1", video_id)
         _write_ops_log(os.path.dirname(raw_path), "cut")
-        log.info(f"Video {video_id} cut successfully")
 
     except Exception as e:
-        log.error(f"Cut unexpected error: {e}")
-        # Cleanup temp files on error
-        for tmp in [part_before, part_after, concat_list, cut_output]:
+        log.error("Cut unexpected error | video_id={} error={}", video_id, e)
+        for tmp in tmp_files:
             if os.path.exists(tmp):
                 os.remove(tmp)
         try:
-            await pool.execute(
-                "UPDATE videos SET status = 'error' WHERE id = $1", video_id,
-            )
+            await pool.execute("UPDATE videos SET status = 'error' WHERE id = $1", video_id)
         except Exception:
             pass
     finally:
