@@ -137,6 +137,9 @@ export const AdminVideos: React.FC = () => {
   const [autoMode, setAutoMode] = useState(false);
   const [autoStatus, setAutoStatus] = useState<Record<string, any> | null>(null);
   const autoStatusPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Tracks which video the active polls belong to — prevents stale polls from a
+  // previously-selected video from overwriting state for the current video.
+  const activeVideoIdRef = useRef<string | null>(null);
 
   // Transcript tab
   const [transcriptData, setTranscriptData] = useState<any | null>(null);
@@ -276,7 +279,11 @@ export const AdminVideos: React.FC = () => {
   }, [fetchVideos, fetchCourses]);
 
   const selectVideo = async (video: Video) => {
+    // Stop all background polls and clear per-video state before switching
+    activeVideoIdRef.current = video.id;
     stopTranscriptProgressPoll();
+    if (autoStatusPollRef.current) { clearInterval(autoStatusPollRef.current); autoStatusPollRef.current = null; }
+    setAutoStatus(null);
     setTranscriptData(null);
     setTranscriptProgress(null);
     setSelected(video);
@@ -488,8 +495,15 @@ export const AdminVideos: React.FC = () => {
   const startAutoStatusPoll = (videoId: string) => {
     if (autoStatusPollRef.current) clearInterval(autoStatusPollRef.current);
     const poll = async () => {
+      // Guard: if the user switched to a different video, stop this poll immediately
+      if (activeVideoIdRef.current !== videoId) {
+        if (autoStatusPollRef.current) clearInterval(autoStatusPollRef.current);
+        autoStatusPollRef.current = null;
+        return;
+      }
       try {
         const status = await api.get<any>(`/admin/videos/${videoId}/auto-status`);
+        if (activeVideoIdRef.current !== videoId) return; // check again after await
         setAutoStatus(status);
         const jobs = status.jobs || {};
         const allDone = ['transcript', 'metadata', 'chapters', 'howto'].every(
@@ -516,13 +530,19 @@ export const AdminVideos: React.FC = () => {
   const startTranscriptProgressPoll = (videoId: string) => {
     stopTranscriptProgressPoll();
     const poll = async () => {
+      if (activeVideoIdRef.current !== videoId) {
+        stopTranscriptProgressPoll();
+        return;
+      }
       try {
         const prog = await api.get<any>(`/admin/videos/${videoId}/transcript/progress`);
+        if (activeVideoIdRef.current !== videoId) return;
         setTranscriptProgress(prog);
         if (prog.status === 'ready') {
           stopTranscriptProgressPoll();
           // Auto-load the full transcript
           const data = await api.get<any>(`/admin/videos/${videoId}/transcript`);
+          if (activeVideoIdRef.current !== videoId) return;
           setTranscriptData(data);
         } else if (prog.status === 'failed') {
           stopTranscriptProgressPoll();
