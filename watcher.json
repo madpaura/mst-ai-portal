@@ -1,0 +1,18 @@
+{
+  "watch_root":   "/home/vishwa/upload",
+  "api_url":      "http://localhost:9800",
+  "token":        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiZjg1YTFiZS00NTdlLTQyMjktYTA0Yi1lZjA5NDc2ZjI2MTUiLCJyb2xlIjoiYWRtaW4iLCJleHAiOjE3Nzc3ODEzMzB9.-yeqJik6m6VT3920CSWPA3tattKlfn-1lvlVKExgGOY",
+  "username":     "",
+  "password":     "",
+
+  "max_size_mb":  100,
+  "allowed_ext":  [".mp4", ".webm"],
+
+  "mode":         "always",
+
+  "auto_process": true,
+  "transcode":    true,
+
+  "stabilize_s":  15,
+  "log_file":     "/home/vishwa/mst-ai-portal/watch.log"
+}

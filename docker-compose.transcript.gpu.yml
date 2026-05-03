@@ -10,7 +10,12 @@ services:
       TRANSCRIPT_COMPUTE: ${TRANSCRIPT_COMPUTE:-float16}
     deploy:
       resources:
+        limits:
+          cpus: "${TRANSCRIPT_GPU_CPU_LIMIT:-2.0}"
+          memory: "${TRANSCRIPT_GPU_MEM_LIMIT:-4g}"
         reservations:
+          cpus: "0.5"
+          memory: 512m
           devices:
             - driver: nvidia
               count: 1

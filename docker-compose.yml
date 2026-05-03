@@ -89,6 +89,14 @@ services:
     volumes:
       - "${VIDEO_DATA_VOLUME}:/data/videos"
     command: ["python", "worker/transcoder.py"]
+    deploy:
+      resources:
+        limits:
+          cpus: "${WORKER_CPU_LIMIT:-4.0}"
+          memory: "${WORKER_MEM_LIMIT:-4g}"
+        reservations:
+          cpus: "0.25"
+          memory: 256m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h db -U ${POSTGRES_USER:-portal} -d ${POSTGRES_DB:-mst_portal} || exit 1"]
       interval: 30s
@@ -120,6 +128,14 @@ services:
     command: ["python", "worker/auto_processor.py"]
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    deploy:
+      resources:
+        limits:
+          cpus: "${AUTO_PROCESSOR_CPU_LIMIT:-2.0}"
+          memory: "${AUTO_PROCESSOR_MEM_LIMIT:-2g}"
+        reservations:
+          cpus: "0.1"
+          memory: 128m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h db -U ${POSTGRES_USER:-portal} -d ${POSTGRES_DB:-mst_portal} || exit 1"]
       interval: 30s

@@ -26,6 +26,14 @@ services:
       - "${TRANSCRIPT_PORT:-9100}:9100"
     volumes:
       - transcript-model-cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        limits:
+          cpus: "${TRANSCRIPT_CPU_LIMIT:-4.0}"
+          memory: "${TRANSCRIPT_MEM_LIMIT:-6g}"
+        reservations:
+          cpus: "0.5"
+          memory: 1g
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9100/health"]
       interval: 30s
