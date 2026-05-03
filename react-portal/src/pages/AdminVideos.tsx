@@ -566,17 +566,6 @@ export const AdminVideos: React.FC = () => {
     }
   };
 
-  const handleRetryAutoJob = async (kind: string) => {
-    if (!selected) return;
-    try {
-      await api.post(`/admin/videos/${selected.id}/auto-process/retry`, { kind });
-      startAutoStatusPoll(selected.id);
-      showMsg('success', `Retrying ${kind}...`);
-    } catch (err: any) {
-      showMsg('error', err.message);
-    }
-  };
-
   const handlePublish = async () => {
     if (!selected) return;
     try {
