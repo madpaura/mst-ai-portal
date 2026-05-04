@@ -3,6 +3,16 @@ from typing import Optional
 from datetime import datetime
 
 
+class AttachmentResponse(BaseModel):
+    id: str
+    article_id: str
+    filename: str
+    file_size: int
+    mime_type: str
+    url: str
+    created_at: datetime
+
+
 class ArticleResponse(BaseModel):
     id: str
     title: str
@@ -15,6 +25,7 @@ class ArticleResponse(BaseModel):
     published_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    attachments: list[AttachmentResponse] = []
 
 
 class ArticleListResponse(BaseModel):

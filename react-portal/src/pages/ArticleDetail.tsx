@@ -11,6 +11,14 @@ import { api } from '../api/client';
 import { usePageView } from '../hooks/usePageView';
 import { useParams, Link } from 'react-router-dom';
 
+interface Attachment {
+  id: string;
+  filename: string;
+  file_size: number;
+  mime_type: string;
+  url: string;
+}
+
 interface Article {
   id: string;
   title: string;
@@ -23,6 +31,7 @@ interface Article {
   published_at: string | null;
   created_at: string;
   updated_at: string;
+  attachments: Attachment[];
 }
 
 const CATEGORY_STYLES: Record<string, string> = {
@@ -117,6 +126,35 @@ export const ArticleDetail: React.FC = () => {
                   {article.content}
                 </ReactMarkdown>
               </div>
+
+              {article.attachments?.length > 0 && (
+                <div className="mt-10 border-t border-slate-200 dark:border-white/10 pt-8">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3">
+                    Attachments
+                  </h3>
+                  <div className="flex flex-col gap-2">
+                    {article.attachments.map((att) => (
+                      <a
+                        key={att.id}
+                        href={att.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10 hover:border-primary/40 hover:bg-primary/5 transition-colors group"
+                      >
+                        <span className="material-symbols-outlined text-xl text-slate-400 group-hover:text-primary transition-colors">
+                          attach_file
+                        </span>
+                        <span className="flex-1 text-sm text-slate-700 dark:text-slate-300 group-hover:text-primary transition-colors truncate">
+                          {att.filename}
+                        </span>
+                        <span className="material-symbols-outlined text-base text-slate-400 group-hover:text-primary transition-colors">
+                          download
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </article>
           )}
         </div>

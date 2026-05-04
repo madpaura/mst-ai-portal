@@ -4,7 +4,7 @@ from typing import Optional
 
 from articles.schemas import (
     ArticleResponse, ArticleListResponse, ArticleCreate, ArticleUpdate,
-    BeautifyRequest, BeautifyResponse,
+    BeautifyRequest, BeautifyResponse, AttachmentResponse,
 )
 from articles.llm import call_llm
 from auth.dependencies import get_current_user
@@ -13,13 +13,38 @@ from database import get_db
 router = APIRouter()
 
 
-def _row_to_response(r) -> ArticleResponse:
+def _attachment_url(article_id: str, stored_name: str) -> str:
+    return f"/media/articles/{article_id}/{stored_name}"
+
+
+def _row_to_attachment(r) -> AttachmentResponse:
+    return AttachmentResponse(
+        id=str(r["id"]),
+        article_id=str(r["article_id"]),
+        filename=r["filename"],
+        file_size=r["file_size"],
+        mime_type=r["mime_type"],
+        url=_attachment_url(str(r["article_id"]), r["file_path"].split("/")[-1]),
+        created_at=r["created_at"],
+    )
+
+
+async def _get_attachments(db, article_id: str) -> list[AttachmentResponse]:
+    rows = await db.fetch(
+        "SELECT * FROM article_attachments WHERE article_id = $1 ORDER BY created_at",
+        article_id,
+    )
+    return [_row_to_attachment(r) for r in rows]
+
+
+def _row_to_response(r, attachments: list[AttachmentResponse] | None = None) -> ArticleResponse:
     return ArticleResponse(
         id=str(r["id"]), title=r["title"], slug=r["slug"],
         summary=r.get("summary"), content=r["content"],
         category=r["category"], author_name=r.get("author_name"),
         is_published=r["is_published"], published_at=r.get("published_at"),
         created_at=r["created_at"], updated_at=r["updated_at"],
+        attachments=attachments or [],
     )
 
 
@@ -103,7 +128,7 @@ async def create_article(req: ArticleCreate, user: dict = Depends(get_current_us
         req.title, slug, req.summary, req.content, req.category,
         user["id"], user.get("display_name", user.get("username", "User")),
     )
-    return _row_to_response(row)
+    return _row_to_response(row, [])
 
 
 @router.get("/my/{article_id}", response_model=ArticleResponse)
@@ -115,7 +140,8 @@ async def get_my_article(article_id: str, user: dict = Depends(get_current_user)
     )
     if not row:
         raise HTTPException(status_code=404, detail="Article not found")
-    return _row_to_response(row)
+    attachments = await _get_attachments(db, article_id)
+    return _row_to_response(row, attachments)
 
 
 @router.put("/my/{article_id}", response_model=ArticleResponse)
@@ -153,7 +179,8 @@ async def update_my_article(
         )
 
     row = await db.fetchrow("SELECT * FROM articles WHERE id = $1", article_id)
-    return _row_to_response(row)
+    attachments = await _get_attachments(db, article_id)
+    return _row_to_response(row, attachments)
 
 
 @router.delete("/my/{article_id}")
@@ -194,4 +221,5 @@ async def get_article(slug: str):
     )
     if not row:
         raise HTTPException(status_code=404, detail="Article not found")
-    return _row_to_response(row)
+    attachments = await _get_attachments(db, str(row["id"]))
+    return _row_to_response(row, attachments)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -6,6 +6,16 @@ import rehypeRaw from 'rehype-raw';
 import 'highlight.js/styles/github-dark.css';
 import '../styles/howto-markdown.css';
 import { api } from '../api/client';
+
+interface Attachment {
+  id: string;
+  article_id: string;
+  filename: string;
+  file_size: number;
+  mime_type: string;
+  url: string;
+  created_at: string;
+}
 
 interface Article {
   id: string;
@@ -19,9 +29,27 @@ interface Article {
   published_at: string | null;
   created_at: string;
   updated_at?: string;
+  attachments?: Attachment[];
 }
 
 const DEFAULT_CATEGORIES = ['General', 'Tutorial', 'Announcement', 'Deep Dive', 'Best Practices'];
+const ALLOWED_TYPES = '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx';
+const MAX_SIZE_MB = 20;
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function fileIcon(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  if (ext === 'pdf') return 'picture_as_pdf';
+  if (ext === 'doc' || ext === 'docx') return 'description';
+  if (ext === 'ppt' || ext === 'pptx') return 'slideshow';
+  if (ext === 'xls' || ext === 'xlsx') return 'table_chart';
+  return 'attach_file';
+}
 
 export const AdminArticles: React.FC = () => {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -40,6 +68,10 @@ export const AdminArticles: React.FC = () => {
   });
   const [saving, setSaving] = useState(false);
   const [beautifying, setBeautifying] = useState(false);
+
+  // Attachments
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchArticles = useCallback(async () => {
     try {
@@ -88,7 +120,7 @@ export const AdminArticles: React.FC = () => {
     setSaving(true);
     try {
       const updated = await api.put<Article>(`/admin/articles/${selected.id}`, editForm);
-      setSelected(updated);
+      setSelected((prev) => prev ? { ...prev, ...updated } : updated);
       setArticles((prev) => prev.map((a) => a.id === updated.id ? { ...a, ...updated } : a));
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Save failed');
@@ -134,6 +166,47 @@ export const AdminArticles: React.FC = () => {
       alert(err instanceof Error ? err.message : 'Beautify failed — is the LLM service running?');
     }
     setBeautifying(false);
+  };
+
+  const handleUploadAttachment = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!selected || !e.target.files?.length) return;
+    const file = e.target.files[0];
+
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+      alert(`File exceeds ${MAX_SIZE_MB} MB limit`);
+      e.target.value = '';
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const attachment = await api.post<Attachment>(
+        `/admin/articles/${selected.id}/attachments`,
+        formData,
+      );
+      setSelected((prev) =>
+        prev ? { ...prev, attachments: [...(prev.attachments || []), attachment] } : prev
+      );
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Upload failed');
+    }
+    setUploading(false);
+    e.target.value = '';
+  };
+
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    if (!selected || !confirm('Delete this attachment?')) return;
+    try {
+      await api.delete(`/admin/articles/${selected.id}/attachments/${attachmentId}`);
+      setSelected((prev) =>
+        prev ? { ...prev, attachments: (prev.attachments || []).filter((a) => a.id !== attachmentId) } : prev
+      );
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Delete failed');
+    }
   };
 
   const filteredArticles = articles.filter((a) =>
@@ -374,6 +447,65 @@ export const AdminArticles: React.FC = () => {
                   placeholder="Write your article in Markdown..."
                   className="w-full h-full bg-transparent border-none resize-none text-white placeholder-slate-600 focus:ring-0 text-sm font-mono p-6 outline-none leading-relaxed"
                 />
+              )}
+            </div>
+
+            {/* Attachments section */}
+            <div className="border-t border-white/10 px-4 py-3 shrink-0 bg-slate-900/40">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  Attachments
+                  <span className="ml-1.5 text-slate-600">
+                    (PDF, Word, PPT, Excel — max {MAX_SIZE_MB} MB)
+                  </span>
+                </span>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="flex items-center gap-1 px-2.5 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-300 text-xs font-bold rounded-lg transition-colors"
+                >
+                  <span className="material-symbols-outlined text-sm">
+                    {uploading ? 'progress_activity' : 'upload_file'}
+                  </span>
+                  {uploading ? 'Uploading...' : 'Upload'}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={ALLOWED_TYPES}
+                  className="hidden"
+                  onChange={handleUploadAttachment}
+                />
+              </div>
+
+              {(selected.attachments || []).length === 0 ? (
+                <p className="text-xs text-slate-600 italic">No attachments yet</p>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  {(selected.attachments || []).map((att) => (
+                    <div
+                      key={att.id}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-slate-800/60 group"
+                    >
+                      <span className="material-symbols-outlined text-base text-slate-400">{fileIcon(att.filename)}</span>
+                      <a
+                        href={att.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 text-xs text-slate-300 hover:text-primary truncate transition-colors"
+                      >
+                        {att.filename}
+                      </a>
+                      <span className="text-[10px] text-slate-600">{formatBytes(att.file_size)}</span>
+                      <button
+                        onClick={() => handleDeleteAttachment(att.id)}
+                        className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-all"
+                      >
+                        <span className="material-symbols-outlined text-sm">close</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </>
