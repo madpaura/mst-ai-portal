@@ -30,13 +30,6 @@ async def get_current_user(
 ) -> dict:
     token = _extract_token(request, credentials)
 
-    if settings.AUTH_MODE == "open" and token is None:
-        db = await get_db()
-        row = await db.fetchrow("SELECT * FROM users WHERE username = 'admin' LIMIT 1")
-        if row:
-            return dict(row)
-        raise HTTPException(status_code=401, detail="No admin user found")
-
     if token is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -59,10 +52,6 @@ async def get_optional_user(
     token = _extract_token(request, credentials)
 
     if token is None:
-        if settings.AUTH_MODE == "open":
-            db = await get_db()
-            row = await db.fetchrow("SELECT * FROM users WHERE username = 'admin' LIMIT 1")
-            return dict(row) if row else None
         return None
 
     payload = decode_access_token(token)
