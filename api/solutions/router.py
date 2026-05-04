@@ -78,8 +78,8 @@ async def list_solution_cards():
             description=r["description"], long_description=r.get("long_description"),
             icon=r.get("icon", "smart_toy"), icon_color=r.get("icon_color", "text-primary"),
             badge=r.get("badge"), link_url=r.get("link_url"), launch_url=r.get("launch_url"),
-            sort_order=r["sort_order"], is_active=r["is_active"],
-            created_at=r["created_at"], updated_at=r["updated_at"],
+            sort_order=r["sort_order"], category=r.get("category", "none"),
+            is_active=r["is_active"], created_at=r["created_at"], updated_at=r["updated_at"],
         )
         for r in rows
     ]
@@ -99,8 +99,8 @@ async def get_solution_card(card_id: str):
         description=row["description"], long_description=row.get("long_description"),
         icon=row.get("icon", "smart_toy"), icon_color=row.get("icon_color", "text-primary"),
         badge=row.get("badge"), link_url=row.get("link_url"), launch_url=row.get("launch_url"),
-        sort_order=row["sort_order"], is_active=row["is_active"],
-        created_at=row["created_at"], updated_at=row["updated_at"],
+        sort_order=row["sort_order"], category=row.get("category", "none"),
+        is_active=row["is_active"], created_at=row["created_at"], updated_at=row["updated_at"],
     )
 
 

@@ -51,8 +51,16 @@ export const Solutions: React.FC = () => {
   const handlePlayVideo = () => navigate('/ignite');
   const handleContact = () => window.open(`mailto:${contactEmail}`, '_blank');
   const handleCardClick = (card: SolutionCard) => {
-    if (card.link_url) navigate(card.link_url);
-    else navigate(`/solutions/${card.id}`);
+    const target = card.link_url?.trim();
+    if (target) {
+      if (target.startsWith('http://') || target.startsWith('https://')) {
+        window.open(target, '_blank', 'noopener,noreferrer');
+      } else {
+        navigate(target);
+      }
+    } else {
+      navigate(`/solutions/${card.id}`);
+    }
   };
 
   const toggleCategory = (cat: string) => {
