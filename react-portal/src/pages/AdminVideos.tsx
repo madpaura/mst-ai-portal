@@ -1540,7 +1540,7 @@ export const AdminVideos: React.FC = () => {
             return (
               <div key={courseId}>
                 {/* Course header with expand/collapse + edit/delete */}
-                <div className="w-full flex items-center gap-1 px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-white/5 group/course">
+                <div className="w-full flex items-center gap-1 px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-white/5">
                   <button
                     onClick={() => toggleCourseCollapse(courseId)}
                     className="flex items-center gap-1.5 flex-1 min-w-0 hover:bg-slate-100 dark:hover:bg-slate-800 rounded px-1 py-0.5 transition-colors"
@@ -1556,7 +1556,7 @@ export const AdminVideos: React.FC = () => {
                     </span>
                   </button>
                   {group.course && (
-                    <div className="flex items-center gap-0.5 opacity-0 group-hover/course:opacity-100 transition-opacity shrink-0">
+                    <div className="flex items-center gap-0.5 shrink-0">
                       <button
                         onClick={(e) => openEditCourse(group.course!, e)}
                         className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
