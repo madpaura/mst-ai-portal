@@ -93,18 +93,41 @@ export const ArticleDetail: React.FC = () => {
             </div>
           ) : (
             <article>
-              <div className="flex items-center gap-3 mb-6">
-                <span className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full border ${CATEGORY_STYLES[article.category] || 'bg-slate-500/10 text-slate-400 border-slate-500/20'}`}>
-                  {article.category}
-                </span>
-                <span className="text-sm text-slate-400">
-                  {article.published_at ? formatDate(article.published_at) : formatDate(article.created_at)}
-                </span>
-                {article.author_name && (
-                  <>
-                    <span className="text-slate-300 dark:text-slate-600">|</span>
-                    <span className="text-sm text-slate-400">By {article.author_name}</span>
-                  </>
+              <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <span className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full border ${CATEGORY_STYLES[article.category] || 'bg-slate-500/10 text-slate-400 border-slate-500/20'}`}>
+                    {article.category}
+                  </span>
+                  <span className="text-sm text-slate-400">
+                    {article.published_at ? formatDate(article.published_at) : formatDate(article.created_at)}
+                  </span>
+                  {article.author_name && (
+                    <>
+                      <span className="text-slate-300 dark:text-slate-600">|</span>
+                      <span className="text-sm text-slate-400">By {article.author_name}</span>
+                    </>
+                  )}
+                </div>
+
+                {article.attachments?.length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {article.attachments.map((att) => (
+                      <a
+                        key={att.id}
+                        href={att.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-white/10 hover:border-primary/40 hover:bg-primary/5 transition-colors group"
+                        title={att.filename}
+                      >
+                        <span className="material-symbols-outlined text-sm text-slate-400 group-hover:text-primary transition-colors">attach_file</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400 group-hover:text-primary transition-colors max-w-[140px] truncate">
+                          {att.filename}
+                        </span>
+                        <span className="material-symbols-outlined text-sm text-slate-400 group-hover:text-primary transition-colors">download</span>
+                      </a>
+                    ))}
+                  </div>
                 )}
               </div>
 
@@ -127,34 +150,6 @@ export const ArticleDetail: React.FC = () => {
                 </ReactMarkdown>
               </div>
 
-              {article.attachments?.length > 0 && (
-                <div className="mt-10 border-t border-slate-200 dark:border-white/10 pt-8">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3">
-                    Attachments
-                  </h3>
-                  <div className="flex flex-col gap-2">
-                    {article.attachments.map((att) => (
-                      <a
-                        key={att.id}
-                        href={att.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10 hover:border-primary/40 hover:bg-primary/5 transition-colors group"
-                      >
-                        <span className="material-symbols-outlined text-xl text-slate-400 group-hover:text-primary transition-colors">
-                          attach_file
-                        </span>
-                        <span className="flex-1 text-sm text-slate-700 dark:text-slate-300 group-hover:text-primary transition-colors truncate">
-                          {att.filename}
-                        </span>
-                        <span className="material-symbols-outlined text-base text-slate-400 group-hover:text-primary transition-colors">
-                          download
-                        </span>
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
             </article>
           )}
         </div>
