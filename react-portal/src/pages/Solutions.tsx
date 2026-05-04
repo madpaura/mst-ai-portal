@@ -18,6 +18,7 @@ interface SolutionCard {
   link_url: string | null;
   launch_url: string | null;
   sort_order: number;
+  category: string;
 }
 
 interface LandingFeature {
@@ -36,6 +37,7 @@ export const Solutions: React.FC = () => {
   const [solutionCards, setSolutionCards] = useState<SolutionCard[]>([]);
   const [landingConfig, setLandingConfig] = useState<LandingConfig | null>(null);
   const [cardSearch, setCardSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<Set<string>>(new Set(['SW', 'HW', 'none']));
   const [contactEmail, setContactEmail] = useState('ai-tools@mst.internal');
 
   useEffect(() => {
@@ -53,16 +55,25 @@ export const Solutions: React.FC = () => {
     else navigate(`/solutions/${card.id}`);
   };
 
-  const filteredCards = cardSearch.trim()
-    ? solutionCards.filter((c) => {
-        const q = cardSearch.toLowerCase();
-        return (
-          c.title.toLowerCase().includes(q) ||
-          (c.subtitle ?? '').toLowerCase().includes(q) ||
-          c.description.toLowerCase().includes(q)
-        );
-      })
-    : solutionCards;
+  const toggleCategory = (cat: string) => {
+    setCategoryFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) { if (next.size > 1) next.delete(cat); }
+      else next.add(cat);
+      return next;
+    });
+  };
+
+  const filteredCards = solutionCards.filter((c) => {
+    if (!categoryFilter.has(c.category || 'none')) return false;
+    if (!cardSearch.trim()) return true;
+    const q = cardSearch.toLowerCase();
+    return (
+      c.title.toLowerCase().includes(q) ||
+      (c.subtitle ?? '').toLowerCase().includes(q) ||
+      c.description.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-sans">
@@ -102,31 +113,54 @@ export const Solutions: React.FC = () => {
         {/* ── Our Solutions ────────────────────────────────────────── */}
         {solutionCards.length > 0 && (
           <section className="max-w-7xl mx-auto px-6 py-16 border-t border-slate-200 dark:border-primary/10">
-            <div className="flex items-center justify-between mb-8 gap-4">
+            <div className="flex flex-wrap items-center justify-between mb-8 gap-4">
               <div>
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Our Solutions</h2>
                 <div className="h-1 w-16 bg-primary rounded-full mt-2" />
               </div>
-              <label className="relative block shrink-0">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none">
-                  <span className="material-symbols-outlined text-[18px]">search</span>
-                </span>
-                <input
-                  type="text"
-                  value={cardSearch}
-                  onChange={(e) => setCardSearch(e.target.value)}
-                  placeholder="Search solutions…"
-                  className="w-52 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-lg py-2 pl-9 pr-3 text-sm placeholder:text-slate-400 focus:ring-2 focus:ring-primary outline-none transition-all"
-                />
-                {cardSearch && (
-                  <button
-                    onClick={() => setCardSearch('')}
-                    className="absolute inset-y-0 right-2 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-white"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">close</span>
-                  </button>
-                )}
-              </label>
+              <div className="flex items-center gap-4 flex-wrap">
+                {/* Category checkboxes */}
+                <div className="flex items-center gap-3">
+                  {(['SW', 'HW', 'none'] as const).map((cat) => (
+                    <label key={cat} className="flex items-center gap-1.5 cursor-pointer select-none group">
+                      <input
+                        type="checkbox"
+                        checked={categoryFilter.has(cat)}
+                        onChange={() => toggleCategory(cat)}
+                        className="w-3.5 h-3.5 accent-primary rounded"
+                      />
+                      <span className={`text-xs font-semibold transition-colors ${
+                        categoryFilter.has(cat)
+                          ? cat === 'SW' ? 'text-blue-500' : cat === 'HW' ? 'text-amber-500' : 'text-slate-400'
+                          : 'text-slate-400 opacity-50'
+                      }`}>
+                        {cat === 'none' ? 'Other' : cat}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {/* Search */}
+                <label className="relative block shrink-0">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none">
+                    <span className="material-symbols-outlined text-[18px]">search</span>
+                  </span>
+                  <input
+                    type="text"
+                    value={cardSearch}
+                    onChange={(e) => setCardSearch(e.target.value)}
+                    placeholder="Search solutions…"
+                    className="w-52 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-lg py-2 pl-9 pr-3 text-sm placeholder:text-slate-400 focus:ring-2 focus:ring-primary outline-none transition-all"
+                  />
+                  {cardSearch && (
+                    <button
+                      onClick={() => setCardSearch('')}
+                      className="absolute inset-y-0 right-2 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-white"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">close</span>
+                    </button>
+                  )}
+                </label>
+              </div>
             </div>
 
             <div
@@ -183,8 +217,8 @@ export const Solutions: React.FC = () => {
               )) : (
                 <div className="col-span-full flex flex-col items-center justify-center py-16 text-slate-400">
                   <span className="material-symbols-outlined text-4xl mb-3">search_off</span>
-                  <p className="text-sm">No solutions match <span className="font-semibold text-slate-500">"{cardSearch}"</span></p>
-                  <button onClick={() => setCardSearch('')} className="mt-3 text-xs text-primary hover:underline">Clear search</button>
+                  <p className="text-sm">No solutions match your current filters</p>
+                  <button onClick={() => { setCardSearch(''); setCategoryFilter(new Set(['SW', 'HW', 'none'])); }} className="mt-3 text-xs text-primary hover:underline">Clear all filters</button>
                 </div>
               )}
             </div>

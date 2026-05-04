@@ -13,6 +13,7 @@ interface SolutionCard {
   link_url: string | null;
   launch_url: string | null;
   sort_order: number;
+  category: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -42,6 +43,7 @@ interface CardForm {
   link_url: string;
   launch_url: string;
   sort_order: number;
+  category: string;
 }
 
 interface NewsForm {
@@ -71,7 +73,7 @@ interface Video {
 
 const EMPTY_CARD: CardForm = {
   title: '', subtitle: '', description: '', long_description: '',
-  icon: 'smart_toy', icon_color: 'text-primary', badge: '', link_url: '', launch_url: '', sort_order: 0,
+  icon: 'smart_toy', icon_color: 'text-primary', badge: '', link_url: '', launch_url: '', sort_order: 0, category: 'none',
 };
 
 const EMPTY_NEWS: NewsForm = {
@@ -199,6 +201,7 @@ export const AdminSolutions: React.FC = () => {
       link_url: card.link_url || '',
       launch_url: card.launch_url || '',
       sort_order: card.sort_order,
+      category: card.category || 'none',
     });
   };
 
@@ -380,6 +383,7 @@ export const AdminSolutions: React.FC = () => {
                 <tr className="border-b border-white/10 text-xs font-bold text-slate-400 uppercase tracking-wider">
                   <th className="text-left px-4 py-3">Card</th>
                   <th className="text-left px-4 py-3">Subtitle</th>
+                  <th className="text-left px-4 py-3">Category</th>
                   <th className="text-left px-4 py-3">Order</th>
                   <th className="text-left px-4 py-3">Status</th>
                   <th className="text-right px-4 py-3">Actions</th>
@@ -400,6 +404,15 @@ export const AdminSolutions: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-400">{card.subtitle || '—'}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${
+                        card.category === 'SW' ? 'bg-blue-500/10 text-blue-400' :
+                        card.category === 'HW' ? 'bg-amber-500/10 text-amber-400' :
+                        'bg-slate-700 text-slate-400'
+                      }`}>
+                        {card.category === 'none' ? 'Other' : card.category}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-xs text-slate-400">{card.sort_order}</td>
                     <td className="px-4 py-3">
                       {card.is_active ? (
@@ -421,7 +434,7 @@ export const AdminSolutions: React.FC = () => {
                   </tr>
                 ))}
                 {cards.length === 0 && (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500 text-sm">No solution cards yet</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500 text-sm">No solution cards yet</td></tr>
                 )}
               </tbody>
             </table>
@@ -591,11 +604,20 @@ export const AdminSolutions: React.FC = () => {
                   className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Subtitle</label>
                   <input value={cardForm.subtitle} onChange={(e) => setCardForm((f) => ({ ...f, subtitle: e.target.value }))}
                     className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Category</label>
+                  <select value={cardForm.category} onChange={(e) => setCardForm((f) => ({ ...f, category: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none">
+                    <option value="SW">SW — Software</option>
+                    <option value="HW">HW — Hardware</option>
+                    <option value="none">Other</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Sort Order</label>

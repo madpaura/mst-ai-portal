@@ -220,6 +220,16 @@ export const AdminVideos: React.FC = () => {
   const [showCourseCreate, setShowCourseCreate] = useState(false);
   const [courseForm, setCourseForm] = useState({ title: '', slug: '', description: '' });
 
+  // Course edit modal
+  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
+  const [courseEditForm, setCourseEditForm] = useState({ title: '', slug: '', description: '', sort_order: 0 });
+
+  // Course delete modal
+  type CourseDeleteMode = 'migrate' | 'delete_videos';
+  const [deletingCourse, setDeletingCourse] = useState<Course | null>(null);
+  const [courseDeleteMode, setCourseDeleteMode] = useState<CourseDeleteMode>('migrate');
+  const [courseDeleteMigrateTarget, setCourseDeleteMigrateTarget] = useState('');
+
   // Category management
   const [customCategories, setCustomCategories] = useState<string[]>([]);
   const [showAddCategory, setShowAddCategory] = useState(false);
@@ -420,6 +430,60 @@ export const AdminVideos: React.FC = () => {
       setCourseForm({ title: '', slug: '', description: '' });
       await fetchCourses();
       showMsg('success', 'Course created');
+    } catch (err: any) {
+      showMsg('error', err.message);
+    }
+  };
+
+  const openEditCourse = (course: Course, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCourseEditForm({ title: course.title, slug: course.slug, description: course.description || '', sort_order: course.sort_order });
+    setEditingCourse(course);
+  };
+
+  const handleSaveCourse = async () => {
+    if (!editingCourse) return;
+    try {
+      const slug = courseEditForm.slug.trim() || courseEditForm.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      await api.put(`/admin/courses/${editingCourse.id}`, {
+        title: courseEditForm.title.trim(),
+        slug,
+        description: courseEditForm.description.trim() || null,
+        sort_order: courseEditForm.sort_order,
+      });
+      setEditingCourse(null);
+      await fetchCourses();
+      showMsg('success', 'Course updated');
+    } catch (err: any) {
+      showMsg('error', err.message);
+    }
+  };
+
+  const openDeleteCourse = (course: Course, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCourseDeleteMode('migrate');
+    setCourseDeleteMigrateTarget('');
+    setDeletingCourse(course);
+  };
+
+  const handleDeleteCourse = async () => {
+    if (!deletingCourse) return;
+    try {
+      const hasVideos = deletingCourse.video_count > 0;
+      let url = `/admin/courses/${deletingCourse.id}`;
+      if (hasVideos) {
+        if (courseDeleteMode === 'migrate') {
+          if (!courseDeleteMigrateTarget) { showMsg('error', 'Select a target course'); return; }
+          url += `?migrate_to_id=${courseDeleteMigrateTarget}`;
+        } else {
+          url += '?delete_videos=true';
+        }
+      }
+      await api.delete(url);
+      setDeletingCourse(null);
+      await fetchCourses();
+      await fetchVideos();
+      showMsg('success', 'Course deleted');
     } catch (err: any) {
       showMsg('error', err.message);
     }
@@ -1154,6 +1218,153 @@ export const AdminVideos: React.FC = () => {
         </div>
       )}
 
+      {/* ── Edit Course Modal ───────────────────────────── */}
+      {editingCourse && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-lg p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary">edit</span>
+                Edit Course
+              </h3>
+              <button onClick={() => setEditingCourse(null)} className="text-slate-400 hover:text-white transition-colors">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Title *</label>
+              <input
+                value={courseEditForm.title}
+                onChange={(e) => setCourseEditForm(f => ({ ...f, title: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Slug</label>
+                <input
+                  value={courseEditForm.slug}
+                  onChange={(e) => setCourseEditForm(f => ({ ...f, slug: e.target.value }))}
+                  placeholder="auto from title if empty"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Sort Order</label>
+                <input
+                  type="number"
+                  value={courseEditForm.sort_order}
+                  onChange={(e) => setCourseEditForm(f => ({ ...f, sort_order: parseInt(e.target.value) || 0 }))}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Description</label>
+              <textarea
+                value={courseEditForm.description}
+                onChange={(e) => setCourseEditForm(f => ({ ...f, description: e.target.value }))}
+                rows={2}
+                className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button onClick={handleSaveCourse} className="px-6 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
+                Save Changes
+              </button>
+              <button onClick={() => setEditingCourse(null)} className="px-6 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Course Modal ─────────────────────────── */}
+      {deletingCourse && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-lg p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span className="material-symbols-outlined text-red-500">delete</span>
+                Delete Course
+              </h3>
+              <button onClick={() => setDeletingCourse(null)} className="text-slate-400 hover:text-white transition-colors">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Delete <span className="font-bold text-slate-900 dark:text-white">"{deletingCourse.title}"</span>
+              {deletingCourse.video_count > 0 && (
+                <> — it contains <span className="font-bold text-amber-500">{deletingCourse.video_count} video{deletingCourse.video_count !== 1 ? 's' : ''}</span></>
+              )}.
+            </p>
+
+            {deletingCourse.video_count > 0 && (
+              <div className="space-y-3">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">What should happen to the videos?</p>
+
+                <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-white/10 cursor-pointer hover:border-primary/50 transition-colors">
+                  <input
+                    type="radio"
+                    name="course-delete-mode"
+                    value="migrate"
+                    checked={courseDeleteMode === 'migrate'}
+                    onChange={() => setCourseDeleteMode('migrate')}
+                    className="mt-0.5 accent-primary"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white">Migrate videos to another course</p>
+                    {courseDeleteMode === 'migrate' && (
+                      <select
+                        value={courseDeleteMigrateTarget}
+                        onChange={(e) => setCourseDeleteMigrateTarget(e.target.value)}
+                        className="mt-2 w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                      >
+                        <option value="">— Select target course —</option>
+                        {courses.filter(c => c.id !== deletingCourse.id).map(c => (
+                          <option key={c.id} value={c.id}>{c.title} ({c.video_count} videos)</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-white/10 cursor-pointer hover:border-red-500/50 transition-colors">
+                  <input
+                    type="radio"
+                    name="course-delete-mode"
+                    value="delete_videos"
+                    checked={courseDeleteMode === 'delete_videos'}
+                    onChange={() => setCourseDeleteMode('delete_videos')}
+                    className="mt-0.5 accent-red-500"
+                  />
+                  <div>
+                    <p className="text-sm font-semibold text-red-500">Delete all videos permanently</p>
+                    <p className="text-xs text-slate-400 mt-0.5">This cannot be undone. All video files, transcripts and metadata will be removed.</p>
+                  </div>
+                </label>
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={handleDeleteCourse}
+                className="px-6 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-bold rounded-lg transition-colors"
+              >
+                {deletingCourse.video_count > 0
+                  ? courseDeleteMode === 'migrate' ? 'Migrate & Delete Course' : 'Delete Videos & Course'
+                  : 'Delete Course'}
+              </button>
+              <button onClick={() => setDeletingCourse(null)} className="px-6 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Category Popup Modal */}
       {showAddCategory && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -1328,21 +1539,41 @@ export const AdminVideos: React.FC = () => {
             const isCollapsed = collapsedCourses.has(courseId);
             return (
               <div key={courseId}>
-                {/* Course header with expand/collapse */}
-                <button
-                  onClick={() => toggleCourseCollapse(courseId)}
-                  className="w-full flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                >
-                  <span className={`material-symbols-outlined text-sm text-slate-400 transition-transform duration-200 ${isCollapsed ? '' : 'rotate-90'}`}>
-                    chevron_right
-                  </span>
-                  <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider flex-1 text-left truncate">
-                    {group.course?.title || 'Uncategorized'}
-                  </span>
-                  <span className="text-[10px] text-slate-400 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded-full">
-                    {group.videos.length}
-                  </span>
-                </button>
+                {/* Course header with expand/collapse + edit/delete */}
+                <div className="w-full flex items-center gap-1 px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-white/5 group/course">
+                  <button
+                    onClick={() => toggleCourseCollapse(courseId)}
+                    className="flex items-center gap-1.5 flex-1 min-w-0 hover:bg-slate-100 dark:hover:bg-slate-800 rounded px-1 py-0.5 transition-colors"
+                  >
+                    <span className={`material-symbols-outlined text-sm text-slate-400 transition-transform duration-200 shrink-0 ${isCollapsed ? '' : 'rotate-90'}`}>
+                      chevron_right
+                    </span>
+                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider flex-1 text-left truncate">
+                      {group.course?.title || 'Uncategorized'}
+                    </span>
+                    <span className="text-[10px] text-slate-400 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded-full shrink-0">
+                      {group.videos.length}
+                    </span>
+                  </button>
+                  {group.course && (
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover/course:opacity-100 transition-opacity shrink-0">
+                      <button
+                        onClick={(e) => openEditCourse(group.course!, e)}
+                        className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
+                        title="Rename / edit course"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">edit</span>
+                      </button>
+                      <button
+                        onClick={(e) => openDeleteCourse(group.course!, e)}
+                        className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-500/20 text-slate-400 hover:text-red-500 transition-colors"
+                        title="Delete course"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">delete</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
                 {/* Videos in this course */}
                 {!isCollapsed && group.videos.map((v) => (
                   <button

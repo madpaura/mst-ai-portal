@@ -105,6 +105,23 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
     }
   }, []);
 
+  // Re-apply CC mode when blob URL changes (video navigation).
+  // Browsers don't reliably fire onLoad when <track src> is mutated in-place,
+  // so we also watch textTracks.addtrack as a fallback.
+  useEffect(() => {
+    if (!blobCaptionsUrl) return;
+    const video = videoRef.current;
+    if (!video) return;
+    const applyMode = () => {
+      for (let i = 0; i < video.textTracks.length; i++) {
+        video.textTracks[i].mode = ccEnabledRef.current ? 'showing' : 'hidden';
+      }
+    };
+    applyMode();
+    video.textTracks.addEventListener('addtrack', applyMode);
+    return () => video.textTracks.removeEventListener('addtrack', applyMode);
+  }, [blobCaptionsUrl]);
+
   useImperativeHandle(ref, () => ({
     getCurrentTime: () => videoRef.current?.currentTime || 0,
     seekTo: (time: number) => {
@@ -359,6 +376,7 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
       >
         {blobCaptionsUrl && (
           <track
+            key={blobCaptionsUrl}
             kind="captions"
             src={blobCaptionsUrl}
             srcLang="en"

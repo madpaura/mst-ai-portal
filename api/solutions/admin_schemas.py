@@ -15,6 +15,7 @@ class SolutionCardResponse(BaseModel):
     link_url: Optional[str] = None
     launch_url: Optional[str] = None
     sort_order: int = 0
+    category: str = "none"
     is_active: bool = True
     created_at: datetime
     updated_at: datetime
@@ -31,6 +32,7 @@ class SolutionCardCreate(BaseModel):
     link_url: Optional[str] = None
     launch_url: Optional[str] = None
     sort_order: int = 0
+    category: str = "none"
 
 
 class SolutionCardUpdate(BaseModel):
@@ -44,6 +46,7 @@ class SolutionCardUpdate(BaseModel):
     link_url: Optional[str] = None
     launch_url: Optional[str] = None
     sort_order: Optional[int] = None
+    category: Optional[str] = None
     is_active: Optional[bool] = None
 
 

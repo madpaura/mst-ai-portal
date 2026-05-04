@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
+from typing import Optional
 
 from video.schemas import CourseResponse, CourseCreate, CourseUpdate
 from auth.dependencies import require_content as require_admin
@@ -91,15 +92,38 @@ async def admin_update_course(
 
 
 @router.delete("/courses/{course_id}")
-async def admin_delete_course(course_id: str, admin: dict = Depends(require_admin)):
+async def admin_delete_course(
+    course_id: str,
+    migrate_to_id: Optional[str] = Query(None, description="Move videos to this course before deleting"),
+    delete_videos: bool = Query(False, description="Delete all videos in this course"),
+    admin: dict = Depends(require_admin),
+):
     db = await get_db()
-    videos = await db.fetchval(
-        "SELECT COUNT(*) FROM videos WHERE course_id = $1 AND is_active = true", course_id
+    course = await db.fetchrow("SELECT * FROM courses WHERE id = $1", course_id)
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    video_count = await db.fetchval(
+        "SELECT COUNT(*) FROM videos WHERE course_id = $1", course_id
     )
-    if videos and videos > 0:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot delete course with {videos} active video(s). Reassign or delete them first.",
-        )
-    await db.execute("UPDATE courses SET is_active = false WHERE id = $1", course_id)
-    return {"message": "Course deactivated"}
+
+    if video_count and video_count > 0:
+        if migrate_to_id:
+            target = await db.fetchrow("SELECT id FROM courses WHERE id = $1", migrate_to_id)
+            if not target:
+                raise HTTPException(status_code=404, detail="Target course not found")
+            await db.execute(
+                "UPDATE videos SET course_id = $1 WHERE course_id = $2",
+                migrate_to_id, course_id,
+            )
+        elif delete_videos:
+            # Physically delete videos and their dependent rows
+            await db.execute("DELETE FROM videos WHERE course_id = $1", course_id)
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Course has {video_count} video(s). Provide migrate_to_id or delete_videos=true.",
+            )
+
+    await db.execute("DELETE FROM courses WHERE id = $1", course_id)
+    return {"message": "Course deleted"}
