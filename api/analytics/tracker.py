@@ -5,6 +5,15 @@ from typing import Optional
 from database import get_db
 
 
+def _client_ip(request: Request) -> Optional[str]:
+    """Return real client IP from proxy headers, falling back to TCP peer."""
+    if ip := request.headers.get("x-real-ip", "").strip():
+        return ip
+    if fwd := request.headers.get("x-forwarded-for", "").strip():
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else None
+
+
 SECTION_MAP = {
     "/": "solutions",
     "/marketplace": "marketplace",
@@ -28,7 +37,7 @@ async def record_page_view(
 ) -> None:
     db = await get_db()
     section = _resolve_section(path)
-    ip = request.client.host if request.client else None
+    ip = _client_ip(request)
     ua = request.headers.get("user-agent", "")[:500]
     referrer = request.headers.get("referer", "")[:500] or None
 

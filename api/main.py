@@ -98,6 +98,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Trust X-Forwarded-For / X-Real-IP from nginx so request.client.host
+# returns the real browser IP, not the proxy IP.
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
 if settings.CORS_ALLOW_ORIGIN_REGEX:
     app.add_middleware(
         CORSMiddleware,

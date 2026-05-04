@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from auth.dependencies import get_optional_user
-from analytics.tracker import record_page_view, record_event
+from analytics.tracker import record_page_view, record_event, _client_ip
 
 router = APIRouter()
 
@@ -40,7 +40,7 @@ async def track_event(
     user: Optional[dict] = Depends(get_optional_user),
 ):
     user_id = str(user["id"]) if user else None
-    ip = request.client.host if request.client else None
+    ip = _client_ip(request)
     await record_event(
         event_type=req.event_type,
         section=req.section,
