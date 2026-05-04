@@ -139,7 +139,8 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
     }
   }, [loadCourseVideos, mergeVideos, loadedCourses]);
 
-  // Initial load
+  // Initial load — fetch all courses in parallel so the full list
+  // appears immediately without waiting for a slug-toggle or timeout.
   useEffect(() => {
     api.get<Course[]>('/video/courses')
       .then(async (courseList) => {
@@ -150,51 +151,35 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
 
         if (courseList.length === 0) { setLoaded(true); return; }
 
-        let firstCourse = courseList[0];
+        // Mark all as loading
+        setLoadingCourses(new Set(courseList.map((c) => c.id)));
 
-        setLoadingCourses((s) => new Set(s).add(firstCourse.id));
-        const firstVids = await loadCourseVideos(firstCourse);
+        // Fetch all courses in parallel
+        const results = await Promise.all(courseList.map((c) => loadCourseVideos(c)));
+
         const vidCourse: Record<string, string> = {};
-        firstVids.forEach((v) => { if (v.course_id) vidCourse[v.id] = v.course_id; });
-        ALL_VIDEOS = firstVids;
-        setVideos(firstVids);
+        const allVids: Video[] = [];
+        const loadedIds = new Set<string>();
+        results.forEach((vids, i) => {
+          vids.forEach((v) => { if (v.course_id) vidCourse[v.id] = v.course_id; });
+          allVids.push(...vids);
+          loadedIds.add(courseList[i].id);
+        });
+
+        ALL_VIDEOS = allVids;
+        setVideos(allVids);
         setVideoCourseMap(vidCourse);
-        setLoadedCourses(new Set([firstCourse.id]));
-        setLoadingCourses((s) => { const n = new Set(s); n.delete(firstCourse.id); return n; });
+        setLoadedCourses(loadedIds);
+        setLoadingCourses(new Set());
+        allLoadedRef.current = true;
         setLoaded(true);
 
+        // Select the appropriate video
         if (urlSlug) {
-          const found = firstVids.find((v) => v.slug === urlSlug);
-          if (found) {
-            onSelectVideo(found);
-          } else {
-            allLoadedRef.current = false;
-            for (const course of courseList.slice(1)) {
-              setLoadingCourses((s) => new Set(s).add(course.id));
-              const vids = await loadCourseVideos(course);
-              mergeVideos(vids);
-              setLoadedCourses((s) => new Set(s).add(course.id));
-              setLoadingCourses((s) => { const n = new Set(s); n.delete(course.id); return n; });
-              const match = vids.find((v) => v.slug === urlSlug);
-              if (match) { onSelectVideo(match); break; }
-            }
-            allLoadedRef.current = true;
-          }
-        } else if (firstVids.length > 0) {
-          onSelectVideo(firstVids[0]);
-        }
-
-        if (!urlSlug) {
-          setTimeout(async () => {
-            for (const course of courseList.slice(1)) {
-              setLoadingCourses((s) => new Set(s).add(course.id));
-              const vids = await loadCourseVideos(course);
-              mergeVideos(vids);
-              setLoadedCourses((s) => new Set(s).add(course.id));
-              setLoadingCourses((s) => { const n = new Set(s); n.delete(course.id); return n; });
-            }
-            allLoadedRef.current = true;
-          }, 500);
+          const match = allVids.find((v) => v.slug === urlSlug);
+          if (match) onSelectVideo(match);
+        } else if (allVids.length > 0) {
+          onSelectVideo(allVids[0]);
         }
       })
       .catch(() => setLoaded(true));

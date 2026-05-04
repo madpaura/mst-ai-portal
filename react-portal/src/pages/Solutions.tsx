@@ -127,25 +127,25 @@ export const Solutions: React.FC = () => {
                 <div className="h-1 w-16 bg-primary rounded-full mt-2" />
               </div>
               <div className="flex items-center gap-4 flex-wrap">
-                {/* Category checkboxes */}
-                <div className="flex items-center gap-3">
-                  {(['SW', 'HW', 'none'] as const).map((cat) => (
-                    <label key={cat} className="flex items-center gap-1.5 cursor-pointer select-none group">
-                      <input
-                        type="checkbox"
-                        checked={categoryFilter.has(cat)}
-                        onChange={() => toggleCategory(cat)}
-                        className="w-3.5 h-3.5 accent-primary rounded"
-                      />
-                      <span className={`text-xs font-semibold transition-colors ${
-                        categoryFilter.has(cat)
-                          ? cat === 'SW' ? 'text-blue-500' : cat === 'HW' ? 'text-amber-500' : 'text-slate-400'
-                          : 'text-slate-400 opacity-50'
-                      }`}>
+                {/* Category filter pills */}
+                <div className="flex items-center gap-2">
+                  {(['SW', 'HW', 'none'] as const).map((cat) => {
+                    const active = categoryFilter.has(cat);
+                    const color = cat === 'SW'
+                      ? active ? 'bg-blue-500/15 text-blue-400 border-blue-500/30' : 'text-slate-400 border-slate-200 dark:border-white/10 hover:border-blue-500/30 hover:text-blue-400'
+                      : cat === 'HW'
+                      ? active ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' : 'text-slate-400 border-slate-200 dark:border-white/10 hover:border-amber-500/30 hover:text-amber-400'
+                      : active ? 'bg-slate-500/15 text-slate-300 border-slate-500/30' : 'text-slate-400 border-slate-200 dark:border-white/10 hover:border-slate-400/30';
+                    return (
+                      <button
+                        key={cat}
+                        onClick={() => toggleCategory(cat)}
+                        className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors ${color}`}
+                      >
                         {cat === 'none' ? 'Other' : cat}
-                      </span>
-                    </label>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
                 {/* Search */}
                 <label className="relative block shrink-0">

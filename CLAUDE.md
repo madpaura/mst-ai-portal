@@ -49,22 +49,11 @@ mst-ai-portal/
 ## Running locally (without Docker)
 
 ```bash
-# Backend
-cd api
-pip install -r requirements.txt
-alembic upgrade head
-uvicorn main:app --reload --port 9800
+./run.sh start
 
-# Auto-processor worker (separate terminal)
-python worker/auto_processor.py
+./run.sh stop
 
-# Transcoder worker (separate terminal)
-python worker/transcoder.py
-
-# Frontend
-cd react-portal
-npm install
-npm run dev          # dev server on :5173, proxies /backend → :9800
+./run.sh restart
 ```
 
 ## Running with Docker
@@ -82,6 +71,14 @@ docker compose up -d --build
 GPU variants: `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d`
 
 ---
+
+## Build checks for every change
+Perform build checks for every change made, before commit changes to gh
+use above docker method to verfiy the build failure, if any build failed, fix it
+
+## Use gh cli to talk to github
+Use gh cli to talk to github, instead of web interface
+gh cli is already configured in my system
 
 ## Key environment variables
 

@@ -21,6 +21,7 @@ router = APIRouter()
 class DigestPreviewRequest(BaseModel):
     days: int = 7
     custom_content: str = ""
+    skip_announcements: bool = False
 
 
 class DigestPreviewResponse(BaseModel):
@@ -173,7 +174,7 @@ async def digest_preview(req: DigestPreviewRequest, admin: dict = Depends(requir
         issue_number = await get_next_issue_number()
         
         # Generate digest content (pass issue_number so it appears in email header)
-        preview = await generate_learning_digest(req.days, req.custom_content or None, issue_number=issue_number)
+        preview = await generate_learning_digest(req.days, req.custom_content or None, issue_number=issue_number, skip_announcements=req.skip_announcements)
 
         # Update subject and title with issue number
         title = f"AI Ignite Digest · {req.days}-Day Update - #{issue_number}"
@@ -497,3 +498,87 @@ async def probe_smtp(req: SmtpProbeRequest, admin: dict = Depends(require_admin)
 
     all_ok = all(s["ok"] for s in steps)
     return {"steps": steps, "reachable": all_ok}
+
+
+# ── Announcement CRUD ────────────────────────────────────────────────────────
+
+class AnnouncementCreate(BaseModel):
+    title: str
+    content: Optional[str] = None
+    badge: Optional[str] = None
+    is_active: bool = True
+
+
+class AnnouncementUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    badge: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class AnnouncementResponse(BaseModel):
+    id: str
+    title: str
+    content: Optional[str] = None
+    badge: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+
+
+@router.get("/announcements", response_model=list[AnnouncementResponse])
+async def list_announcements(admin: dict = Depends(require_admin)):
+    db = await get_db()
+    rows = await db.fetch(
+        "SELECT * FROM announcements ORDER BY created_at DESC"
+    )
+    return [AnnouncementResponse(
+        id=str(r["id"]), title=r["title"], content=r.get("content"),
+        badge=r.get("badge"), is_active=r["is_active"], created_at=r["created_at"],
+    ) for r in rows]
+
+
+@router.post("/announcements", response_model=AnnouncementResponse)
+async def create_announcement(req: AnnouncementCreate, admin: dict = Depends(require_admin)):
+    db = await get_db()
+    row = await db.fetchrow(
+        "INSERT INTO announcements (title, content, badge, is_active) VALUES ($1, $2, $3, $4) RETURNING *",
+        req.title, req.content, req.badge, req.is_active,
+    )
+    return AnnouncementResponse(
+        id=str(row["id"]), title=row["title"], content=row.get("content"),
+        badge=row.get("badge"), is_active=row["is_active"], created_at=row["created_at"],
+    )
+
+
+@router.put("/announcements/{announcement_id}", response_model=AnnouncementResponse)
+async def update_announcement(
+    announcement_id: str, req: AnnouncementUpdate, admin: dict = Depends(require_admin)
+):
+    db = await get_db()
+    row = await db.fetchrow("SELECT * FROM announcements WHERE id = $1", announcement_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Announcement not found")
+
+    updates = {k: v for k, v in req.dict(exclude_none=True).items()}
+    if updates:
+        set_clauses = [f"{k} = ${i+1}" for i, k in enumerate(updates)]
+        values = list(updates.values()) + [announcement_id]
+        await db.execute(
+            f"UPDATE announcements SET {', '.join(set_clauses)} WHERE id = ${len(values)}",
+            *values,
+        )
+
+    row = await db.fetchrow("SELECT * FROM announcements WHERE id = $1", announcement_id)
+    return AnnouncementResponse(
+        id=str(row["id"]), title=row["title"], content=row.get("content"),
+        badge=row.get("badge"), is_active=row["is_active"], created_at=row["created_at"],
+    )
+
+
+@router.delete("/announcements/{announcement_id}")
+async def delete_announcement(announcement_id: str, admin: dict = Depends(require_admin)):
+    db = await get_db()
+    result = await db.execute("DELETE FROM announcements WHERE id = $1", announcement_id)
+    if result == "DELETE 0":
+        raise HTTPException(status_code=404, detail="Announcement not found")
+    return {"message": "Announcement deleted"}

@@ -21,7 +21,7 @@ Return ONLY the summary text, nothing else."""
         return ""
 
 
-async def generate_learning_digest(days: int = 7, custom_content: Optional[str] = None, issue_number: int = None) -> dict:
+async def generate_learning_digest(days: int = 7, custom_content: Optional[str] = None, issue_number: int = None, skip_announcements: bool = False) -> dict:
     """
     Generate a comprehensive multi-page learning digest email covering:
     - Page 1: Learning (recently published videos)
@@ -86,8 +86,8 @@ async def generate_learning_digest(days: int = 7, custom_content: Optional[str] 
         cutoff_date,
     )
 
-    # Fetch active announcements
-    announcements = await db.fetch(
+    # Fetch active announcements (skip if requested)
+    announcements = [] if skip_announcements else await db.fetch(
         """
         SELECT title, content, badge
         FROM announcements

@@ -1,6 +1,15 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import DOMPurify from 'dompurify';
 import { api } from '../api/client';
+
+interface Announcement {
+  id: string;
+  title: string;
+  content: string | null;
+  badge: string | null;
+  is_active: boolean;
+  created_at: string;
+}
 
 interface DigestPreview {
   subject: string;
@@ -44,6 +53,7 @@ function persistSavedEmails(emails: string[]) {
 export const AdminDigest: React.FC = () => {
   const [digestDays, setDigestDays] = useState(7);
   const [customContent, setCustomContent] = useState('');
+  const [skipAnnouncements, setSkipAnnouncements] = useState(false);
   const [preview, setPreview] = useState<DigestPreview | null>(null);
   const [editedSubject, setEditedSubject] = useState('');
   const [recipientEmails, setRecipientEmails] = useState('');
@@ -56,6 +66,14 @@ export const AdminDigest: React.FC = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [digestIssues, setDigestIssues] = useState<DigestIssue[]>([]);
   const [loadingIssues, setLoadingIssues] = useState(false);
+
+  // Announcements
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [loadingAnn, setLoadingAnn] = useState(false);
+  const [showAnnForm, setShowAnnForm] = useState(false);
+  const [editingAnn, setEditingAnn] = useState<Announcement | null>(null);
+  const [annForm, setAnnForm] = useState({ title: '', content: '', badge: '', is_active: true });
+  const [savingAnn, setSavingAnn] = useState(false);
 
   // Saved emails
   const [savedEmails, setSavedEmails] = useState<string[]>(loadSavedEmails);
@@ -121,6 +139,71 @@ export const AdminDigest: React.FC = () => {
     e.target.value = '';
   };
 
+  // ── Announcement handlers ──────────────────────────────
+  const fetchAnnouncements = useCallback(async () => {
+    setLoadingAnn(true);
+    try {
+      const data = await api.get<Announcement[]>('/admin/announcements');
+      setAnnouncements(data);
+    } catch (err: any) {
+      showMsg('error', err.message);
+    } finally {
+      setLoadingAnn(false);
+    }
+  }, []);
+
+  const openCreateAnn = () => {
+    setEditingAnn(null);
+    setAnnForm({ title: '', content: '', badge: '', is_active: true });
+    setShowAnnForm(true);
+  };
+
+  const openEditAnn = (ann: Announcement) => {
+    setEditingAnn(ann);
+    setAnnForm({ title: ann.title, content: ann.content || '', badge: ann.badge || '', is_active: ann.is_active });
+    setShowAnnForm(true);
+  };
+
+  const handleSaveAnn = async () => {
+    if (!annForm.title.trim()) { showMsg('error', 'Title is required'); return; }
+    setSavingAnn(true);
+    try {
+      if (editingAnn) {
+        await api.put(`/admin/announcements/${editingAnn.id}`, annForm);
+        showMsg('success', 'Announcement updated');
+      } else {
+        await api.post('/admin/announcements', annForm);
+        showMsg('success', 'Announcement created');
+      }
+      setShowAnnForm(false);
+      await fetchAnnouncements();
+    } catch (err: any) {
+      showMsg('error', err.message);
+    } finally {
+      setSavingAnn(false);
+    }
+  };
+
+  const handleToggleAnn = async (ann: Announcement) => {
+    try {
+      await api.put(`/admin/announcements/${ann.id}`, { ...ann, is_active: !ann.is_active });
+      setAnnouncements(prev => prev.map(a => a.id === ann.id ? { ...a, is_active: !a.is_active } : a));
+    } catch (err: any) {
+      showMsg('error', err.message);
+    }
+  };
+
+  const handleDeleteAnn = async (ann: Announcement) => {
+    if (!confirm(`Delete announcement "${ann.title}"?`)) return;
+    try {
+      await api.delete(`/admin/announcements/${ann.id}`);
+      showMsg('success', 'Announcement deleted');
+      setAnnouncements(prev => prev.filter(a => a.id !== ann.id));
+    } catch (err: any) {
+      showMsg('error', err.message);
+    }
+  };
+
   // ── Handlers ─────────────────────────────────────────
   const handleGeneratePreview = async () => {
     setGenerating(true);
@@ -131,6 +214,7 @@ export const AdminDigest: React.FC = () => {
       const data = await api.post<DigestPreview>('/admin/digest-preview', {
         days: digestDays,
         custom_content: customContent,
+        skip_announcements: skipAnnouncements,
       });
       setPreviewWithSubject(data);
       showMsg('success', 'Digest preview generated!');
@@ -355,7 +439,8 @@ export const AdminDigest: React.FC = () => {
 
   React.useEffect(() => {
     loadDigestIssues();
-  }, []);
+    fetchAnnouncements();
+  }, [fetchAnnouncements]);
 
   const recipientList = recipientEmails.split('\n').map(e => e.trim()).filter(Boolean);
   const batchCount = batchSize > 0 ? Math.ceil(recipientList.length / batchSize) : 1;
@@ -406,6 +491,15 @@ export const AdminDigest: React.FC = () => {
                     rows={4}
                   />
                 </div>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={skipAnnouncements}
+                    onChange={(e) => setSkipAnnouncements(e.target.checked)}
+                    className="w-4 h-4 accent-primary rounded"
+                  />
+                  <span className="text-xs text-slate-300">Skip announcements in digest</span>
+                </label>
                 <button
                   onClick={handleGeneratePreview}
                   disabled={generating}
@@ -662,6 +756,135 @@ export const AdminDigest: React.FC = () => {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Announcements Management */}
+        <div className="mt-6 bg-slate-800/50 rounded-xl border border-white/10 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-bold">Announcements</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Active announcements are included in digest emails unless skipped above</p>
+            </div>
+            <button
+              onClick={openCreateAnn}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold rounded-lg transition-colors border border-primary/20"
+            >
+              <span className="material-symbols-outlined text-sm">add</span>
+              New Announcement
+            </button>
+          </div>
+
+          {/* Create / Edit form */}
+          {showAnnForm && (
+            <div className="mb-4 p-4 bg-slate-900/60 rounded-xl border border-white/10 space-y-3">
+              <h3 className="text-sm font-bold text-slate-200">{editingAnn ? 'Edit Announcement' : 'New Announcement'}</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Title *</label>
+                  <input
+                    type="text"
+                    value={annForm.title}
+                    onChange={(e) => setAnnForm(f => ({ ...f, title: e.target.value }))}
+                    placeholder="Announcement title"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Badge (optional)</label>
+                  <input
+                    type="text"
+                    value={annForm.badge}
+                    onChange={(e) => setAnnForm(f => ({ ...f, badge: e.target.value }))}
+                    placeholder="e.g. New, Update"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Content</label>
+                <textarea
+                  value={annForm.content}
+                  onChange={(e) => setAnnForm(f => ({ ...f, content: e.target.value }))}
+                  placeholder="Announcement body text..."
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-primary outline-none resize-none"
+                  rows={3}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={annForm.is_active}
+                    onChange={(e) => setAnnForm(f => ({ ...f, is_active: e.target.checked }))}
+                    className="w-4 h-4 accent-primary"
+                  />
+                  <span className="text-xs text-slate-300">Active (included in digest)</span>
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowAnnForm(false)}
+                    className="px-3 py-1.5 bg-slate-700/60 hover:bg-slate-700 text-slate-300 text-xs rounded-lg border border-white/10 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveAnn}
+                    disabled={savingAnn}
+                    className="px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold rounded-lg border border-primary/20 transition-colors disabled:opacity-50"
+                  >
+                    {savingAnn ? 'Saving…' : (editingAnn ? 'Update' : 'Create')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Announcements list */}
+          {loadingAnn ? (
+            <p className="text-xs text-slate-400">Loading announcements…</p>
+          ) : announcements.length === 0 ? (
+            <p className="text-xs text-slate-400">No announcements yet. Create one to include in digest emails.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {announcements.map((ann) => (
+                <div key={ann.id} className={`rounded-lg border p-4 transition-colors ${ann.is_active ? 'bg-slate-900/50 border-white/10' : 'bg-slate-900/20 border-white/5 opacity-60'}`}>
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <span className="text-sm font-semibold text-white leading-snug">{ann.title}</span>
+                    {ann.badge && (
+                      <span className="shrink-0 text-xs px-1.5 py-0.5 bg-primary/20 text-primary rounded font-medium">{ann.badge}</span>
+                    )}
+                  </div>
+                  {ann.content && (
+                    <p className="text-xs text-slate-400 mb-3 line-clamp-2">{ann.content}</p>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleToggleAnn(ann)}
+                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors border ${ann.is_active ? 'bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20' : 'bg-slate-700/40 border-white/10 text-slate-400 hover:bg-slate-700'}`}
+                      title={ann.is_active ? 'Deactivate' : 'Activate'}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>{ann.is_active ? 'visibility' : 'visibility_off'}</span>
+                      {ann.is_active ? 'Active' : 'Inactive'}
+                    </button>
+                    <button
+                      onClick={() => openEditAnn(ann)}
+                      className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-slate-700/40 hover:bg-slate-700 text-slate-300 border border-white/10 transition-colors"
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>edit</span>
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteAnn(ann)}
+                      className="ml-auto text-red-400/50 hover:text-red-400 transition-colors"
+                      title="Delete"
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>delete</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
