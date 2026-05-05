@@ -1,4 +1,5 @@
 import smtplib
+import json
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional
@@ -8,66 +9,112 @@ from database import get_db
 from email_utils.template import generate_editorial_email
 
 
+async def _get_smtp_cfg() -> dict:
+    """Load SMTP config from DB, falling back to env settings."""
+    db = await get_db()
+    row = await db.fetchrow("SELECT value FROM app_settings WHERE key = 'smtp_config'")
+    if row:
+        cfg = json.loads(row["value"])
+        return {
+            "server": cfg.get("smtp_server", settings.SMTP_SERVER),
+            "port": int(cfg.get("smtp_port", settings.SMTP_PORT)),
+            "user": cfg.get("smtp_user", settings.SMTP_USER),
+            "password": cfg.get("smtp_password", settings.SMTP_PASSWORD),
+            "from_email": cfg.get("smtp_from_email", settings.SMTP_FROM_EMAIL),
+            "from_name": cfg.get("smtp_from_name", settings.SMTP_FROM_NAME),
+        }
+    return {
+        "server": settings.SMTP_SERVER,
+        "port": settings.SMTP_PORT,
+        "user": settings.SMTP_USER,
+        "password": settings.SMTP_PASSWORD,
+        "from_email": settings.SMTP_FROM_EMAIL,
+        "from_name": settings.SMTP_FROM_NAME,
+    }
+
+
+def _make_smtp_connection(cfg: dict):
+    if cfg["port"] == 465:
+        server = smtplib.SMTP_SSL(cfg["server"], cfg["port"], timeout=15)
+    else:
+        server = smtplib.SMTP(cfg["server"], cfg["port"], timeout=15)
+        server.ehlo()
+        if server.has_extn("starttls"):
+            server.starttls()
+    server.ehlo()
+    if cfg["user"] and cfg["password"]:
+        server.login(cfg["user"], cfg["password"])
+    return server
+
+
 async def send_email(
     to_email: str,
     subject: str,
     html_content: str,
     plain_text: Optional[str] = None,
 ) -> bool:
-    """Send email via SMTP using saved settings or config defaults"""
+    """Send email to a single recipient."""
     try:
-        # Fetch SMTP settings from database
-        db = await get_db()
-        smtp_config = await db.fetchrow("SELECT value FROM app_settings WHERE key = 'smtp_config'")
-        
-        # Use saved settings or fall back to config defaults
-        if smtp_config:
-            import json
-            cfg = json.loads(smtp_config['value'])
-            smtp_server = cfg.get('smtp_server', settings.SMTP_SERVER)
-            smtp_port = int(cfg.get('smtp_port', settings.SMTP_PORT))
-            smtp_user = cfg.get('smtp_user', settings.SMTP_USER)
-            smtp_password = cfg.get('smtp_password', settings.SMTP_PASSWORD)
-            smtp_from_email = cfg.get('smtp_from_email', settings.SMTP_FROM_EMAIL)
-            smtp_from_name = cfg.get('smtp_from_name', settings.SMTP_FROM_NAME)
-        else:
-            smtp_server = settings.SMTP_SERVER
-            smtp_port = settings.SMTP_PORT
-            smtp_user = settings.SMTP_USER
-            smtp_password = settings.SMTP_PASSWORD
-            smtp_from_email = settings.SMTP_FROM_EMAIL
-            smtp_from_name = settings.SMTP_FROM_NAME
-
+        cfg = await _get_smtp_cfg()
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = f"{smtp_from_name} <{smtp_from_email}>"
+        msg["From"] = f"{cfg['from_name']} <{cfg['from_email']}>"
         msg["To"] = to_email
-
         if plain_text:
-            part1 = MIMEText(plain_text, "plain")
-            msg.attach(part1)
+            msg.attach(MIMEText(plain_text, "plain"))
+        msg.attach(MIMEText(html_content, "html"))
 
-        part2 = MIMEText(html_content, "html")
-        msg.attach(part2)
-
-        if smtp_port == 465:
-            server = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=15)
-            server.ehlo()
-        else:
-            server = smtplib.SMTP(smtp_server, smtp_port, timeout=15)
-            server.ehlo()
-            if server.has_extn("starttls"):
-                server.starttls()
-                server.ehlo()
-
-        if smtp_user and smtp_password:
-            server.login(smtp_user, smtp_password)
-
-        server.sendmail(smtp_from_email, to_email, msg.as_string())
+        server = _make_smtp_connection(cfg)
+        server.sendmail(cfg["from_email"], [to_email], msg.as_string())
         server.quit()
         return True
     except Exception as e:
         log.error(f"Email send failed: {e}")
+        return False
+
+
+async def send_email_multi(
+    subject: str,
+    html_content: str,
+    plain_text: Optional[str] = None,
+    to_emails: Optional[list[str]] = None,
+    cc_emails: Optional[list[str]] = None,
+    bcc_emails: Optional[list[str]] = None,
+) -> bool:
+    """Send one email to multiple recipients in a single SMTP transaction.
+
+    to_emails  — visible To recipients
+    cc_emails  — visible CC recipients (e.g. message sender)
+    bcc_emails — hidden BCC recipients (e.g. newsletter list)
+    BCC addresses are passed to sendmail() but NOT written into headers.
+    """
+    to_emails = to_emails or []
+    cc_emails = cc_emails or []
+    bcc_emails = bcc_emails or []
+    all_recipients = list({*to_emails, *cc_emails, *bcc_emails})
+    if not all_recipients:
+        log.warning("send_email_multi called with no recipients")
+        return False
+    try:
+        cfg = await _get_smtp_cfg()
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{cfg['from_name']} <{cfg['from_email']}>"
+        # To: header shows explicit To list; if none, show portal address so inbox displays nicely
+        msg["To"] = ", ".join(to_emails) if to_emails else f"{cfg['from_name']} <{cfg['from_email']}>"
+        if cc_emails:
+            msg["CC"] = ", ".join(cc_emails)
+        # BCC: deliberately omitted from headers
+        if plain_text:
+            msg.attach(MIMEText(plain_text, "plain"))
+        msg.attach(MIMEText(html_content, "html"))
+
+        server = _make_smtp_connection(cfg)
+        server.sendmail(cfg["from_email"], all_recipients, msg.as_string())
+        server.quit()
+        return True
+    except Exception as e:
+        log.error(f"send_email_multi failed: {e}")
         return False
 
 

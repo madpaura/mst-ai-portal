@@ -24,7 +24,7 @@ from database import get_db
 from config import settings
 from worker.gpu_detect import get_encode_args, get_hwaccel_args, get_gpu_info
 from video.email import generate_email_preview
-from email_utils.utils import send_email
+from email_utils.utils import send_email_multi
 
 router = APIRouter()
 
@@ -1619,25 +1619,15 @@ async def admin_send_email(
     video_id: str, req: SendEmailRequest, admin: dict = Depends(require_admin)
 ):
     try:
-        sent_count = 0
-        failed = []
-        for recipient in req.recipient_emails:
-            success = await send_email(
-                to_email=recipient,
-                subject=req.subject,
-                html_content=req.html_content,
-            )
-            if success:
-                sent_count += 1
-            else:
-                failed.append(recipient)
-
         total = len(req.recipient_emails)
-        if sent_count == total:
-            return SendEmailResponse(success=True, message=f"Email sent to all {sent_count} recipient(s)", sent_count=sent_count)
-        elif sent_count > 0:
-            return SendEmailResponse(success=False, message=f"Sent to {sent_count}/{total}. Failed: {', '.join(failed)}", sent_count=sent_count)
+        success = await send_email_multi(
+            subject=req.subject,
+            html_content=req.html_content,
+            bcc_emails=req.recipient_emails,
+        )
+        if success:
+            return SendEmailResponse(success=True, message=f"Email sent to {total} recipient(s)", sent_count=total)
         else:
-            return SendEmailResponse(success=False, message="Failed to send email", sent_count=0)
+            return SendEmailResponse(success=False, message="Failed to send email — check SMTP settings", sent_count=0)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Email send error: {str(e)}")

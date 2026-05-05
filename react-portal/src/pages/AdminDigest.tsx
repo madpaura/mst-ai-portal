@@ -61,7 +61,6 @@ export const AdminDigest: React.FC = () => {
   const [generatingStep, setGeneratingStep] = useState('');
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
-  const [sendingProgress, setSendingProgress] = useState('');
   const [loadingIssueId, setLoadingIssueId] = useState<number | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [digestIssues, setDigestIssues] = useState<DigestIssue[]>([]);
@@ -78,9 +77,6 @@ export const AdminDigest: React.FC = () => {
   // Saved emails
   const [savedEmails, setSavedEmails] = useState<string[]>(loadSavedEmails);
   const [showSavedEmails, setShowSavedEmails] = useState(false);
-
-  // Batch send
-  const [batchSize, setBatchSize] = useState(50);
 
   const csvInputRef = useRef<HTMLInputElement>(null);
 
@@ -364,43 +360,23 @@ export const AdminDigest: React.FC = () => {
     }
 
     setSending(true);
-
-    // Split into batches
-    const batches: string[][] = [];
-    for (let i = 0; i < emails.length; i += batchSize) {
-      batches.push(emails.slice(i, i + batchSize));
-    }
-
-    let totalSent = 0;
-    let lastIssueNumber = preview.issue_number;
-
     try {
-      for (let b = 0; b < batches.length; b++) {
-        setSendingProgress(`Sending batch ${b + 1}/${batches.length} (${batches[b].length} recipients)…`);
-        const result = await api.post<{ success: boolean; message: string; sent_count: number }>(
-          '/admin/send-digest',
-          {
-            recipient_emails: batches[b],
-            subject: editedSubject || preview.subject,
-            html_content: preview.html_content,
-            plain_text: preview.plain_text,
-            summary: preview.summary,
-            days_covered: digestDays,
-            custom_content: customContent,
-            issue_number: lastIssueNumber,
-            title: preview.title,
-          },
-        );
-        totalSent += result.sent_count;
-        // Save sent emails to quick-access
-        addEmailsToSaved(batches[b]);
-        // Small pause between batches to avoid rate limits
-        if (b < batches.length - 1) {
-          await new Promise(r => setTimeout(r, 800));
-        }
-      }
-
-      showMsg('success', `Sent to ${totalSent}/${emails.length} recipients across ${batches.length} batch(es)`);
+      const result = await api.post<{ success: boolean; message: string; sent_count: number }>(
+        '/admin/send-digest',
+        {
+          recipient_emails: emails,
+          subject: editedSubject || preview.subject,
+          html_content: preview.html_content,
+          plain_text: preview.plain_text,
+          summary: preview.summary,
+          days_covered: digestDays,
+          custom_content: customContent,
+          issue_number: preview.issue_number,
+          title: preview.title,
+        },
+      );
+      addEmailsToSaved(emails);
+      showMsg('success', result.message);
       setRecipientEmails('');
       setPreview(null);
       setEditedSubject('');
@@ -410,7 +386,6 @@ export const AdminDigest: React.FC = () => {
       showMsg('error', err.message);
     } finally {
       setSending(false);
-      setSendingProgress('');
     }
   };
 
@@ -443,7 +418,6 @@ export const AdminDigest: React.FC = () => {
   }, [fetchAnnouncements]);
 
   const recipientList = recipientEmails.split('\n').map(e => e.trim()).filter(Boolean);
-  const batchCount = batchSize > 0 ? Math.ceil(recipientList.length / batchSize) : 1;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-6">
@@ -623,7 +597,7 @@ export const AdminDigest: React.FC = () => {
                 <div className="bg-slate-800/50 rounded-xl border border-white/10 p-6 space-y-4">
                   <h2 className="text-lg font-bold">Send To Recipients</h2>
 
-                  {/* Toolbar: CSV load + batch size */}
+                  {/* Toolbar: CSV load + saved */}
                   <div className="flex items-center gap-3 flex-wrap">
                     <button
                       onClick={() => csvInputRef.current?.click()}
@@ -644,16 +618,6 @@ export const AdminDigest: React.FC = () => {
                         Saved ({savedEmails.length})
                       </button>
                     )}
-
-                    <div className="flex items-center gap-2 ml-auto">
-                      <label className="text-xs text-slate-400 whitespace-nowrap">Batch size:</label>
-                      <input
-                        type="number" min="1" max="500" value={batchSize}
-                        onChange={(e) => setBatchSize(Math.max(1, parseInt(e.target.value) || 50))}
-                        className="w-20 px-2 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-xs focus:border-primary outline-none"
-                        title="Number of recipients per batch"
-                      />
-                    </div>
                   </div>
 
                   {/* Saved emails quick-select */}
@@ -707,8 +671,7 @@ export const AdminDigest: React.FC = () => {
                     />
                     <div className="flex items-center justify-between mt-1">
                       <p className="text-xs text-slate-500">
-                        {recipientList.length} recipient{recipientList.length !== 1 ? 's' : ''}
-                        {recipientList.length > 0 && batchCount > 1 && ` · ${batchCount} batches of ${batchSize}`}
+                        {recipientList.length} recipient{recipientList.length !== 1 ? 's' : ''} · sent as BCC in one email
                       </p>
                       {recipientList.length > 0 && (
                         <button
@@ -729,7 +692,7 @@ export const AdminDigest: React.FC = () => {
                       className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-500/10 hover:bg-green-500/20 text-green-400 font-bold text-sm rounded-lg transition-colors border border-green-500/20 disabled:opacity-50"
                     >
                       <span className="material-symbols-outlined text-sm">{sending ? 'hourglass_empty' : 'send'}</span>
-                      {sending ? (sendingProgress || 'Sending…') : `Send${batchCount > 1 ? ` (${batchCount} batches)` : ''}`}
+                      {sending ? 'Sending…' : 'Send'}
                     </button>
                     <button
                       onClick={handleSaveDraft}

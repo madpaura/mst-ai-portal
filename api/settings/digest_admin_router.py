@@ -11,7 +11,7 @@ import asyncpg
 
 from auth.dependencies import require_admin
 from email_utils.digest import generate_learning_digest
-from email_utils.utils import send_email
+from email_utils.utils import send_email_multi
 from config import settings
 from database import get_db
 
@@ -245,20 +245,15 @@ async def send_digest(req: SendDigestRequest, admin: dict = Depends(require_admi
             custom_content=req.custom_content
         )
 
-        # Send emails
-        sent_count = 0
-        failed = []
+        # Send one email with all recipients in BCC
+        total = len(req.recipient_emails)
+        success = await send_email_multi(
+            subject=req.subject,
+            html_content=req.html_content,
+            bcc_emails=req.recipient_emails,
+        )
 
-        for recipient in req.recipient_emails:
-            success = await send_email(
-                to_email=recipient,
-                subject=req.subject,
-                html_content=req.html_content,
-            )
-            if success:
-                sent_count += 1
-            else:
-                failed.append(recipient)
+        sent_count = total if success else 0
 
         # Update recipient count
         pool = await get_db()
@@ -268,17 +263,17 @@ async def send_digest(req: SendDigestRequest, admin: dict = Depends(require_admi
                 sent_count, issue_number
             )
 
-        if sent_count == len(req.recipient_emails):
+        if success:
             return SendDigestResponse(
                 success=True,
-                message=f"Successfully sent Issue #{issue_number} to all {sent_count} recipients",
-                sent_count=sent_count,
+                message=f"Successfully sent Issue #{issue_number} to {total} recipients",
+                sent_count=total,
             )
         else:
             return SendDigestResponse(
                 success=False,
-                message=f"Sent Issue #{issue_number} to {sent_count}/{len(req.recipient_emails)} recipients. Failed: {', '.join(failed)}",
-                sent_count=sent_count,
+                message=f"Failed to send Issue #{issue_number} — check SMTP settings",
+                sent_count=0,
             )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Digest send error: {str(e)}")
