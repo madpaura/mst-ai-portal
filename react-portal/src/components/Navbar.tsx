@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../api/auth';
 import { useTheme } from '../context/theme';
 import { PortalLogo } from './PortalLogo';
-import { api } from '../api/client';
-
 const BETA_TAG = import.meta.env.VITE_BETA_TAG as string | undefined;
 
 interface NavbarProps {
@@ -17,18 +15,9 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
   const { user, isAdmin, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
-  const [contactEmail, setContactEmail] = useState('');
-
-  useEffect(() => {
-    api.get<string | null>('/settings/contact_email').then((v) => { if (v) setContactEmail(v); }).catch(() => {});
-  }, []);
-
   const handleSignIn = () => navigate('/login');
   const handleAdmin = () => navigate('/admin/videos');
   const handleLogout = () => { logout(); navigate('/'); };
-  const handleContact = () => {
-    window.open(`mailto:${contactEmail || 'ai-tools@mst.internal'}`, '_blank');
-  };
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -72,12 +61,12 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
             >
               Articles
             </Link>
-            <button
-              onClick={handleContact}
-              className="text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-primary transition-colors"
+            <Link
+              className={`text-sm font-medium transition-colors ${isActive('/contact') ? 'text-primary' : 'text-slate-500 dark:text-slate-400 hover:text-primary'}`}
+              to="/contact"
             >
               Contact
-            </button>
+            </Link>
           </div>
           <div className="flex items-center gap-4">
             <button

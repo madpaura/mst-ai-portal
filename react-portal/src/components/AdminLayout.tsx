@@ -31,6 +31,7 @@ export const AdminLayout: React.FC = () => {
       { path: '/admin/digest', label: 'Digest', icon: 'mail' },
       { path: '/admin/solutions', label: 'Solutions', icon: 'dashboard' },
       { path: '/admin/analytics', label: 'Analytics', icon: 'analytics' },
+      { path: '/admin/contacts', label: 'Contacts', icon: 'contacts' },
       { path: '/admin/contributions', label: 'Contributors', icon: 'volunteer_activism' },
       { path: '/admin/audit-log', label: 'Audit Log', icon: 'policy' },
       { path: '/admin/settings', label: 'Settings', icon: 'settings' },

@@ -53,6 +53,8 @@ from settings.router import router as settings_router
 from settings.digest_admin_router import router as digest_admin_router
 from articles.router import router as articles_router
 from articles.admin_router import router as articles_admin_router
+from contacts.router import router as contacts_router
+from contacts.admin_router import router as contacts_admin_router
 
 
 @asynccontextmanager
@@ -150,6 +152,8 @@ app.include_router(settings_router, prefix="/settings", tags=["settings"])
 app.include_router(digest_admin_router, prefix="/admin", tags=["admin-digest"])
 app.include_router(articles_router, prefix="/articles", tags=["articles"])
 app.include_router(articles_admin_router, prefix="/admin", tags=["admin-articles"])
+app.include_router(contacts_router, prefix="/contacts", tags=["contacts"])
+app.include_router(contacts_admin_router, prefix="/admin/contacts", tags=["admin-contacts"])
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):

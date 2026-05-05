@@ -27,6 +27,8 @@ import { AdminArticles } from './pages/AdminArticles';
 import { ContributeRequest } from './pages/ContributeRequest';
 import { AdminContributions } from './pages/AdminContributions';
 import { AdminAuditLog } from './pages/AdminAuditLog';
+import { Contact } from './pages/Contact';
+import { AdminContacts } from './pages/AdminContacts';
 
 function App() {
   useEffect(() => {
@@ -54,6 +56,7 @@ function App() {
           <Route path="/articles/:articleSlug" element={<ArticleDetail />} />
           <Route path="/login" element={<Login />} />
           <Route path="/contribute" element={<ContributeRequest />} />
+          <Route path="/contact" element={<Contact />} />
 
           {/* Admin pages (protected by AdminLayout) */}
           <Route path="/admin" element={<AdminLayout />}>
@@ -67,6 +70,7 @@ function App() {
             <Route path="settings" element={<AdminSettings />} />
             <Route path="contributions" element={<AdminContributions />} />
             <Route path="audit-log" element={<AdminAuditLog />} />
+            <Route path="contacts" element={<AdminContacts />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
