@@ -888,6 +888,7 @@ async def admin_create_chapter(
         "INSERT INTO video_chapters (video_id, title, start_time, sort_order) VALUES ($1,$2,$3,$4) RETURNING *",
         video_id, req.title, req.start_time, req.sort_order,
     )
+    await cache.bump_version(cache.NS_VIDEO)
     return ChapterResponse(
         id=str(row["id"]), video_id=str(row["video_id"]),
         title=row["title"], start_time=row["start_time"], sort_order=row["sort_order"],
@@ -911,6 +912,7 @@ async def admin_update_chapter(
         await db.execute("UPDATE video_chapters SET sort_order = $1 WHERE id = $2", req.sort_order, chapter_id)
 
     row = await db.fetchrow("SELECT * FROM video_chapters WHERE id = $1", chapter_id)
+    await cache.bump_version(cache.NS_VIDEO)
     return ChapterResponse(
         id=str(row["id"]), video_id=str(row["video_id"]),
         title=row["title"], start_time=row["start_time"], sort_order=row["sort_order"],
@@ -923,6 +925,7 @@ async def admin_delete_chapter(chapter_id: str, admin: dict = Depends(require_ad
     result = await db.execute("DELETE FROM video_chapters WHERE id = $1", chapter_id)
     if result == "DELETE 0":
         raise HTTPException(status_code=404, detail="Chapter not found")
+    await cache.bump_version(cache.NS_VIDEO)
     return {"message": "Chapter deleted"}
 
 
@@ -936,6 +939,7 @@ async def admin_reorder_chapters(
             "UPDATE video_chapters SET sort_order = $1 WHERE id = $2 AND video_id = $3",
             idx, chapter_id, video_id,
         )
+    await cache.bump_version(cache.NS_VIDEO)
     return {"message": "Chapters reordered"}
 
 
@@ -971,6 +975,7 @@ async def admin_upsert_howto(
         )
 
     row = await db.fetchrow("SELECT * FROM howto_guides WHERE video_id = $1", video_id)
+    await cache.bump_version(cache.NS_VIDEO)
     return HowtoResponse(
         id=str(row["id"]), video_id=str(row["video_id"]),
         title=row["title"], content=row["content"], version=row.get("version", "1.0"),

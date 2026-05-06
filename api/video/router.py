@@ -95,34 +95,61 @@ async def list_courses():
 
 @router.get("/courses/{slug}")
 async def get_course(slug: str):
-    db = await get_db()
-    course = await db.fetchrow("SELECT * FROM courses WHERE slug = $1 AND is_active = true", slug)
-    if not course:
+    async def _fetch():
+        db = await get_db()
+        course = await db.fetchrow("SELECT * FROM courses WHERE slug = $1 AND is_active = true", slug)
+        if not course:
+            return None
+        videos = await db.fetch(
+            "SELECT * FROM videos WHERE course_id = $1 AND is_published = true AND is_active = true ORDER BY sort_order",
+            course["id"],
+        )
+        return {
+            "course": CourseResponse(
+                id=str(course["id"]), title=course["title"], slug=course["slug"],
+                description=course.get("description"), sort_order=course["sort_order"],
+                video_count=len(videos),
+            ).model_dump(mode="json"),
+            "videos": [
+                VideoResponse(
+                    id=str(v["id"]), course_id=str(v["course_id"]) if v["course_id"] else None,
+                    title=v["title"], slug=v["slug"], description=v.get("description"),
+                    category=v["category"], duration_s=v.get("duration_s"),
+                    status=v["status"], hls_path=v.get("hls_path"),
+                    thumbnail=v.get("thumbnail"), is_published=v["is_published"],
+                    sort_order=v["sort_order"], created_at=v["created_at"],
+                    transcript_status=v.get("transcript_status"),
+                ).model_dump(mode="json")
+                for v in videos
+            ],
+        }
+    result = await cache.get_or_set(cache.NS_VIDEO, "course", slug, None, settings.REDIS_DEFAULT_TTL, _fetch)
+    if result is None:
         raise HTTPException(status_code=404, detail="Course not found")
+    return result
 
-    videos = await db.fetch(
-        "SELECT * FROM videos WHERE course_id = $1 AND is_published = true AND is_active = true ORDER BY sort_order",
-        course["id"],
-    )
-    return {
-        "course": CourseResponse(
-            id=str(course["id"]), title=course["title"], slug=course["slug"],
-            description=course.get("description"), sort_order=course["sort_order"],
-            video_count=len(videos),
-        ),
-        "videos": [
+
+@router.get("/videos", response_model=list[VideoResponse])
+async def list_all_videos():
+    """Return all published videos in sort order — used by the Ignite sidebar."""
+    async def _fetch():
+        db = await get_db()
+        rows = await db.fetch(
+            "SELECT * FROM videos WHERE is_published = true AND is_active = true ORDER BY sort_order",
+        )
+        return [
             VideoResponse(
-                id=str(v["id"]), course_id=str(v["course_id"]) if v["course_id"] else None,
-                title=v["title"], slug=v["slug"], description=v.get("description"),
-                category=v["category"], duration_s=v.get("duration_s"),
-                status=v["status"], hls_path=v.get("hls_path"),
-                thumbnail=v.get("thumbnail"), is_published=v["is_published"],
-                sort_order=v["sort_order"], created_at=v["created_at"],
-                transcript_status=v.get("transcript_status"),
-            )
-            for v in videos
-        ],
-    }
+                id=str(r["id"]), course_id=str(r["course_id"]) if r["course_id"] else None,
+                title=r["title"], slug=r["slug"], description=r.get("description"),
+                category=r["category"], duration_s=r.get("duration_s"),
+                status=r["status"], hls_path=r.get("hls_path"),
+                thumbnail=r.get("thumbnail"), is_published=r["is_published"],
+                sort_order=r["sort_order"], created_at=r["created_at"],
+                transcript_status=r.get("transcript_status"),
+            ).model_dump(mode="json")
+            for r in rows
+        ]
+    return await cache.get_or_set(cache.NS_VIDEO, "list", "videos", None, settings.REDIS_DEFAULT_TTL, _fetch)
 
 
 @router.get("/videos/{slug}", response_model=VideoResponse)
@@ -147,53 +174,57 @@ async def get_video(slug: str):
 
 @router.get("/videos/{slug}/attachments", response_model=list[AttachmentResponse])
 async def get_video_attachments(slug: str):
-    db = await get_db()
-    video = await db.fetchrow(
-        "SELECT id FROM videos WHERE slug = $1 AND is_published = true AND is_active = true", slug
-    )
-    if not video:
-        raise HTTPException(status_code=404, detail="Video not found")
-
-    rows = await db.fetch(
-        "SELECT * FROM video_attachments WHERE video_id = $1 ORDER BY sort_order, created_at",
-        video["id"],
-    )
-    return [
-        AttachmentResponse(
-            id=str(r["id"]),
-            video_id=str(r["video_id"]),
-            filename=r["filename"],
-            display_name=r.get("display_name"),
-            file_size=r["file_size"],
-            mime_type=r.get("mime_type"),
-            sort_order=r["sort_order"],
-            download_url=f"/media/attachments/{r['video_id']}/{r['filename']}",
-            created_at=r["created_at"],
+    async def _fetch():
+        db = await get_db()
+        video = await db.fetchrow(
+            "SELECT id FROM videos WHERE slug = $1 AND is_published = true AND is_active = true", slug
         )
-        for r in rows
-    ]
+        if not video:
+            return None
+        rows = await db.fetch(
+            "SELECT * FROM video_attachments WHERE video_id = $1 ORDER BY sort_order, created_at",
+            video["id"],
+        )
+        return [
+            AttachmentResponse(
+                id=str(r["id"]), video_id=str(r["video_id"]), filename=r["filename"],
+                display_name=r.get("display_name"), file_size=r["file_size"],
+                mime_type=r.get("mime_type"), sort_order=r["sort_order"],
+                download_url=f"/media/attachments/{r['video_id']}/{r['filename']}",
+                created_at=r["created_at"],
+            ).model_dump(mode="json")
+            for r in rows
+        ]
+    result = await cache.get_or_set(cache.NS_VIDEO, "attachments", slug, None, settings.REDIS_DEFAULT_TTL, _fetch)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Video not found")
+    return result
 
 
 @router.get("/videos/{slug}/chapters", response_model=list[ChapterResponse])
 async def get_chapters(slug: str):
-    db = await get_db()
-    video = await db.fetchrow(
-        "SELECT id FROM videos WHERE slug = $1 AND is_published = true AND is_active = true", slug
-    )
-    if not video:
-        raise HTTPException(status_code=404, detail="Video not found")
-
-    rows = await db.fetch(
-        "SELECT * FROM video_chapters WHERE video_id = $1 ORDER BY sort_order, start_time",
-        video["id"],
-    )
-    return [
-        ChapterResponse(
-            id=str(r["id"]), video_id=str(r["video_id"]),
-            title=r["title"], start_time=r["start_time"], sort_order=r["sort_order"],
+    async def _fetch():
+        db = await get_db()
+        video = await db.fetchrow(
+            "SELECT id FROM videos WHERE slug = $1 AND is_published = true AND is_active = true", slug
         )
-        for r in rows
-    ]
+        if not video:
+            return None
+        rows = await db.fetch(
+            "SELECT * FROM video_chapters WHERE video_id = $1 ORDER BY sort_order, start_time",
+            video["id"],
+        )
+        return [
+            ChapterResponse(
+                id=str(r["id"]), video_id=str(r["video_id"]),
+                title=r["title"], start_time=r["start_time"], sort_order=r["sort_order"],
+            ).model_dump(mode="json")
+            for r in rows
+        ]
+    result = await cache.get_or_set(cache.NS_VIDEO, "chapters", slug, None, settings.REDIS_DEFAULT_TTL, _fetch)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Video not found")
+    return result
 
 
 @router.get("/progress", response_model=OverallProgressResponse)
@@ -370,18 +401,25 @@ async def delete_note(note_id: str, user: dict = Depends(get_current_user)):
 
 @router.get("/videos/{slug}/howto", response_model=Optional[HowtoResponse])
 async def get_howto(slug: str):
-    db = await get_db()
-    video = await db.fetchrow("SELECT id FROM videos WHERE slug = $1", slug)
-    if not video:
-        raise HTTPException(status_code=404, detail="Video not found")
+    _MISS = "__notfound__"
 
-    row = await db.fetchrow("SELECT * FROM howto_guides WHERE video_id = $1", video["id"])
-    if not row:
-        return None
-    return HowtoResponse(
-        id=str(row["id"]), video_id=str(row["video_id"]),
-        title=row["title"], content=row["content"], version=row.get("version", "1.0"),
-    )
+    async def _fetch():
+        db = await get_db()
+        video = await db.fetchrow("SELECT id FROM videos WHERE slug = $1", slug)
+        if not video:
+            return _MISS
+        row = await db.fetchrow("SELECT * FROM howto_guides WHERE video_id = $1", video["id"])
+        if not row:
+            return None
+        return HowtoResponse(
+            id=str(row["id"]), video_id=str(row["video_id"]),
+            title=row["title"], content=row["content"], version=row.get("version", "1.0"),
+        ).model_dump(mode="json")
+
+    result = await cache.get_or_set(cache.NS_VIDEO, "howto", slug, None, settings.REDIS_DEFAULT_TTL, _fetch)
+    if result == _MISS:
+        raise HTTPException(status_code=404, detail="Video not found")
+    return result
 
 
 # ── Video Likes ───────────────────────────────────────────
