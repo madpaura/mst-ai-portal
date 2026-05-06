@@ -81,6 +81,11 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = ["*"]
     CORS_ALLOW_ORIGIN_REGEX: str = ""
 
+    # Redis cache
+    REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_ENABLED: bool = True
+    REDIS_DEFAULT_TTL: int = 300  # seconds — 5 minutes
+
     # Seed default admin (open mode only). Set to "false" in production.
     SEED_DEFAULT_ADMIN: bool = True
 

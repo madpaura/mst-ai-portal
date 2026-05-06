@@ -9,6 +9,8 @@ from articles.schemas import (
 from articles.llm import call_llm
 from auth.dependencies import get_current_user
 from database import get_db
+import cache
+from config import settings
 
 router = APIRouter()
 
@@ -71,29 +73,34 @@ async def list_articles(
     search: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
 ):
-    db = await get_db()
-    conditions = ["is_published = true", "is_active = true"]
-    params: list = []
-    idx = 1
+    cache_params: dict | None = None
+    if search or category:
+        cache_params = {}
+        if search:
+            cache_params["s"] = search.strip()
+        if category:
+            cache_params["c"] = category
 
-    if category:
-        conditions.append(f"category = ${idx}")
-        params.append(category)
-        idx += 1
+    async def _fetch():
+        db = await get_db()
+        conditions = ["is_published = true", "is_active = true"]
+        qparams: list = []
+        idx = 1
+        if category:
+            conditions.append(f"category = ${idx}")
+            qparams.append(category)
+            idx += 1
+        if search and search.strip():
+            conditions.append(
+                f"to_tsvector('english', title || ' ' || COALESCE(summary, '') || ' ' || content) @@ plainto_tsquery('english', ${idx})"
+            )
+            qparams.append(search.strip())
+            idx += 1
+        where = " AND ".join(conditions)
+        rows = await db.fetch(f"SELECT * FROM articles WHERE {where} ORDER BY published_at DESC", *qparams)
+        return [_row_to_list(r).model_dump(mode="json") for r in rows]
 
-    if search and search.strip():
-        conditions.append(
-            f"to_tsvector('english', title || ' ' || COALESCE(summary, '') || ' ' || content) @@ plainto_tsquery('english', ${idx})"
-        )
-        params.append(search.strip())
-        idx += 1
-
-    where = " AND ".join(conditions)
-    rows = await db.fetch(
-        f"SELECT * FROM articles WHERE {where} ORDER BY published_at DESC",
-        *params,
-    )
-    return [_row_to_list(r) for r in rows]
+    return await cache.get_or_set(cache.NS_ARTICLES, "list", "all", cache_params, settings.REDIS_DEFAULT_TTL, _fetch)
 
 
 # ── User article CRUD (authenticated) ──────────────────────
@@ -128,6 +135,7 @@ async def create_article(req: ArticleCreate, user: dict = Depends(get_current_us
         req.title, slug, req.summary, req.content, req.category,
         user["id"], user.get("display_name", user.get("username", "User")),
     )
+    await cache.bump_version(cache.NS_ARTICLES)
     return _row_to_response(row, [])
 
 
@@ -180,6 +188,7 @@ async def update_my_article(
 
     row = await db.fetchrow("SELECT * FROM articles WHERE id = $1", article_id)
     attachments = await _get_attachments(db, article_id)
+    await cache.bump_version(cache.NS_ARTICLES)
     return _row_to_response(row, attachments)
 
 
@@ -192,6 +201,7 @@ async def delete_my_article(article_id: str, user: dict = Depends(get_current_us
     )
     if result == "UPDATE 0":
         raise HTTPException(status_code=404, detail="Article not found or not yours")
+    await cache.bump_version(cache.NS_ARTICLES)
     return {"message": "Article deleted"}
 
 

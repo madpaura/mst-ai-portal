@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from auth.dependencies import require_content as require_admin
 from database import get_db
 from config import settings
+import cache
 from worker.gpu_detect import get_encode_args, get_hwaccel_args, get_gpu_info
 from video.email import generate_email_preview
 from email_utils.utils import send_email_multi
@@ -112,6 +113,7 @@ async def admin_create_video(req: VideoCreate, admin: dict = Depends(require_adm
     os.makedirs(os.path.join(video_dir, "raw"), exist_ok=True)
     os.makedirs(os.path.join(video_dir, "hls"), exist_ok=True)
 
+    await cache.bump_version(cache.NS_VIDEO)
     return _video_row_to_admin(row)
 
 
@@ -156,6 +158,7 @@ async def admin_update_video(
         await db.execute(f"UPDATE videos SET {set_clause} WHERE id = $1", *params)
 
     row = await db.fetchrow("SELECT * FROM videos WHERE id = $1", video_id)
+    await cache.bump_version(cache.NS_VIDEO)
     return _video_row_to_admin(row)
 
 
@@ -174,6 +177,7 @@ async def admin_delete_video(video_id: str, admin: dict = Depends(require_admin)
     # Delete from DB — cascades to chapters, quality_settings, progress,
     # user_notes, seed_notes, howto_guides, video_banners, transcode_jobs
     await db.execute("DELETE FROM videos WHERE id = $1", video_id)
+    await cache.bump_version(cache.NS_VIDEO)
     return {"message": "Video permanently deleted"}
 
 
@@ -188,6 +192,7 @@ async def admin_publish_video(video_id: str, admin: dict = Depends(require_admin
     if video["status"] != "ready":
         raise HTTPException(status_code=400, detail="Video must be transcoded (status=ready) before publishing")
     await db.execute("UPDATE videos SET is_published = true WHERE id = $1", video_id)
+    await cache.bump_version(cache.NS_VIDEO)
     return {"message": "Video published"}
 
 
@@ -195,6 +200,7 @@ async def admin_publish_video(video_id: str, admin: dict = Depends(require_admin
 async def admin_unpublish_video(video_id: str, admin: dict = Depends(require_admin)):
     db = await get_db()
     await db.execute("UPDATE videos SET is_published = false WHERE id = $1", video_id)
+    await cache.bump_version(cache.NS_VIDEO)
     return {"message": "Video unpublished"}
 
 

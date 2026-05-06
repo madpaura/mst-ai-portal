@@ -13,6 +13,8 @@ from typing import Optional
 from forge.schemas import ForgeComponentResponse, ForgeCategoryResponse
 from auth.dependencies import get_optional_user
 from database import get_db
+import cache
+from config import settings
 
 router = APIRouter()
 
@@ -42,34 +44,43 @@ async def list_components(
     badge: Optional[str] = None,
     q: Optional[str] = None,
 ):
-    db = await get_db()
-    conditions = ["is_active = true"]
-    params = []
-    idx = 1
+    cache_params: dict | None = None
+    if type or badge or q:
+        cache_params = {}
+        if type:
+            cache_params["t"] = type
+        if badge:
+            cache_params["b"] = badge
+        if q:
+            cache_params["q"] = q
 
-    if type:
-        conditions.append(f"component_type = ${idx}")
-        params.append(type)
-        idx += 1
-
-    if badge:
-        conditions.append(f"badge = ${idx}")
-        params.append(badge)
-        idx += 1
-
-    if q:
-        conditions.append(
-            f"to_tsvector('english', name || ' ' || COALESCE(description, '')) @@ plainto_tsquery('english', ${idx})"
+    async def _fetch():
+        db = await get_db()
+        conditions = ["is_active = true"]
+        qparams = []
+        idx = 1
+        if type:
+            conditions.append(f"component_type = ${idx}")
+            qparams.append(type)
+            idx += 1
+        if badge:
+            conditions.append(f"badge = ${idx}")
+            qparams.append(badge)
+            idx += 1
+        if q:
+            conditions.append(
+                f"to_tsvector('english', name || ' ' || COALESCE(description, '')) @@ plainto_tsquery('english', ${idx})"
+            )
+            qparams.append(q)
+            idx += 1
+        where = " AND ".join(conditions)
+        rows = await db.fetch(
+            f"SELECT * FROM forge_components WHERE {where} ORDER BY downloads DESC, name ASC",
+            *qparams,
         )
-        params.append(q)
-        idx += 1
+        return [_row_to_component(r).model_dump(mode="json") for r in rows]
 
-    where = " AND ".join(conditions)
-    rows = await db.fetch(
-        f"SELECT * FROM forge_components WHERE {where} ORDER BY downloads DESC, name ASC",
-        *params,
-    )
-    return [_row_to_component(r) for r in rows]
+    return await cache.get_or_set(cache.NS_FORGE, "list", "components", cache_params, settings.REDIS_DEFAULT_TTL, _fetch)
 
 
 @router.get("/components/{slug}", response_model=ForgeComponentResponse)
@@ -129,11 +140,13 @@ async def get_contributing_guide():
 
 @router.get("/categories", response_model=list[ForgeCategoryResponse])
 async def list_categories():
-    db = await get_db()
-    rows = await db.fetch(
-        "SELECT component_type, COUNT(*) as count FROM forge_components WHERE is_active = true GROUP BY component_type ORDER BY component_type"
-    )
-    return [ForgeCategoryResponse(component_type=r["component_type"], count=r["count"]) for r in rows]
+    async def _fetch():
+        db = await get_db()
+        rows = await db.fetch(
+            "SELECT component_type, COUNT(*) as count FROM forge_components WHERE is_active = true GROUP BY component_type ORDER BY component_type"
+        )
+        return [ForgeCategoryResponse(component_type=r["component_type"], count=r["count"]).model_dump(mode="json") for r in rows]
+    return await cache.get_or_set(cache.NS_FORGE, "list", "categories", None, settings.REDIS_DEFAULT_TTL, _fetch)
 
 
 @router.get("/components/{slug}/download")

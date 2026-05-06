@@ -14,6 +14,7 @@ from video.schemas import (
 )
 from auth.dependencies import get_current_user, get_optional_user
 from database import get_db
+import cache
 
 router = APIRouter()
 
@@ -61,33 +62,35 @@ class CourseProgressResponse(BaseModel):
 
 @router.get("/courses", response_model=list[CourseResponse])
 async def list_courses():
-    db = await get_db()
-    rows = await db.fetch(
-        """
-        SELECT c.*,
-            COUNT(v.id) FILTER (WHERE v.is_published = true AND v.is_active = true) as video_count,
-            (
-                SELECT COALESCE(v2.custom_thumbnail, v2.thumbnail)
-                FROM videos v2
-                WHERE v2.course_id = c.id AND v2.is_published = true AND v2.is_active = true
-                ORDER BY v2.sort_order
-                LIMIT 1
-            ) as thumbnail
-        FROM courses c
-        LEFT JOIN videos v ON v.course_id = c.id
-        WHERE c.is_active = true
-        GROUP BY c.id
-        ORDER BY c.sort_order
-        """
-    )
-    return [
-        CourseResponse(
-            id=str(r["id"]), title=r["title"], slug=r["slug"],
-            description=r.get("description"), sort_order=r["sort_order"],
-            video_count=r["video_count"], thumbnail=r.get("thumbnail"),
+    async def _fetch():
+        db = await get_db()
+        rows = await db.fetch(
+            """
+            SELECT c.*,
+                COUNT(v.id) FILTER (WHERE v.is_published = true AND v.is_active = true) as video_count,
+                (
+                    SELECT COALESCE(v2.custom_thumbnail, v2.thumbnail)
+                    FROM videos v2
+                    WHERE v2.course_id = c.id AND v2.is_published = true AND v2.is_active = true
+                    ORDER BY v2.sort_order
+                    LIMIT 1
+                ) as thumbnail
+            FROM courses c
+            LEFT JOIN videos v ON v.course_id = c.id
+            WHERE c.is_active = true
+            GROUP BY c.id
+            ORDER BY c.sort_order
+            """
         )
-        for r in rows
-    ]
+        return [
+            CourseResponse(
+                id=str(r["id"]), title=r["title"], slug=r["slug"],
+                description=r.get("description"), sort_order=r["sort_order"],
+                video_count=r["video_count"], thumbnail=r.get("thumbnail"),
+            ).model_dump(mode="json")
+            for r in rows
+        ]
+    return await cache.get_or_set(cache.NS_VIDEO, "list", "courses", None, settings.REDIS_DEFAULT_TTL, _fetch)
 
 
 @router.get("/courses/{slug}")

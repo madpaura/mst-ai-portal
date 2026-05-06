@@ -98,6 +98,10 @@ export const AdminSettings: React.FC = () => {
   const [smtpProbing, setSmtpProbing] = useState(false);
   const [smtpProbeResult, setSmtpProbeResult] = useState<{ steps: { step: string; ok: boolean; detail: string }[]; reachable: boolean; hint?: string } | null>(null);
 
+  // Cache stats
+  const [cacheStats, setCacheStats] = useState<Record<string, any> | null>(null);
+  const [cacheFlushing, setCacheFlushing] = useState(false);
+
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
@@ -197,7 +201,30 @@ export const AdminSettings: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => { fetchSettings(); fetchSmtpSettings(); fetchTranscriptConfig(); fetchMarketplaceStatus(); fetchContactEmail(); }, [fetchSettings, fetchSmtpSettings, fetchTranscriptConfig, fetchMarketplaceStatus, fetchContactEmail]);
+  const fetchCacheStats = useCallback(async () => {
+    try {
+      const data = await api.get<Record<string, any>>('/admin/cache/stats');
+      setCacheStats(data);
+    } catch { /* redis may be disabled */ }
+  }, []);
+
+  const handleCacheFlush = async (namespace?: string) => {
+    setCacheFlushing(true);
+    try {
+      if (namespace) {
+        await api.post(`/admin/cache/flush/${namespace}`, {});
+        showMsg('success', `Cache flushed: ${namespace}`);
+      } else {
+        await api.post('/admin/cache/flush', {});
+        showMsg('success', 'All caches flushed');
+      }
+      await fetchCacheStats();
+    } catch (err: any) {
+      showMsg('error', err.message);
+    } finally { setCacheFlushing(false); }
+  };
+
+  useEffect(() => { fetchSettings(); fetchSmtpSettings(); fetchTranscriptConfig(); fetchMarketplaceStatus(); fetchContactEmail(); fetchCacheStats(); }, [fetchSettings, fetchSmtpSettings, fetchTranscriptConfig, fetchMarketplaceStatus, fetchContactEmail, fetchCacheStats]);
 
   useEffect(() => {
     if (selectedSettingId) fetchJobs(selectedSettingId);
@@ -575,6 +602,68 @@ export const AdminSettings: React.FC = () => {
                 Auth: {smtpConfig.smtp_user ? 'Yes' : 'No'}
               </span>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Redis Cache Card ─────────────────────────────────── */}
+      <div className="bg-card-dark rounded-xl border border-white/5 p-6 mb-8">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-primary">memory</span>
+            <div>
+              <h2 className="text-base font-bold text-white">Redis Cache</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Read-through cache for hot public endpoints — version-based invalidation</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={fetchCacheStats} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg transition-colors border border-white/10">
+              <span className="material-symbols-outlined text-xs">refresh</span>Refresh
+            </button>
+            <button onClick={() => handleCacheFlush()} disabled={cacheFlushing} className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-bold rounded-lg transition-colors border border-red-500/20 disabled:opacity-50">
+              <span className="material-symbols-outlined text-xs">delete_sweep</span>{cacheFlushing ? 'Flushing…' : 'Flush All'}
+            </button>
+          </div>
+        </div>
+        {cacheStats && (
+          <div className="mt-4 pt-4 border-t border-white/5">
+            {cacheStats.enabled === false ? (
+              <p className="text-sm text-slate-500">Redis is disabled. Set <code className="text-xs bg-slate-800 px-1 rounded">REDIS_ENABLED=true</code> to enable caching.</p>
+            ) : !cacheStats.connected ? (
+              <p className="text-sm text-amber-400">Redis enabled but not reachable. Check <code className="text-xs bg-slate-800 px-1 rounded">REDIS_URL</code> and ensure the redis container is running.</p>
+            ) : (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Memory Used', value: cacheStats.used_memory_human },
+                    { label: 'Peak Memory', value: cacheStats.used_memory_peak_human },
+                    { label: 'Cache Hits', value: (cacheStats.keyspace_hits ?? 0).toLocaleString() },
+                    { label: 'Cache Misses', value: (cacheStats.keyspace_misses ?? 0).toLocaleString() },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="bg-slate-900/50 rounded-lg p-3">
+                      <p className="text-xs text-slate-400">{label}</p>
+                      <p className="text-sm font-bold text-white mt-0.5">{value ?? '—'}</p>
+                    </div>
+                  ))}
+                </div>
+                {cacheStats.namespace_versions && (
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Namespace Versions</p>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(cacheStats.namespace_versions as Record<string, number>).map(([ns, ver]) => (
+                        <div key={ns} className="flex items-center gap-1.5 bg-slate-900/50 rounded-lg px-3 py-1.5">
+                          <span className="text-xs text-slate-400">{ns}</span>
+                          <span className="text-xs font-mono text-primary">v{ver}</span>
+                          <button onClick={() => handleCacheFlush(ns)} disabled={cacheFlushing} className="ml-1 text-slate-500 hover:text-red-400 transition-colors" title={`Flush ${ns}`}>
+                            <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>close</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

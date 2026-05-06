@@ -7,6 +7,7 @@ from solutions.admin_schemas import (
 )
 from auth.dependencies import require_admin
 from database import get_db
+import cache
 
 router = APIRouter()
 
@@ -49,6 +50,7 @@ async def create_solution_card(req: SolutionCardCreate, admin: dict = Depends(re
         req.title, req.subtitle, req.description, req.long_description,
         req.icon, req.icon_color, req.badge, req.link_url, req.launch_url, req.sort_order, req.category,
     )
+    await cache.bump_version(cache.NS_SOLUTIONS)
     return _row_to_card(row)
 
 
@@ -92,6 +94,7 @@ async def update_solution_card(
         await db.execute(f"UPDATE solution_cards SET {set_clause} WHERE id = $1", *params)
 
     row = await db.fetchrow("SELECT * FROM solution_cards WHERE id = $1", card_id)
+    await cache.bump_version(cache.NS_SOLUTIONS)
     return _row_to_card(row)
 
 
@@ -101,6 +104,7 @@ async def delete_solution_card(card_id: str, admin: dict = Depends(require_admin
     result = await db.execute("DELETE FROM solution_cards WHERE id = $1", card_id)
     if result == "DELETE 0":
         raise HTTPException(status_code=404, detail="Solution card not found")
+    await cache.bump_version(cache.NS_SOLUTIONS)
     return {"message": "Solution card deleted"}
 
 
@@ -133,6 +137,7 @@ async def create_news(req: NewsFeedCreate, admin: dict = Depends(require_admin))
         """,
         req.title, req.summary, req.content, req.source, req.source_url, req.badge,
     )
+    await cache.bump_version(cache.NS_SOLUTIONS)
     return _row_to_news(row)
 
 
@@ -163,6 +168,7 @@ async def update_news(
         await db.execute(f"UPDATE news_feed SET {set_clause} WHERE id = $1", *params)
 
     row = await db.fetchrow("SELECT * FROM news_feed WHERE id = $1", news_id)
+    await cache.bump_version(cache.NS_SOLUTIONS)
     return _row_to_news(row)
 
 
@@ -172,6 +178,7 @@ async def delete_news(news_id: str, admin: dict = Depends(require_admin)):
     result = await db.execute("DELETE FROM news_feed WHERE id = $1", news_id)
     if result == "DELETE 0":
         raise HTTPException(status_code=404, detail="News item not found")
+    await cache.bump_version(cache.NS_SOLUTIONS)
     return {"message": "News item deleted"}
 
 
@@ -333,6 +340,10 @@ async def _sync_rss_feed(feed_id: str, feed_url: str, badge: str, db_url: str):
             "UPDATE news_rss_feeds SET last_fetched_at=now(), items_imported=items_imported+$1, error=NULL, updated_at=now() WHERE id=$2",
             imported, feed_id,
         )
+        if imported > 0:
+            from cache.service import bump_version as _bv
+            from cache.keys import NS_SOLUTIONS
+            await _bv(NS_SOLUTIONS)
 
     except Exception as e:
         try:

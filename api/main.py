@@ -55,12 +55,14 @@ from articles.router import router as articles_router
 from articles.admin_router import router as articles_admin_router
 from contacts.router import router as contacts_router
 from contacts.admin_router import router as contacts_admin_router
+from cache.admin_router import router as cache_admin_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import asyncio
     from forge.scheduler import run_scheduler
+    from cache.client import init_redis, close_redis
 
     # Run Alembic migrations before initialising the connection pool
     import subprocess, sys, os
@@ -78,6 +80,8 @@ async def lifespan(app: FastAPI):
         log.info("alembic upgrade head: OK")
 
     await init_db()
+    if settings.REDIS_ENABLED:
+        await init_redis(settings.REDIS_URL)
     if settings.AUTH_MODE == "open" and settings.SEED_DEFAULT_ADMIN:
         await seed_admin_user()
 
@@ -91,6 +95,7 @@ async def lifespan(app: FastAPI):
         await scheduler_task
     except asyncio.CancelledError:
         pass
+    await close_redis()
     await close_db()
 
 
@@ -154,6 +159,7 @@ app.include_router(articles_router, prefix="/articles", tags=["articles"])
 app.include_router(articles_admin_router, prefix="/admin", tags=["admin-articles"])
 app.include_router(contacts_router, prefix="/contacts", tags=["contacts"])
 app.include_router(contacts_admin_router, prefix="/admin/contacts", tags=["admin-contacts"])
+app.include_router(cache_admin_router, prefix="/admin/cache", tags=["admin-cache"])
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):

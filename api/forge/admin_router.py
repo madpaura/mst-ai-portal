@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from forge.schemas import ForgeComponentResponse, ForgeComponentCreate, ForgeComponentUpdate
 from auth.dependencies import require_content as require_admin
 from database import get_db
+import cache
 
 router = APIRouter()
 
@@ -47,6 +48,7 @@ async def admin_create_component(req: ForgeComponentCreate, admin: dict = Depend
         req.long_description, req.icon, req.icon_color, req.version,
         req.install_command, req.badge, req.author, req.tags,
     )
+    await cache.bump_version(cache.NS_FORGE)
     return _row_to_component(row)
 
 
@@ -91,6 +93,7 @@ async def admin_update_component(
         await db.execute(f"UPDATE forge_components SET {set_clause} WHERE id = $1", *params)
 
     row = await db.fetchrow("SELECT * FROM forge_components WHERE id = $1", component_id)
+    await cache.bump_version(cache.NS_FORGE)
     return _row_to_component(row)
 
 
@@ -103,6 +106,7 @@ async def admin_delete_component(component_id: str, admin: dict = Depends(requir
     )
     if result == "DELETE 0":
         raise HTTPException(status_code=404, detail="Component not found")
+    await cache.bump_version(cache.NS_FORGE)
     return {"message": "Component deleted"}
 
 
@@ -113,6 +117,7 @@ async def admin_activate_component(component_id: str, admin: dict = Depends(requ
         "UPDATE forge_components SET is_active = true, updated_at = now() WHERE id = $1",
         component_id,
     )
+    await cache.bump_version(cache.NS_FORGE)
     return {"message": "Component activated"}
 
 
@@ -123,4 +128,5 @@ async def admin_deactivate_component(component_id: str, admin: dict = Depends(re
         "UPDATE forge_components SET is_active = false, updated_at = now() WHERE id = $1",
         component_id,
     )
+    await cache.bump_version(cache.NS_FORGE)
     return {"message": "Component deactivated"}

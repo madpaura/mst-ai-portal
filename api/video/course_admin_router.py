@@ -4,6 +4,7 @@ from typing import Optional
 from video.schemas import CourseResponse, CourseCreate, CourseUpdate
 from auth.dependencies import require_content as require_admin
 from database import get_db
+import cache
 
 router = APIRouter()
 
@@ -41,6 +42,7 @@ async def admin_create_course(req: CourseCreate, admin: dict = Depends(require_a
         "INSERT INTO courses (title, slug, description, sort_order) VALUES ($1,$2,$3,$4) RETURNING *",
         req.title, req.slug, req.description, req.sort_order,
     )
+    await cache.bump_version(cache.NS_VIDEO)
     return CourseResponse(
         id=str(row["id"]), title=row["title"], slug=row["slug"],
         description=row.get("description"), sort_order=row["sort_order"],
@@ -84,6 +86,7 @@ async def admin_update_course(
         """,
         course_id,
     )
+    await cache.bump_version(cache.NS_VIDEO)
     return CourseResponse(
         id=str(row["id"]), title=row["title"], slug=row["slug"],
         description=row.get("description"), sort_order=row["sort_order"],
@@ -126,4 +129,5 @@ async def admin_delete_course(
             )
 
     await db.execute("DELETE FROM courses WHERE id = $1", course_id)
+    await cache.bump_version(cache.NS_VIDEO)
     return {"message": "Course deleted"}

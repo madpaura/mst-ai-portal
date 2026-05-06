@@ -11,6 +11,7 @@ from articles.llm import call_llm
 from auth.dependencies import require_content as require_admin
 from config import settings
 from database import get_db
+import cache
 
 router = APIRouter()
 
@@ -100,6 +101,7 @@ async def admin_create_article(req: ArticleCreate, admin: dict = Depends(require
         req.title, slug, req.summary, req.content, req.category,
         admin["id"], admin.get("display_name", "Admin"),
     )
+    await cache.bump_version(cache.NS_ARTICLES)
     return _row_to_response(row, [])
 
 
@@ -169,6 +171,7 @@ async def admin_update_article(
 
     row = await db.fetchrow("SELECT * FROM articles WHERE id = $1", article_id)
     attachments = await _get_attachments(db, article_id)
+    await cache.bump_version(cache.NS_ARTICLES)
     return _row_to_response(row, attachments)
 
 
@@ -181,6 +184,7 @@ async def admin_delete_article(article_id: str, admin: dict = Depends(require_ad
     )
     if result == "UPDATE 0":
         raise HTTPException(status_code=404, detail="Article not found")
+    await cache.bump_version(cache.NS_ARTICLES)
     return {"message": "Article deleted"}
 
 
@@ -193,6 +197,7 @@ async def admin_publish_article(article_id: str, admin: dict = Depends(require_a
     )
     if result == "UPDATE 0":
         raise HTTPException(status_code=404, detail="Article not found")
+    await cache.bump_version(cache.NS_ARTICLES)
     return {"message": "Article published"}
 
 
@@ -205,6 +210,7 @@ async def admin_unpublish_article(article_id: str, admin: dict = Depends(require
     )
     if result == "UPDATE 0":
         raise HTTPException(status_code=404, detail="Article not found")
+    await cache.bump_version(cache.NS_ARTICLES)
     return {"message": "Article unpublished"}
 
 

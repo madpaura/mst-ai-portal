@@ -19,6 +19,19 @@ services:
       timeout: 3s
       retries: 5
 
+  # ── Redis Cache ──────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --save "" --appendonly no
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   # ── FastAPI Backend ───────────────────────────────────────
   backend:
     image: mst-portal-backend:latest
@@ -31,8 +44,13 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-portal}:${POSTGRES_PASSWORD:-portal123}@db:5432/${POSTGRES_DB:-mst_portal}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      REDIS_ENABLED: ${REDIS_ENABLED:-true}
+      REDIS_DEFAULT_TTL: ${REDIS_DEFAULT_TTL:-300}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       AUTH_MODE: ${AUTH_MODE:-open}
       VIDEO_STORAGE_PATH: /data/videos
