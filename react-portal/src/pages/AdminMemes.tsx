@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../api/client';
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+const mediaUrl = (url: string | null | undefined) =>
+  url ? (url.startsWith('/') ? `${API_BASE}${url}` : url) : '';
+
 interface Meme {
   id: string;
   group_id: string;
@@ -273,7 +277,7 @@ export const AdminMemes: React.FC = () => {
                 >
                   <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-slate-200 dark:bg-slate-700">
                     {g.thumbnail ? (
-                      <img src={g.thumbnail} alt="" className="w-full h-full object-cover" />
+                      <img src={mediaUrl(g.thumbnail)} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
                         <span className="material-symbols-outlined text-slate-400 text-sm">image</span>
@@ -442,7 +446,7 @@ export const AdminMemes: React.FC = () => {
                   {memes.map((meme, i) => (
                     <div key={meme.id} className="group relative rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900">
                       <div className="aspect-square overflow-hidden bg-slate-100 dark:bg-slate-800">
-                        <img src={meme.image_url} alt={meme.title || ''} className="w-full h-full object-cover" />
+                        <img src={mediaUrl(meme.image_url)} alt={meme.title || ''} className="w-full h-full object-cover" />
                       </div>
                       <div className="p-2">
                         {meme.link_url && (

@@ -2,6 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Navbar } from '../components/Navbar';
 import { api } from '../api/client';
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+const mediaUrl = (url: string | null | undefined) =>
+  url ? (url.startsWith('/') ? `${API_BASE}${url}` : url) : '';
+
 interface Meme {
   id: string;
   group_id: string;
@@ -136,7 +140,7 @@ export const Memes: React.FC = () => {
                 <div className="aspect-square bg-slate-100 dark:bg-slate-800 overflow-hidden">
                   {group.thumbnail ? (
                     <img
-                      src={group.thumbnail}
+                      src={mediaUrl(group.thumbnail)}
                       alt={group.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
@@ -213,14 +217,14 @@ export const Memes: React.FC = () => {
               {currentMeme.link_url ? (
                 <a href={currentMeme.link_url} target="_blank" rel="noopener noreferrer" title="Open link">
                   <img
-                    src={currentMeme.image_url}
+                    src={mediaUrl(currentMeme.image_url)}
                     alt={currentMeme.title || lightbox.group.title}
                     className="w-full max-h-[70vh] object-contain rounded-xl cursor-pointer hover:opacity-90 transition-opacity"
                   />
                 </a>
               ) : (
                 <img
-                  src={currentMeme.image_url}
+                  src={mediaUrl(currentMeme.image_url)}
                   alt={currentMeme.title || lightbox.group.title}
                   className="w-full max-h-[70vh] object-contain rounded-xl"
                 />
