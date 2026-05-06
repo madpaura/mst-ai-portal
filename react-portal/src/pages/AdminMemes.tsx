@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../api/client';
 
 interface Meme {
@@ -20,6 +20,16 @@ interface MemeGroup {
   thumbnail: string | null;
 }
 
+interface PendingUpload {
+  uid: string;
+  file: File;
+  objectUrl: string;
+  imageUrl: string | null;
+  linkUrl: string;
+  uploading: boolean;
+  error: string | null;
+}
+
 const CATEGORIES = ['General', 'AI Humor', 'Tech Life', 'Monday Mood', 'Deep Thoughts', 'Other'];
 
 export const AdminMemes: React.FC = () => {
@@ -36,9 +46,10 @@ export const AdminMemes: React.FC = () => {
   const [editingGroup, setEditingGroup] = useState<MemeGroup | null>(null);
   const [groupForm, setGroupForm] = useState({ title: '', slug: '', category: 'General', sort_order: 0 });
 
-  // Meme form
-  const [showMemeForm, setShowMemeForm] = useState(false);
-  const [memeForm, setMemeForm] = useState({ title: '', image_url: '', link_url: '', sort_order: 0 });
+  // Bulk upload
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchGroups = async () => {
     try {
@@ -64,7 +75,7 @@ export const AdminMemes: React.FC = () => {
   const selectGroup = (g: MemeGroup) => {
     setSelectedGroup(g);
     fetchMemes(g);
-    setShowMemeForm(false);
+    setPendingUploads([]);
   };
 
   const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -107,37 +118,8 @@ export const AdminMemes: React.FC = () => {
     setSaving(true);
     try {
       await api.delete(`/admin/memes/groups/${g.id}`);
-      if (selectedGroup?.id === g.id) { setSelectedGroup(null); setMemes([]); }
+      if (selectedGroup?.id === g.id) { setSelectedGroup(null); setMemes([]); setPendingUploads([]); }
       await fetchGroups();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Meme CRUD
-  const openAddMeme = () => {
-    setMemeForm({ title: '', image_url: '', link_url: '', sort_order: memes.length });
-    setShowMemeForm(true);
-    setError('');
-  };
-
-  const saveMeme = async () => {
-    if (!memeForm.image_url.trim()) { setError('Image URL is required.'); return; }
-    if (!selectedGroup) return;
-    setSaving(true); setError('');
-    try {
-      await api.post(`/admin/memes/groups/${selectedGroup.id}/memes`, {
-        title: memeForm.title || null,
-        image_url: memeForm.image_url,
-        link_url: memeForm.link_url || null,
-        sort_order: memeForm.sort_order,
-      });
-      await fetchMemes(selectedGroup);
-      await fetchGroups();
-      setShowMemeForm(false);
-      setMemeForm({ title: '', image_url: '', link_url: '', sort_order: memes.length + 1 });
-    } catch (e: any) {
-      setError(e?.message || 'Failed to add meme.');
     } finally {
       setSaving(false);
     }
@@ -156,6 +138,106 @@ export const AdminMemes: React.FC = () => {
       setSaving(false);
     }
   };
+
+  // Upload a single file and update state
+  const uploadOne = useCallback(async (uid: string, file: File, groupId: string) => {
+    const formData = new FormData();
+    formData.append('files', file);
+    try {
+      const results = await api.post<{ image_url?: string; error?: string }[]>(
+        `/admin/memes/groups/${groupId}/upload`,
+        formData,
+      );
+      const result = results[0];
+      setPendingUploads((prev) =>
+        prev.map((p) =>
+          p.uid === uid
+            ? { ...p, uploading: false, imageUrl: result.image_url ?? null, error: result.error ?? null }
+            : p,
+        ),
+      );
+    } catch {
+      setPendingUploads((prev) =>
+        prev.map((p) => (p.uid === uid ? { ...p, uploading: false, error: 'Upload failed' } : p)),
+      );
+    }
+  }, []);
+
+  const addFiles = useCallback(
+    (files: File[]) => {
+      if (!selectedGroup) return;
+      const imageFiles = files.filter((f) => f.type.startsWith('image/'));
+      if (!imageFiles.length) return;
+
+      const newItems: PendingUpload[] = imageFiles.map((file) => ({
+        uid: crypto.randomUUID(),
+        file,
+        objectUrl: URL.createObjectURL(file),
+        imageUrl: null,
+        linkUrl: '',
+        uploading: true,
+        error: null,
+      }));
+
+      setPendingUploads((prev) => [...prev, ...newItems]);
+
+      // Upload all immediately in parallel
+      newItems.forEach((item) => uploadOne(item.uid, item.file, selectedGroup.id));
+    },
+    [selectedGroup, uploadOne],
+  );
+
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      addFiles(Array.from(e.dataTransfer.files));
+    },
+    [addFiles],
+  );
+
+  const onFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) addFiles(Array.from(e.target.files));
+    e.target.value = '';
+  };
+
+  const removePending = (uid: string) => {
+    setPendingUploads((prev) => {
+      const item = prev.find((p) => p.uid === uid);
+      if (item) URL.revokeObjectURL(item.objectUrl);
+      return prev.filter((p) => p.uid !== uid);
+    });
+  };
+
+  const saveAll = async () => {
+    if (!selectedGroup) return;
+    const ready = pendingUploads.filter((p) => p.imageUrl && !p.uploading && !p.error);
+    if (!ready.length) return;
+    setSaving(true);
+    try {
+      const baseOrder = memes.length;
+      await Promise.all(
+        ready.map((p, i) =>
+          api.post(`/admin/memes/groups/${selectedGroup.id}/memes`, {
+            title: null,
+            image_url: p.imageUrl,
+            link_url: p.linkUrl.trim() || null,
+            sort_order: baseOrder + i,
+          }),
+        ),
+      );
+      // Cleanup object URLs
+      pendingUploads.forEach((p) => URL.revokeObjectURL(p.objectUrl));
+      setPendingUploads([]);
+      await fetchMemes(selectedGroup);
+      await fetchGroups();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const uploadingCount = pendingUploads.filter((p) => p.uploading).length;
+  const readyCount = pendingUploads.filter((p) => p.imageUrl && !p.uploading).length;
 
   return (
     <div className="flex h-full">
@@ -185,7 +267,7 @@ export const AdminMemes: React.FC = () => {
                 <div
                   key={g.id}
                   onClick={() => selectGroup(g)}
-                  className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-slate-100 dark:border-white/5 ${
+                  className={`group flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-slate-100 dark:border-white/5 ${
                     selectedGroup?.id === g.id ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-slate-100 dark:hover:bg-slate-800/50'
                   }`}
                 >
@@ -217,7 +299,7 @@ export const AdminMemes: React.FC = () => {
         )}
       </div>
 
-      {/* Right panel: memes in selected group */}
+      {/* Right panel */}
       <div className="flex-1 overflow-y-auto p-6">
         {!selectedGroup ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
@@ -226,117 +308,161 @@ export const AdminMemes: React.FC = () => {
           </div>
         ) : (
           <>
+            {/* Header */}
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-lg font-bold text-slate-900 dark:text-white">{selectedGroup.title}</h2>
                 <p className="text-xs text-slate-400">{selectedGroup.category} · {selectedGroup.meme_count} images</p>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => openEditGroup(selectedGroup)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded-lg hover:border-primary hover:text-primary transition-colors"
-                >
-                  <span className="material-symbols-outlined text-sm">edit</span>
-                  Edit Group
-                </button>
-                <button
-                  onClick={openAddMeme}
-                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-                >
-                  <span className="material-symbols-outlined text-sm">add_photo_alternate</span>
-                  Add Image
-                </button>
-              </div>
+              <button
+                onClick={() => openEditGroup(selectedGroup)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded-lg hover:border-primary hover:text-primary transition-colors"
+              >
+                <span className="material-symbols-outlined text-sm">edit</span>
+                Edit Group
+              </button>
             </div>
 
-            {/* Add meme form */}
-            {showMemeForm && (
-              <div className="mb-6 p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900/50">
-                <h3 className="text-sm font-bold text-slate-800 dark:text-white mb-4">Add Image</h3>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Image URL *</label>
-                    <input
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-primary focus:border-primary"
-                      placeholder="https://example.com/meme.jpg"
-                      value={memeForm.image_url}
-                      onChange={(e) => setMemeForm({ ...memeForm, image_url: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Title (optional)</label>
-                    <input
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-primary focus:border-primary"
-                      placeholder="Caption or title"
-                      value={memeForm.title}
-                      onChange={(e) => setMemeForm({ ...memeForm, title: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Link URL (optional)</label>
-                    <input
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-primary focus:border-primary"
-                      placeholder="https://example.com/article"
-                      value={memeForm.link_url}
-                      onChange={(e) => setMemeForm({ ...memeForm, link_url: e.target.value })}
-                    />
+            {/* Drop zone */}
+            <div
+              onDrop={onDrop}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onClick={() => fileInputRef.current?.click()}
+              className={`mb-6 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center gap-2 py-8 cursor-pointer transition-all ${
+                dragOver
+                  ? 'border-primary bg-primary/5 scale-[1.01]'
+                  : 'border-slate-200 dark:border-white/10 hover:border-primary/50 hover:bg-slate-50 dark:hover:bg-slate-900/50'
+              }`}
+            >
+              <span className="material-symbols-outlined text-3xl text-slate-400" style={{ fontVariationSettings: "'FILL' 1" }}>add_photo_alternate</span>
+              <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Drop images here or click to pick</p>
+              <p className="text-xs text-slate-400">JPG, PNG, GIF, WebP · up to 20 MB each · multiple files at once</p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={onFileInput}
+              />
+            </div>
+
+            {/* Pending uploads: thumbnails + link inputs */}
+            {pendingUploads.length > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                    {uploadingCount > 0 ? `Uploading ${uploadingCount}…` : `${readyCount} ready`}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        pendingUploads.forEach((p) => URL.revokeObjectURL(p.objectUrl));
+                        setPendingUploads([]);
+                      }}
+                      className="text-xs text-slate-400 hover:text-red-400 transition-colors"
+                    >
+                      Clear all
+                    </button>
+                    <button
+                      onClick={saveAll}
+                      disabled={saving || readyCount === 0 || uploadingCount > 0}
+                      className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-40 transition-colors"
+                    >
+                      {saving ? (
+                        <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                      ) : (
+                        <span className="material-symbols-outlined text-sm">save</span>
+                      )}
+                      Save {readyCount} {readyCount === 1 ? 'image' : 'images'}
+                    </button>
                   </div>
                 </div>
-                {/* Preview */}
-                {memeForm.image_url && (
-                  <div className="mb-4">
-                    <p className="text-xs text-slate-500 mb-1">Preview</p>
-                    <img src={memeForm.image_url} alt="preview" className="max-h-40 rounded-lg border border-slate-200 dark:border-white/10 object-contain" />
-                  </div>
-                )}
-                {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
-                <div className="flex gap-2">
-                  <button onClick={saveMeme} disabled={saving} className="px-4 py-1.5 text-xs font-bold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors">
-                    {saving ? 'Saving…' : 'Add Image'}
-                  </button>
-                  <button onClick={() => setShowMemeForm(false)} className="px-4 py-1.5 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
-                    Cancel
-                  </button>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                  {pendingUploads.map((p) => (
+                    <div key={p.uid} className="relative flex flex-col gap-1.5">
+                      {/* Thumbnail */}
+                      <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/10">
+                        <img src={p.objectUrl} alt="" className="w-full h-full object-cover" />
+                        {p.uploading && (
+                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                            <span className="material-symbols-outlined text-white text-xl animate-spin">progress_activity</span>
+                          </div>
+                        )}
+                        {p.error && (
+                          <div className="absolute inset-0 bg-red-900/60 flex items-center justify-center p-2">
+                            <span className="text-[10px] text-white text-center">{p.error}</span>
+                          </div>
+                        )}
+                        {!p.uploading && !p.error && (
+                          <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
+                            <span className="material-symbols-outlined text-white text-[10px]" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
+                          </div>
+                        )}
+                        <button
+                          onClick={() => removePending(p.uid)}
+                          className="absolute top-1 left-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-red-600 transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-[11px]">close</span>
+                        </button>
+                      </div>
+                      {/* Link URL input */}
+                      <input
+                        type="url"
+                        placeholder="Link URL (optional)"
+                        value={p.linkUrl}
+                        onChange={(e) =>
+                          setPendingUploads((prev) =>
+                            prev.map((x) => (x.uid === p.uid ? { ...x, linkUrl: e.target.value } : x)),
+                          )
+                        }
+                        className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-[10px] text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:ring-1 focus:ring-primary focus:border-primary"
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
 
-            {/* Meme grid */}
+            {/* Existing memes */}
             {memesLoading ? (
               <div className="flex items-center justify-center h-32">
                 <span className="material-symbols-outlined text-2xl text-slate-400 animate-spin">progress_activity</span>
               </div>
-            ) : memes.length === 0 ? (
-              <div className="text-center py-16 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-2xl">
-                <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-700 block mb-2">add_photo_alternate</span>
-                <p className="text-sm text-slate-500">No images yet. Add one above.</p>
+            ) : memes.length === 0 && pendingUploads.length === 0 ? (
+              <div className="text-center py-16">
+                <p className="text-sm text-slate-400">No images yet — drop some above.</p>
               </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {memes.map((meme, i) => (
-                  <div key={meme.id} className="group relative rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900">
-                    <div className="aspect-square overflow-hidden bg-slate-100 dark:bg-slate-800">
-                      <img src={meme.image_url} alt={meme.title || ''} className="w-full h-full object-cover" />
+            ) : memes.length > 0 ? (
+              <>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Saved images</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  {memes.map((meme, i) => (
+                    <div key={meme.id} className="group relative rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900">
+                      <div className="aspect-square overflow-hidden bg-slate-100 dark:bg-slate-800">
+                        <img src={meme.image_url} alt={meme.title || ''} className="w-full h-full object-cover" />
+                      </div>
+                      <div className="p-2">
+                        {meme.link_url && (
+                          <a href={meme.link_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary truncate block hover:underline">
+                            {meme.link_url}
+                          </a>
+                        )}
+                        <p className="text-[10px] text-slate-400">#{i + 1}</p>
+                      </div>
+                      <button
+                        onClick={() => deleteMeme(meme)}
+                        className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-500/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                      >
+                        <span className="material-symbols-outlined text-[12px]">close</span>
+                      </button>
                     </div>
-                    <div className="p-2">
-                      {meme.title && <p className="text-[10px] text-slate-600 dark:text-slate-300 truncate">{meme.title}</p>}
-                      {meme.link_url && (
-                        <a href={meme.link_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary truncate block hover:underline">
-                          {meme.link_url}
-                        </a>
-                      )}
-                      <p className="text-[10px] text-slate-400">#{i + 1}</p>
-                    </div>
-                    <button
-                      onClick={() => deleteMeme(meme)}
-                      className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-500/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                    >
-                      <span className="material-symbols-outlined text-[12px]">close</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              </>
+            ) : null}
           </>
         )}
       </div>

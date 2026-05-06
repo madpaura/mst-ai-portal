@@ -1,4 +1,8 @@
-from fastapi import APIRouter, HTTPException, Depends
+import os
+import uuid
+
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from typing import List
 
 from memes.schemas import (
     MemeGroupResponse, MemeGroupCreate, MemeGroupUpdate,
@@ -6,7 +10,11 @@ from memes.schemas import (
 )
 from auth.dependencies import require_content as require_admin
 from database import get_db
+from config import settings
 import cache
+
+_ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"}
+_MAX_IMAGE_BYTES = 20 * 1024 * 1024  # 20 MB
 
 router = APIRouter()
 
@@ -153,6 +161,38 @@ async def admin_delete_meme(meme_id: str, admin: dict = Depends(require_admin)):
     await db.execute("DELETE FROM memes WHERE id = $1", meme_id)
     await cache.bump_version(NS)
     return {"message": "Meme deleted"}
+
+
+@router.post("/memes/groups/{group_id}/upload")
+async def admin_upload_images(
+    group_id: str,
+    files: List[UploadFile] = File(...),
+    admin: dict = Depends(require_admin),
+):
+    db = await get_db()
+    group = await db.fetchrow("SELECT id FROM meme_groups WHERE id = $1", group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    dir_path = os.path.join(settings.MEDIA_STORAGE_PATH, "memes", group_id)
+    os.makedirs(dir_path, exist_ok=True)
+
+    results = []
+    for file in files:
+        ext = os.path.splitext(file.filename or "")[1].lower()
+        if ext not in _ALLOWED_IMAGE_EXTS:
+            results.append({"error": f"{file.filename}: unsupported type"})
+            continue
+        data = await file.read()
+        if len(data) > _MAX_IMAGE_BYTES:
+            results.append({"error": f"{file.filename}: exceeds 20 MB"})
+            continue
+        stored_name = f"{uuid.uuid4()}{ext}"
+        with open(os.path.join(dir_path, stored_name), "wb") as f:
+            f.write(data)
+        results.append({"image_url": f"/media/memes/{group_id}/{stored_name}"})
+
+    return results
 
 
 @router.post("/memes/groups/{group_id}/reorder")
