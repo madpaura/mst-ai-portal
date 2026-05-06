@@ -50,6 +50,10 @@ export const AdminMemes: React.FC = () => {
   const [editingGroup, setEditingGroup] = useState<MemeGroup | null>(null);
   const [groupForm, setGroupForm] = useState({ title: '', slug: '', category: 'General', sort_order: 0 });
 
+  // Inline link edit
+  const [editingMemeId, setEditingMemeId] = useState<string | null>(null);
+  const [editLinkUrl, setEditLinkUrl] = useState('');
+
   // Bulk upload
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [dragOver, setDragOver] = useState(false);
@@ -127,6 +131,22 @@ export const AdminMemes: React.FC = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const openEditLink = (meme: Meme) => {
+    setEditingMemeId(meme.id);
+    setEditLinkUrl(meme.link_url || '');
+  };
+
+  const saveEditLink = async (meme: Meme) => {
+    if (editingMemeId !== meme.id) return;
+    setEditingMemeId(null);
+    const newUrl = editLinkUrl.trim() || null;
+    if (newUrl === meme.link_url) return;
+    try {
+      await api.put(`/admin/memes/memes/${meme.id}`, { link_url: newUrl });
+      setMemes((prev) => prev.map((m) => m.id === meme.id ? { ...m, link_url: newUrl } : m));
+    } catch { /* ignore */ }
   };
 
   const deleteMeme = async (meme: Meme) => {
@@ -449,12 +469,34 @@ export const AdminMemes: React.FC = () => {
                         <img src={mediaUrl(meme.image_url)} alt={meme.title || ''} className="w-full h-full object-cover" />
                       </div>
                       <div className="p-2">
-                        {meme.link_url && (
-                          <a href={meme.link_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary truncate block hover:underline">
-                            {meme.link_url}
-                          </a>
+                        {editingMemeId === meme.id ? (
+                          <input
+                            autoFocus
+                            type="url"
+                            value={editLinkUrl}
+                            onChange={(e) => setEditLinkUrl(e.target.value)}
+                            onBlur={() => saveEditLink(meme)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') saveEditLink(meme); if (e.key === 'Escape') setEditingMemeId(null); }}
+                            placeholder="https://..."
+                            className="w-full bg-white dark:bg-slate-800 border border-primary rounded px-1.5 py-0.5 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none"
+                          />
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-slate-400">#{i + 1}</span>
+                            <button
+                              onClick={() => openEditLink(meme)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 text-slate-400 hover:text-primary"
+                              title="Edit link URL"
+                            >
+                              <span className="material-symbols-outlined text-[12px]">edit</span>
+                            </button>
+                            {meme.link_url && (
+                              <a href={meme.link_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary truncate hover:underline ml-auto" title={meme.link_url}>
+                                <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+                              </a>
+                            )}
+                          </div>
                         )}
-                        <p className="text-[10px] text-slate-400">#{i + 1}</p>
                       </div>
                       <button
                         onClick={() => deleteMeme(meme)}
