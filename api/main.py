@@ -56,6 +56,8 @@ from articles.admin_router import router as articles_admin_router
 from contacts.router import router as contacts_router
 from contacts.admin_router import router as contacts_admin_router
 from cache.admin_router import router as cache_admin_router
+from memes.router import router as memes_router
+from memes.admin_router import router as memes_admin_router
 
 
 @asynccontextmanager
@@ -160,6 +162,8 @@ app.include_router(articles_admin_router, prefix="/admin", tags=["admin-articles
 app.include_router(contacts_router, prefix="/contacts", tags=["contacts"])
 app.include_router(contacts_admin_router, prefix="/admin/contacts", tags=["admin-contacts"])
 app.include_router(cache_admin_router, prefix="/admin/cache", tags=["admin-cache"])
+app.include_router(memes_router, prefix="/memes", tags=["memes"])
+app.include_router(memes_admin_router, prefix="/admin", tags=["admin-memes"])
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):

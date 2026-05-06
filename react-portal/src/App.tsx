@@ -24,6 +24,8 @@ import { Articles } from './pages/Articles';
 import { ArticleDetail } from './pages/ArticleDetail';
 import { ArticleEditor } from './pages/ArticleEditor';
 import { AdminArticles } from './pages/AdminArticles';
+import { Memes } from './pages/Memes';
+import { AdminMemes } from './pages/AdminMemes';
 import { ContributeRequest } from './pages/ContributeRequest';
 import { AdminContributions } from './pages/AdminContributions';
 import { AdminAuditLog } from './pages/AdminAuditLog';
@@ -54,6 +56,7 @@ function App() {
           <Route path="/articles/new" element={<ArticleEditor />} />
           <Route path="/articles/edit/:articleId" element={<ArticleEditor />} />
           <Route path="/articles/:articleSlug" element={<ArticleDetail />} />
+          <Route path="/memes" element={<Memes />} />
           <Route path="/login" element={<Login />} />
           <Route path="/contribute" element={<ContributeRequest />} />
           <Route path="/contact" element={<Contact />} />
@@ -71,6 +74,7 @@ function App() {
             <Route path="contributions" element={<AdminContributions />} />
             <Route path="audit-log" element={<AdminAuditLog />} />
             <Route path="contacts" element={<AdminContacts />} />
+            <Route path="memes" element={<AdminMemes />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
