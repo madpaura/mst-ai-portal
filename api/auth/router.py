@@ -297,10 +297,10 @@ async def update_user_role(request: Request, user_id: str, role: str, admin: dic
 
 class ResetPasswordRequest(BaseModel):
     new_password: str
+    current_password: Optional[str] = None  # required when admin resets their own password
 
 
 def _validate_password_strength(password: str) -> None:
-    """Raise HTTPException if password does not meet minimum requirements."""
     errors = []
     if len(password) < 6:
         errors.append("at least 6 characters")
@@ -309,23 +309,27 @@ def _validate_password_strength(password: str) -> None:
     if not any(c.isdigit() for c in password):
         errors.append("at least one number")
     if errors:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Password must contain: {', '.join(errors)}",
-        )
+        raise HTTPException(status_code=400, detail=f"Password must contain: {', '.join(errors)}")
 
 
 @router.put("/admin/users/{user_id}/password")
 async def reset_user_password(request: Request, user_id: str, body: ResetPasswordRequest, admin: dict = Depends(require_admin)):
-    _validate_password_strength(body.new_password)
-    from auth.service import hash_password
-    pw_hash = hash_password(body.new_password)
+    from auth.service import hash_password, verify_password
     db = await get_db()
-    result = await db.execute(
-        "UPDATE users SET password_hash = $1 WHERE id = $2", pw_hash, user_id
-    )
-    if result == "UPDATE 0":
+    target = await db.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
+    if not target:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Admin changing their own password must verify current password first
+    if str(admin["id"]) == user_id:
+        if not body.current_password:
+            raise HTTPException(status_code=400, detail="Current password is required to change your own password")
+        if not verify_password(body.current_password, target["password_hash"] or ""):
+            raise HTTPException(status_code=401, detail="Current password is incorrect")
+
+    _validate_password_strength(body.new_password)
+    pw_hash = hash_password(body.new_password)
+    await db.execute("UPDATE users SET password_hash = $1 WHERE id = $2", pw_hash, user_id)
     await audit(request, admin, "user.password_reset", "user", user_id)
     return {"message": "Password updated"}
 

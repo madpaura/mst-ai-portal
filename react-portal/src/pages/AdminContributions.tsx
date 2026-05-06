@@ -42,12 +42,6 @@ interface NewUserForm {
 
 const BLANK_USER: NewUserForm = { username: '', display_name: '', password: '', role: 'user', email: '' };
 
-const ROLE_STYLE: Record<string, string> = {
-  admin: 'text-purple-400 bg-purple-400/10 border-purple-400/20',
-  content: 'text-primary bg-primary/10 border-primary/20',
-  user: 'text-slate-400 bg-slate-400/10 border-slate-400/20',
-};
-
 const STATUS_STYLES: Record<string, string> = {
   pending: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
   approved: 'bg-green-500/10 text-green-500 border-green-500/20',
@@ -73,7 +67,9 @@ export const AdminContributions: React.FC = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [resetTarget, setResetTarget] = useState<UserRecord | null>(null);
   const [resetPassword, setResetPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [resetting, setResetting] = useState(false);
+  const [changingRoleId, setChangingRoleId] = useState<string | null>(null);
   // Create user form
   const [newUser, setNewUser] = useState<NewUserForm>(BLANK_USER);
   const [creatingUser, setCreatingUser] = useState(false);
@@ -133,14 +129,33 @@ export const AdminContributions: React.FC = () => {
     if (!resetTarget || !resetPassword.trim()) return;
     setResetting(true);
     try {
-      await api.put(`/auth/admin/users/${resetTarget.id}/password`, { new_password: resetPassword });
-      showMsg('success', `Password reset for "${resetTarget.username}"`);
+      const isSelf = currentUser?.id === resetTarget.id;
+      await api.put(`/auth/admin/users/${resetTarget.id}/password`, {
+        new_password: resetPassword,
+        ...(isSelf ? { current_password: currentPassword } : {}),
+      });
+      showMsg('success', `Password updated for "${resetTarget.username}"`);
       setResetTarget(null);
       setResetPassword('');
+      setCurrentPassword('');
     } catch (err: any) {
       showMsg('error', err.message || 'Failed to reset password');
     } finally {
       setResetting(false);
+    }
+  };
+
+  const handleChangeRole = async (u: UserRecord, newRole: string) => {
+    if (u.role === newRole) return;
+    setChangingRoleId(u.id);
+    try {
+      await api.put(`/auth/admin/users/${u.id}/role?role=${newRole}`, {});
+      setUsers(prev => prev.map(x => x.id === u.id ? { ...x, role: newRole } : x));
+      showMsg('success', `${u.display_name} is now ${newRole}`);
+    } catch (err: any) {
+      showMsg('error', err.message || 'Failed to change role');
+    } finally {
+      setChangingRoleId(null);
     }
   };
 
@@ -212,9 +227,9 @@ export const AdminContributions: React.FC = () => {
 
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Contributors</h1>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Users & Contributors</h1>
           <p className="text-sm text-slate-400 mt-1">
-            Manage contribution requests and add internal test users.
+            Manage users, roles, passwords, and contribution requests.
           </p>
         </div>
         <button
@@ -511,16 +526,36 @@ export const AdminContributions: React.FC = () => {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{u.display_name}</span>
-                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase ${ROLE_STYLE[u.role] || ROLE_STYLE.user}`}>
-                    {u.role}
-                  </span>
+                  {currentUser?.id === u.id && (
+                    <span className="text-[10px] text-slate-400 font-medium">(you)</span>
+                  )}
                 </div>
                 <span className="text-xs text-slate-400 font-mono">{u.username}{u.email ? ` · ${u.email}` : ''}</span>
               </div>
-              {/* Actions */}
+              {/* Role pills */}
+              <div className="flex items-center gap-1 shrink-0">
+                {(['user', 'content', 'admin'] as const).map(r => (
+                  <button
+                    key={r}
+                    onClick={() => handleChangeRole(u, r)}
+                    disabled={changingRoleId === u.id || currentUser?.id === u.id}
+                    title={currentUser?.id === u.id ? "Can't change your own role" : `Set role to ${r}`}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors disabled:cursor-not-allowed ${
+                      u.role === r
+                        ? r === 'admin' ? 'bg-purple-500/20 border-purple-500/40 text-purple-400'
+                          : r === 'content' ? 'bg-primary/20 border-primary/40 text-primary'
+                          : 'bg-slate-200 dark:bg-slate-700 border-slate-400 dark:border-slate-500 text-slate-700 dark:text-slate-200'
+                        : 'border-slate-200 dark:border-white/10 text-slate-400 hover:border-slate-400 dark:hover:border-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+              {/* Action buttons */}
               <div className="flex items-center gap-1 shrink-0">
                 <button
-                  onClick={() => { setResetTarget(u); setResetPassword(''); }}
+                  onClick={() => { setResetTarget(u); setResetPassword(''); setCurrentPassword(''); }}
                   disabled={deletingId === u.id}
                   title="Reset password"
                   className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors"
@@ -552,19 +587,40 @@ export const AdminContributions: React.FC = () => {
             onSubmit={handleResetPassword}
             className="bg-card-light dark:bg-card-dark border border-slate-200 dark:border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
           >
-            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">Reset Password</h3>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">
+              {currentUser?.id === resetTarget.id ? 'Change Your Password' : 'Reset Password'}
+            </h3>
             <p className="text-xs text-slate-400 mb-4">
-              Set a new password for <strong className="text-slate-600 dark:text-slate-300">{resetTarget.username}</strong>
+              {currentUser?.id === resetTarget.id
+                ? 'Verify your current password before setting a new one.'
+                : <>Set a new password for <strong className="text-slate-600 dark:text-slate-300">{resetTarget.username}</strong></>
+              }
             </p>
+
+            {/* Current password — only shown when resetting own account */}
+            {currentUser?.id === resetTarget.id && (
+              <input
+                type="password"
+                required
+                autoFocus
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Current password"
+                className="w-full px-3 py-2 mb-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:border-primary outline-none"
+              />
+            )}
+
             <input
               type="password"
               required
-              autoFocus
+              autoFocus={currentUser?.id !== resetTarget.id}
               value={resetPassword}
               onChange={(e) => setResetPassword(e.target.value)}
               placeholder="New password"
-              className="w-full px-3 py-2 mb-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:border-primary outline-none"
+              className="w-full px-3 py-2 mb-1 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:border-primary outline-none"
             />
+            <p className="text-[11px] text-slate-400 mb-4">Min 6 chars, at least one letter and one number</p>
+
             <div className="flex gap-2">
               <button
                 type="submit"
@@ -574,11 +630,11 @@ export const AdminContributions: React.FC = () => {
                 {resetting
                   ? <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
                   : <span className="material-symbols-outlined text-sm">lock_reset</span>}
-                {resetting ? 'Saving...' : 'Reset Password'}
+                {resetting ? 'Saving...' : 'Update Password'}
               </button>
               <button
                 type="button"
-                onClick={() => { setResetTarget(null); setResetPassword(''); }}
+                onClick={() => { setResetTarget(null); setResetPassword(''); setCurrentPassword(''); }}
                 className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 dark:hover:text-white transition-colors"
               >
                 Cancel
