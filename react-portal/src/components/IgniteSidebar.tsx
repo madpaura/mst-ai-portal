@@ -67,7 +67,7 @@ const CATEGORIES = ['All', 'Code-mate', 'RAG', 'Agents', 'Deep Dive'];
 
 // Heights for virtual list items
 const HEADER_H = 41;
-const VIDEO_H = 80;
+const VIDEO_H = 88;
 
 type FlatItem =
   | { type: 'header'; courseId: string; courseName: string; videoCount: number }
@@ -133,7 +133,7 @@ const Row = React.memo(({ index, style, data }: ListChildComponentProps<RowData>
               : idx}
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className={`text-sm mb-1 group-hover:text-primary transition-colors ${
+            <h3 className={`text-sm mb-1 line-clamp-2 group-hover:text-primary transition-colors ${
               isActive ? 'font-bold text-slate-900 dark:text-white' : 'font-medium text-slate-600 dark:text-slate-300'
             }`}>
               {video.title}
