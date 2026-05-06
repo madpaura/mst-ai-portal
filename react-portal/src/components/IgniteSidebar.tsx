@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
+import { VariableSizeList, type ListChildComponentProps } from 'react-window';
+import AutoSizer from 'react-virtualized-auto-sizer';
 import { api } from '../api/client';
 
 export interface Video {
@@ -63,6 +65,104 @@ let ALL_VIDEOS: Video[] = [];
 
 const CATEGORIES = ['All', 'Code-mate', 'RAG', 'Agents', 'Deep Dive'];
 
+// Heights for virtual list items
+const HEADER_H = 41;
+const VIDEO_H = 80;
+
+type FlatItem =
+  | { type: 'header'; courseId: string; courseName: string; videoCount: number }
+  | { type: 'video'; video: Video; idx: number };
+
+interface RowData {
+  items: FlatItem[];
+  activeVideoId: string;
+  collapsedCourses: Set<string>;
+  onSelectVideo: (v: Video) => void;
+  onToggleCourse: (courseId: string) => void;
+}
+
+const Row = React.memo(({ index, style, data }: ListChildComponentProps<RowData>) => {
+  const { items, activeVideoId, collapsedCourses, onSelectVideo, onToggleCourse } = data;
+  const item = items[index];
+
+  if (item.type === 'header') {
+    const isCollapsed = collapsedCourses.has(item.courseId);
+    return (
+      <div style={style} className="bg-slate-50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-white/5">
+        <button
+          onClick={() => onToggleCourse(item.courseId)}
+          className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors"
+        >
+          <span className={`material-symbols-outlined text-sm text-primary transition-transform duration-200 ${isCollapsed ? '' : 'rotate-90'}`}>
+            chevron_right
+          </span>
+          <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex-1 text-left truncate">
+            {item.courseName}
+          </span>
+          <span className="text-[10px] text-slate-400 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded-full">
+            {item.videoCount}
+          </span>
+        </button>
+      </div>
+    );
+  }
+
+  const { video, idx } = item;
+  const isActive = video.id === activeVideoId;
+
+  return (
+    <div style={{ ...style, paddingLeft: 8, paddingRight: 8, paddingTop: 4 }}>
+      <div
+        onClick={() => onSelectVideo(video)}
+        className={`p-3 rounded-xl cursor-pointer group transition-all ${
+          isActive
+            ? 'active-lesson bg-primary/5 border border-primary/20'
+            : 'border border-transparent hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:border-slate-200 dark:hover:border-slate-700'
+        }`}
+      >
+        <div className="flex items-start gap-3">
+          <div
+            className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold mt-0.5 ${
+              isActive
+                ? 'bg-primary text-white shadow-[0_0_10px_rgba(37,140,244,0.5)]'
+                : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700'
+            }`}
+          >
+            {isActive
+              ? <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: "'FILL' 1" }}>play_arrow</span>
+              : idx}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className={`text-sm mb-1 group-hover:text-primary transition-colors ${
+              isActive ? 'font-bold text-slate-900 dark:text-white' : 'font-medium text-slate-600 dark:text-slate-300'
+            }`}>
+              {video.title}
+            </h3>
+            <div className={`flex items-center gap-2 text-[10px] ${isActive ? 'text-slate-400' : 'text-slate-500 group-hover:text-slate-400'}`}>
+              <span className={`px-1.5 rounded border ${isActive ? 'bg-primary/10 text-primary border-primary/20' : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700'}`}>
+                {video.category}
+              </span>
+              <span>&bull;</span>
+              <span>{video.duration}</span>
+            </div>
+          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); onSelectVideo(video); }}
+            className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+              isActive
+                ? 'bg-primary text-white'
+                : 'bg-slate-200 dark:bg-slate-700 text-slate-500 opacity-0 group-hover:opacity-100 hover:bg-primary hover:text-white'
+            }`}
+            title={`Play ${video.title}`}
+          >
+            <span className="material-symbols-outlined text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>play_arrow</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 interface IgniteSidebarProps {
   activeVideoId: string;
   onSelectVideo: (video: Video) => void;
@@ -84,9 +184,11 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseNames, setCourseNames] = useState<Record<string, string>>({});
   const [videoCourseMap, setVideoCourseMap] = useState<Record<string, string>>({});
+  // Default: all courses collapsed — user expands what they need
   const [collapsedCourses, setCollapsedCourses] = useState<Set<string>>(new Set());
+  const listRef = useRef<VariableSizeList<RowData>>(null);
 
-  // Single load: fetch course list + all videos in parallel (both cached in Redis)
+  // Single load: 2 parallel cached requests
   useEffect(() => {
     Promise.all([
       api.get<Course[]>('/video/courses'),
@@ -98,17 +200,10 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
       setCourseNames(names);
 
       const vids: Video[] = apiVideos.map((v) => ({
-        id: v.id,
-        slug: v.slug,
-        title: v.title,
-        category: v.category,
-        duration: formatDuration(v.duration_s),
-        duration_s: v.duration_s,
-        description: v.description,
-        hls_path: v.hls_path,
-        thumbnail: v.thumbnail,
-        course_id: v.course_id || null,
-        sort_order: v.sort_order,
+        id: v.id, slug: v.slug, title: v.title, category: v.category,
+        duration: formatDuration(v.duration_s), duration_s: v.duration_s,
+        description: v.description, hls_path: v.hls_path, thumbnail: v.thumbnail,
+        course_id: v.course_id || null, sort_order: v.sort_order,
         transcript_status: v.transcript_status,
       }));
 
@@ -122,17 +217,24 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
 
       if (onCoursesLoaded) onCoursesLoaded(courseList, {});
 
-      // Select video from URL or default to first
+      // Default: all courses collapsed; expand only the active one
+      const allCollapsed = new Set(courseList.map((c) => c.id));
+
       if (urlSlug) {
         const match = vids.find((v) => v.slug === urlSlug);
-        if (match) onSelectVideo(match);
+        if (match) {
+          onSelectVideo(match);
+          if (match.course_id) allCollapsed.delete(match.course_id);
+        }
       } else if (vids.length > 0) {
         onSelectVideo(vids[0]);
+        if (vids[0].course_id) allCollapsed.delete(vids[0].course_id);
       }
+      setCollapsedCourses(allCollapsed);
     }).catch(() => setLoaded(true));
   }, []);
 
-  const toggleCourseCollapse = useCallback((courseId: string) => {
+  const toggleCourse = useCallback((courseId: string) => {
     setCollapsedCourses((prev) => {
       const next = new Set(prev);
       if (next.has(courseId)) next.delete(courseId);
@@ -141,21 +243,21 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
     });
   }, []);
 
-  const allCourseIds = courses.map((c) => c.id);
+  const allCourseIds = useMemo(() => courses.map((c) => c.id), [courses]);
   const allCollapsed = allCourseIds.length > 0 && allCourseIds.every((id) => collapsedCourses.has(id));
   const toggleCollapseAll = useCallback(() => {
     setCollapsedCourses(allCollapsed ? new Set() : new Set(allCourseIds));
   }, [allCollapsed, allCourseIds]);
 
-  const filteredVideos = videos.filter((v) => {
+  const filteredVideos = useMemo(() => videos.filter((v) => {
     const matchesCategory = activeCategory === 'All' || v.category === activeCategory;
     const matchesSearch = v.title.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
-  });
+  }), [videos, activeCategory, searchQuery]);
 
-  // Group filtered videos by course
-  const groupedVideos = (() => {
-    const groups: { courseId: string; courseName: string; courseSlug: string; videos: Video[] }[] = [];
+  // Build grouped structure
+  const groupedVideos = useMemo(() => {
+    const groups: { courseId: string; courseName: string; videos: Video[] }[] = [];
     const courseMap = new Map<string, Video[]>();
     const uncategorized: Video[] = [];
     for (const v of filteredVideos) {
@@ -169,20 +271,50 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
     }
     for (const course of courses) {
       const vids = courseMap.get(course.id);
-      if (vids && vids.length > 0) {
-        groups.push({ courseId: course.id, courseName: courseNames[course.id] || 'Course', courseSlug: course.slug, videos: vids });
+      if (vids && vids.length > 0)
+        groups.push({ courseId: course.id, courseName: courseNames[course.id] || 'Course', videos: vids });
+    }
+    if (uncategorized.length > 0)
+      groups.push({ courseId: '__uncategorized__', courseName: 'Videos', videos: uncategorized });
+    return groups;
+  }, [filteredVideos, courses, courseNames, videoCourseMap]);
+
+  // Flat item list for react-window
+  const flatItems = useMemo<FlatItem[]>(() => {
+    const items: FlatItem[] = [];
+    let idx = 0;
+    for (const group of groupedVideos) {
+      items.push({ type: 'header', courseId: group.courseId, courseName: group.courseName, videoCount: group.videos.length });
+      if (!collapsedCourses.has(group.courseId)) {
+        for (const video of group.videos) {
+          idx++;
+          items.push({ type: 'video', video, idx });
+        }
       }
     }
-    if (uncategorized.length > 0) {
-      groups.push({ courseId: '__uncategorized__', courseName: 'Videos', courseSlug: '', videos: uncategorized });
-    }
-    return groups;
-  })();
+    return items;
+  }, [groupedVideos, collapsedCourses]);
 
-  let globalIdx = 0;
+  // Reset list sizing cache when flat items change
+  useEffect(() => {
+    listRef.current?.resetAfterIndex(0, true);
+  }, [flatItems]);
+
+  const itemSize = useCallback((index: number) => {
+    return flatItems[index]?.type === 'header' ? HEADER_H : VIDEO_H;
+  }, [flatItems]);
+
+  const listData = useMemo<RowData>(() => ({
+    items: flatItems,
+    activeVideoId,
+    collapsedCourses,
+    onSelectVideo,
+    onToggleCourse: toggleCourse,
+  }), [flatItems, activeVideoId, collapsedCourses, onSelectVideo, toggleCourse]);
 
   return (
     <aside className="w-80 bg-sidebar-light dark:bg-sidebar-dark border-r border-slate-200 dark:border-white/5 flex flex-col shrink-0 z-40 font-sans">
+      {/* Top controls */}
       <div className="p-4 border-b border-slate-200 dark:border-white/5">
         {onBrowseCourses && (
           <button
@@ -231,100 +363,35 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      {/* Virtualized video list */}
+      <div className="flex-1 min-h-0">
         {!loaded ? (
-          <div className="flex items-center justify-center py-12">
+          <div className="flex items-center justify-center h-full">
             <span className="material-symbols-outlined text-2xl text-slate-400 animate-spin">progress_activity</span>
           </div>
-        ) : groupedVideos.length === 0 ? (
+        ) : flatItems.length === 0 ? (
           <div className="text-center py-12">
             <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600 block mb-3">video_library</span>
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
               {searchQuery ? 'No videos match your search.' : 'No content available yet.'}
             </p>
           </div>
         ) : (
-          groupedVideos.map((group) => {
-            const isCollapsed = collapsedCourses.has(group.courseId);
-            return (
-              <div key={group.courseId}>
-                <div className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-white/5">
-                  <button
-                    onClick={() => toggleCourseCollapse(group.courseId)}
-                    className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors"
-                  >
-                    <span className={`material-symbols-outlined text-sm text-primary transition-transform duration-200 ${isCollapsed ? '' : 'rotate-90'}`}>
-                      chevron_right
-                    </span>
-                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex-1 text-left truncate">
-                      {group.courseName}
-                    </span>
-                    <span className="text-[10px] text-slate-400 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded-full">
-                      {group.videos.length}
-                    </span>
-                  </button>
-                </div>
-                {!isCollapsed && (
-                  <div className="p-2 space-y-1.5">
-                    {group.videos.map((video) => {
-                      globalIdx++;
-                      const isActive = video.id === activeVideoId;
-                      return (
-                        <div
-                          key={video.id}
-                          onClick={() => onSelectVideo(video)}
-                          className={`p-3 rounded-xl cursor-pointer group transition-all ${
-                            isActive
-                              ? 'active-lesson bg-primary/5 border border-primary/20'
-                              : 'border border-transparent hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:border-slate-200 dark:hover:border-slate-700'
-                          }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div
-                              className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold mt-0.5 ${
-                                isActive
-                                  ? 'bg-primary text-white shadow-[0_0_10px_rgba(37,140,244,0.5)]'
-                                  : 'bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700'
-                              }`}
-                            >
-                              {isActive ? <span className="material-symbols-outlined text-[11px]" style={{ fontVariationSettings: "'FILL' 1" }}>play_arrow</span> : globalIdx}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h3
-                                className={`text-sm mb-1 group-hover:text-primary transition-colors ${
-                                  isActive ? 'font-bold text-slate-900 dark:text-white' : 'font-medium text-slate-600 dark:text-slate-300'
-                                }`}
-                              >
-                                {video.title}
-                              </h3>
-                              <div className={`flex items-center gap-2 text-[10px] ${isActive ? 'text-slate-400' : 'text-slate-500 group-hover:text-slate-400'}`}>
-                                <span className={`px-1.5 rounded border ${isActive ? 'bg-primary/10 text-primary border-primary/20' : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700'}`}>
-                                  {video.category}
-                                </span>
-                                <span>&bull;</span>
-                                <span>{video.duration}</span>
-                              </div>
-                            </div>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); onSelectVideo(video); }}
-                              className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-all ${
-                                isActive
-                                  ? 'bg-primary text-white'
-                                  : 'bg-slate-200 dark:bg-slate-700 text-slate-500 opacity-0 group-hover:opacity-100 hover:bg-primary hover:text-white'
-                              }`}
-                              title={`Play ${video.title}`}
-                            >
-                              <span className="material-symbols-outlined text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>play_arrow</span>
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })
+          <AutoSizer>
+            {({ height, width }) => (
+              <VariableSizeList<RowData>
+                ref={listRef}
+                height={height}
+                width={width}
+                itemCount={flatItems.length}
+                itemSize={itemSize}
+                itemData={listData}
+                overscanCount={8}
+              >
+                {Row}
+              </VariableSizeList>
+            )}
+          </AutoSizer>
         )}
       </div>
     </aside>
