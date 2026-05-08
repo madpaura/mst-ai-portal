@@ -126,7 +126,7 @@ def _build_saml_settings() -> dict:
                 "url": settings.SAML_SP_SLS_URL,
                 "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
             },
-            "NameIDFormat": "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
+            "NameIDFormat": "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified",
             "x509cert": settings.SAML_SP_CERT,
             "privateKey": settings.SAML_SP_KEY,
         },
