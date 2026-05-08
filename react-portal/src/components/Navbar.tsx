@@ -117,7 +117,26 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
                     {isAdmin ? 'Admin Panel' : 'Creator Panel'}
                   </button>
                 )}
-                <span className="text-sm text-slate-600 dark:text-slate-300">{user.display_name}</span>
+                <div className="relative group">
+                  <span className="text-sm text-slate-600 dark:text-slate-300 cursor-default select-none">
+                    {user.display_name}
+                  </span>
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 z-50 pointer-events-none">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{user.display_name}</p>
+                    {user.dept_name_en && (
+                      <p className="text-xs text-primary mt-1 flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[14px]">corporate_fare</span>
+                        {user.dept_name_en}
+                      </p>
+                    )}
+                    {user.email && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1 truncate">
+                        <span className="material-symbols-outlined text-[14px]">mail</span>
+                        {user.email}
+                      </p>
+                    )}
+                  </div>
+                </div>
                 <button
                   onClick={handleLogout}
                   className="text-sm text-slate-500 dark:text-slate-400 hover:text-red-400 transition-colors"

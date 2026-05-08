@@ -15,6 +15,7 @@ export const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   const isSamlMode = AUTH_MODE === 'saml';
+  const forceLocal = searchParams.get('local') === '1';
 
   // SAML mode: auto-redirect to IdP unless we're handling the callback
   useEffect(() => {
@@ -57,8 +58,8 @@ export const Login: React.FC = () => {
     }
   };
 
-  // SAML mode: show a redirecting spinner while the browser navigates to the IdP
-  if (isSamlMode) {
+  // SAML mode with ?local=1 — fall through to local login form below
+  if (isSamlMode && !forceLocal) {
     return (
       <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-center justify-center">
         <div className="absolute inset-0 circuit-bg opacity-30" />
@@ -102,13 +103,21 @@ export const Login: React.FC = () => {
                 </p>
               </>
             )}
+            <div className="mt-6 text-center">
+              <a
+                href="/login?local=1"
+                className="text-xs text-slate-600 dark:text-slate-600 hover:text-slate-400 dark:hover:text-slate-400 transition-colors"
+              >
+                Admin
+              </a>
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  // Local / open auth mode
+  // Local / open auth mode (also used when ?local=1 overrides SAML)
   return (
     <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-center justify-center">
       <div className="absolute inset-0 circuit-bg opacity-30" />

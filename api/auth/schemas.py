@@ -20,6 +20,7 @@ class UserResponse(BaseModel):
     display_name: str
     initials: Optional[str] = None
     role: str
+    dept_name_en: Optional[str] = None
     created_at: datetime
 
 

@@ -8,6 +8,7 @@ interface User {
   display_name: string;
   initials: string | null;
   role: string;
+  dept_name_en: string | null;
   created_at: string;
 }
 

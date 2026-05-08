@@ -76,6 +76,7 @@ async def get_me(user: dict = Depends(get_current_user)):
         display_name=user["display_name"],
         initials=user.get("initials"),
         role=user["role"],
+        dept_name_en=user.get("dept_name_en"),
         created_at=user["created_at"],
     )
 
@@ -112,6 +113,7 @@ async def update_me(req: UserUpdateRequest, user: dict = Depends(get_current_use
         display_name=updated["display_name"],
         initials=updated.get("initials"),
         role=updated["role"],
+        dept_name_en=updated.get("dept_name_en"),
         created_at=updated["created_at"],
     )
 
