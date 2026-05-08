@@ -148,8 +148,8 @@ def _build_saml_settings() -> dict:
             "logoutRequestSigned": bool(settings.SAML_SP_KEY),
             "logoutResponseSigned": bool(settings.SAML_SP_KEY),
             "signMetadata": False,
-            "wantMessagesSigned": False,
-            "wantAssertionsSigned": True,
+            "wantMessagesSigned": True,
+            "wantAssertionsSigned": False,
             "wantAssertionsEncrypted": False,
             "signatureAlgorithm": "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256",
             "digestAlgorithm": "http://www.w3.org/2001/04/xmlenc#sha256",
@@ -329,7 +329,11 @@ async def saml_acs(request: Request):
         raise HTTPException(status_code=503, detail="python3-saml not installed")
 
     auth = OneLogin_Saml2_Auth(req_dict, _build_saml_settings())
-    auth.process_response()
+    try:
+        auth.process_response()
+    except Exception as exc:
+        logger.exception("SAML ACS: process_response raised an exception: {}", exc)
+        raise HTTPException(status_code=401, detail=f"SAML processing error: {exc}") from exc
 
     errors = auth.get_errors()
     if errors:
