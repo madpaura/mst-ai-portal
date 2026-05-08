@@ -17,9 +17,9 @@ export const Login: React.FC = () => {
   const isSamlMode = AUTH_MODE === 'saml';
   const forceLocal = searchParams.get('local') === '1';
 
-  // SAML mode: auto-redirect to IdP unless we're handling the callback
+  // SAML mode: auto-redirect to IdP unless we're handling the callback or forced local
   useEffect(() => {
-    if (!isSamlMode) return;
+    if (!isSamlMode || forceLocal) return;
     const samlCode = searchParams.get('saml_code');
     if (samlCode) {
       // Callback path — exchange code for JWT
