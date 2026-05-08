@@ -173,12 +173,16 @@ def _get_saml_auth(request: Request):
 
 def _prepare_fastapi_request(request: Request) -> dict:
     # FastAPI/Starlette — reconstruct the dict python3-saml expects.
-    # X-Forwarded-Proto must be set by Nginx (see Step 5 in the methodology doc).
+    # X-Forwarded-Proto must be set by Nginx.
+    # X-Forwarded-Prefix carries the path prefix that Nginx strips before
+    # forwarding (e.g. "/backend"), so python3-saml can reconstruct the
+    # correct public ACS URL for Destination validation.
     proto = request.headers.get("x-forwarded-proto", "https" if request.url.scheme == "https" else "http")
+    prefix = request.headers.get("x-forwarded-prefix", "").rstrip("/")
     return {
         "https": "on" if proto == "https" else "off",
         "http_host": request.headers.get("x-forwarded-host", request.headers.get("host", str(request.url.hostname))),
-        "script_name": request.url.path,
+        "script_name": prefix + request.url.path,
         "get_data": dict(request.query_params),
         "post_data": {},  # filled per-endpoint for ACS/SLS
     }
