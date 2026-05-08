@@ -29,8 +29,8 @@ from functools import lru_cache
 from typing import Optional
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.responses import JSONResponse, RedirectResponse
 from loguru import logger
 
 from auth.service import create_access_token
@@ -395,11 +395,15 @@ async def saml_acs(request: Request):
     return RedirectResponse(url=redirect_url, status_code=302)
 
 
+_COOKIE_NAME = "mst_token"
+
+
 @router.get("/callback")
-async def saml_callback(saml_code: str):
+async def saml_callback(saml_code: str, response: Response):
     """
     Called by the React SPA after being redirected from /saml/acs.
-    Exchanges the one-time saml_code for a JWT access token.
+    Exchanges the one-time saml_code for a JWT access token and sets
+    the same httpOnly cookie that the regular /auth/login endpoint uses.
     """
     logger.info("SAML callback: code exchange requested")
     entry = _consume_saml_code(saml_code)
@@ -409,6 +413,17 @@ async def saml_callback(saml_code: str):
 
     token = create_access_token(entry["user_id"], entry["role"])
     logger.info("SAML callback: JWT issued | user_id={} role={}", entry["user_id"], entry["role"])
+
+    cookie_max_age = int(settings.JWT_EXPIRE_HOURS * 3600)
+    response.set_cookie(
+        key=_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=False,      # Nginx terminates TLS; cookie travels over internal HTTP
+        samesite="lax",
+        max_age=cookie_max_age,
+        path="/",
+    )
     return {"access_token": token, "token_type": "bearer"}
 
 
