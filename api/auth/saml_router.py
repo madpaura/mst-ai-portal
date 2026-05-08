@@ -214,6 +214,8 @@ def _resolve_role(groups: list[str]) -> str:
     return settings.SAML_DEFAULT_ROLE
 
 
+_COOKIE_NAME = "mst_token"
+
 # ── DB helpers ───────────────────────────────────────────────────────────────
 
 async def _upsert_saml_user(
@@ -384,18 +386,24 @@ async def saml_acs(request: Request):
         dept_name_en=dept_name,
     )
 
-    # Issue one-time code; React SPA will exchange it for a JWT
-    code = _issue_saml_code(str(user["id"]), user["role"])
-
+    # Set the httpOnly cookie directly in the redirect response.
+    # This avoids the JS fetch/cross-origin cookie problem: the browser
+    # receives Set-Cookie in the ACS 302 response, stores it for the
+    # portal domain, then follows the redirect. No code exchange needed.
+    token = create_access_token(str(user["id"]), user["role"])
     portal_origin = settings.PORTAL_URL.rstrip("/")
-    # Redirect to frontend /login with the one-time code (ignore RelayState
-    # for the final redirect — code exchange always goes to /login)
-    redirect_url = f"{portal_origin}/login?saml_code={urllib.parse.quote(code)}"
     logger.info("SAML ACS: redirecting user to portal | user_id={}", user["id"])
-    return RedirectResponse(url=redirect_url, status_code=302)
-
-
-_COOKIE_NAME = "mst_token"
+    resp = RedirectResponse(url=f"{portal_origin}/", status_code=302)
+    resp.set_cookie(
+        key=_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=int(settings.JWT_EXPIRE_HOURS * 3600),
+        path="/",
+    )
+    return resp
 
 
 @router.get("/callback")
