@@ -127,8 +127,6 @@ def _build_saml_settings() -> dict:
                 "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
             },
             "NameIDFormat": "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified",
-            "x509cert": settings.SAML_SP_CERT,
-            "privateKey": settings.SAML_SP_KEY,
         },
         "idp": {
             "entityId": settings.SAML_IDP_ENTITY_ID,
@@ -143,16 +141,36 @@ def _build_saml_settings() -> dict:
             "x509cert": settings.SAML_IDP_CERT,
         },
         "security": {
-            "nameIdEncrypted": False,
-            "authnRequestsSigned": bool(settings.SAML_SP_KEY),
-            "logoutRequestSigned": bool(settings.SAML_SP_KEY),
-            "logoutResponseSigned": bool(settings.SAML_SP_KEY),
+            "authnRequestsSigned": False,
+            "logoutRequestSigned": False,
+            "logoutResponseSigned": False,
             "signMetadata": False,
-            "wantMessagesSigned": True,
+            "wantMessagesSigned": False,
             "wantAssertionsSigned": False,
+            "wantNameId": False,
+            "wantNameIdEncrypted": False,
             "wantAssertionsEncrypted": False,
-            "signatureAlgorithm": "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256",
-            "digestAlgorithm": "http://www.w3.org/2001/04/xmlenc#sha256",
+            "requestedAuthnContext": False,
+            "signatureAlgorithm": "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
+            "digestAlgorithm": "http://www.w3.org/2000/09/xmldsig#sha1",
+            "rejectDeprecatedAlgorithm": True,
+        },
+        "contactPerson": {
+            "technical": {
+                "givenName": "technical_name",
+                "emailAddress": "technical@example.com",
+            },
+            "support": {
+                "givenName": "support_name",
+                "emailAddress": "support@example.com",
+            },
+        },
+        "organization": {
+            "en-US": {
+                "name": "sp_test",
+                "displayname": "SP test",
+                "url": "http://sp.example.com",
+            },
         },
     }
 
