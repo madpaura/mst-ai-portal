@@ -203,15 +203,17 @@ def _parse_group_role_map() -> dict[str, str]:
     return result
 
 
-def _resolve_role(groups: list[str]) -> str:
+def _resolve_role(groups: list[str]) -> str | None:
+    """Return the role from SAML group mapping, or None if no group matched.
+    None means 'no SAML opinion' — the caller should preserve the existing role."""
     group_map = _parse_group_role_map()
     for g in groups:
         role = group_map.get(g)
         if role:
             logger.debug("Resolved role '{}' from group '{}'", role, g)
             return role
-    logger.debug("No group match; using default role '{}'", settings.SAML_DEFAULT_ROLE)
-    return settings.SAML_DEFAULT_ROLE
+    logger.debug("No SAML group match — existing role will be preserved for known users")
+    return None
 
 
 _COOKIE_NAME = "mst_token"
@@ -219,11 +221,15 @@ _COOKIE_NAME = "mst_token"
 # ── DB helpers ───────────────────────────────────────────────────────────────
 
 async def _upsert_saml_user(
-    email: str, display_name: str, role: str,
+    email: str, display_name: str, role: str | None,
     login_id: str = "", dept_name_en: str = "",
 ) -> dict:
-    """Create or update a user record for a SAML-authenticated identity."""
-    logger.info("Upserting SAML user | email={} login_id={} role={}", email, login_id, role)
+    """Create or update a user record for a SAML-authenticated identity.
+
+    role=None means no SAML group matched — preserve the existing DB role
+    so manually-promoted admins are not downgraded on every login.
+    """
+    logger.info("Upserting SAML user | email={} login_id={} saml_role={}", email, login_id, role)
     db = await get_db()
     username = login_id or email.split("@")[0]
     existing = await db.fetchrow(
@@ -232,7 +238,9 @@ async def _upsert_saml_user(
         email,
     )
     if existing:
-        logger.debug("Updating existing SAML user | id={} email={}", existing["id"], email)
+        # Only overwrite role when SAML groups explicitly resolved one.
+        effective_role = role if role is not None else existing["role"]
+        logger.debug("Updating existing SAML user | id={} role={}->{}", existing["id"], existing["role"], effective_role)
         await db.execute(
             """
             UPDATE users
@@ -246,7 +254,7 @@ async def _upsert_saml_user(
              WHERE id = $6
             """,
             display_name,
-            role,
+            effective_role,
             email,
             login_id or None,
             dept_name_en or None,
@@ -254,7 +262,9 @@ async def _upsert_saml_user(
         )
         return dict(await db.fetchrow("SELECT * FROM users WHERE id = $1", existing["id"]))
 
-    logger.info("Provisioning new SAML user | email={} role={}", email, role)
+    # New user — use resolved role or fall back to the configured default.
+    new_role = role if role is not None else settings.SAML_DEFAULT_ROLE
+    logger.info("Provisioning new SAML user | email={} role={}", email, new_role)
     initials = "".join(p[0].upper() for p in display_name.split()[:2]) if display_name else username[:2].upper()
     row = await db.fetchrow(
         """
@@ -277,7 +287,7 @@ async def _upsert_saml_user(
         email,
         display_name or username,
         initials,
-        role,
+        new_role,
         email,
         login_id or None,
         dept_name_en or None,
