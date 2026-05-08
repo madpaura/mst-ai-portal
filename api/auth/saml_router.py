@@ -212,13 +212,14 @@ def _resolve_role(groups: list[str]) -> str:
 
 # ── DB helpers ───────────────────────────────────────────────────────────────
 
-async def _upsert_saml_user(email: str, display_name: str, role: str) -> dict:
+async def _upsert_saml_user(
+    email: str, display_name: str, role: str,
+    login_id: str = "", dept_name_en: str = "",
+) -> dict:
     """Create or update a user record for a SAML-authenticated identity."""
-    logger.info("Upserting SAML user | email={} role={}", email, role)
+    logger.info("Upserting SAML user | email={} login_id={} role={}", email, login_id, role)
     db = await get_db()
-    # Use the local part of the UPN/email as username
-    username = email.split("@")[0]
-    # Look up by saml_name_id first (most reliable), fall back to email
+    username = login_id or email.split("@")[0]
     existing = await db.fetchrow(
         "SELECT * FROM users WHERE saml_name_id = $1 OR email = $2 LIMIT 1",
         email,
@@ -233,24 +234,27 @@ async def _upsert_saml_user(email: str, display_name: str, role: str) -> dict:
                    role          = $2,
                    saml_name_id  = $3,
                    auth_provider = 'saml',
+                   login_id      = $4,
+                   dept_name_en  = $5,
                    last_login    = now()
-             WHERE id = $4
+             WHERE id = $6
             """,
             display_name,
             role,
             email,
+            login_id or None,
+            dept_name_en or None,
             existing["id"],
         )
         return dict(await db.fetchrow("SELECT * FROM users WHERE id = $1", existing["id"]))
 
-    # Auto-provision new SAML user (no local password)
     logger.info("Provisioning new SAML user | email={} role={}", email, role)
     initials = "".join(p[0].upper() for p in display_name.split()[:2]) if display_name else username[:2].upper()
     row = await db.fetchrow(
         """
         INSERT INTO users (username, email, display_name, initials, password_hash, role,
-                           saml_name_id, auth_provider)
-        VALUES ($1, $2, $3, $4, NULL, $5, $6, 'saml')
+                           saml_name_id, auth_provider, login_id, dept_name_en)
+        VALUES ($1, $2, $3, $4, NULL, $5, $6, 'saml', $7, $8)
         ON CONFLICT (username) DO UPDATE
           SET email         = EXCLUDED.email,
               display_name  = EXCLUDED.display_name,
@@ -258,6 +262,8 @@ async def _upsert_saml_user(email: str, display_name: str, role: str) -> dict:
               role          = EXCLUDED.role,
               saml_name_id  = EXCLUDED.saml_name_id,
               auth_provider = 'saml',
+              login_id      = EXCLUDED.login_id,
+              dept_name_en  = EXCLUDED.dept_name_en,
               last_login    = now()
         RETURNING *
         """,
@@ -267,6 +273,8 @@ async def _upsert_saml_user(email: str, display_name: str, role: str) -> dict:
         initials,
         role,
         email,
+        login_id or None,
+        dept_name_en or None,
     )
     return dict(row)
 
@@ -329,25 +337,44 @@ async def saml_acs(request: Request):
         raise HTTPException(status_code=401, detail="SAML authentication failed")
 
     attrs = auth.get_attributes()
-    name_id = auth.get_nameid()  # email / UPN
+    name_id = auth.get_nameid()  # UPN / NameID from IdP
     logger.info("SAML ACS: authenticated | name_id={}", name_id)
 
-    # Extract display name from SAML attributes
+    # SEC-schema SAML claims
+    SEC = "http://schemas.sec.com/2018/05/identity/claims/"
+    login_id    = (attrs.get(SEC + "LoginId",    [None])[0] or "").strip()
+    email       = (attrs.get(SEC + "Mail",       [None])[0] or name_id).strip()
+    dept_name   = (attrs.get(SEC + "DeptName_EN",[None])[0] or "").strip()
+    username_en = (attrs.get(SEC + "UserName_EN",[None])[0] or "").strip()
+
+    # Fallback display name from standard MS claims if SEC claim is absent
     NAME_CLAIM = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"
     DISP_CLAIM = "http://schemas.microsoft.com/ws/2008/06/identity/claims/windowsaccountname"
     display_name = (
-        attrs.get(NAME_CLAIM, [None])[0]
+        username_en
+        or attrs.get(NAME_CLAIM, [None])[0]
         or attrs.get(DISP_CLAIM, [None])[0]
         or name_id
     )
 
-    # Extract group memberships
+    logger.debug(
+        "SAML ACS: login_id={} email={} dept_name_en={} display_name={}",
+        login_id, email, dept_name, display_name,
+    )
+
+    # Extract group memberships for role resolution
     GROUP_CLAIM = "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups"
     groups = attrs.get(GROUP_CLAIM, [])
-    logger.debug("SAML ACS: groups={} display_name={}", groups, display_name)
+    logger.debug("SAML ACS: groups={}", groups)
 
     role = _resolve_role(groups)
-    user = await _upsert_saml_user(email=name_id, display_name=display_name, role=role)
+    user = await _upsert_saml_user(
+        email=email,
+        display_name=display_name,
+        role=role,
+        login_id=login_id,
+        dept_name_en=dept_name,
+    )
 
     # Issue one-time code; React SPA will exchange it for a JWT
     code = _issue_saml_code(str(user["id"]), user["role"])
