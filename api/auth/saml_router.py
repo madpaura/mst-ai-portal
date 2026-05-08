@@ -107,12 +107,13 @@ def _build_saml_settings() -> dict:
     saml/settings.json if it exists (for cert file-based config).
     """
     json_path = settings.SAML_SETTINGS_PATH
+    logger.info("SAML settings path: {}", json_path)
     if os.path.isfile(json_path):
         logger.info("Loading SAML settings from file: {}", json_path)
         with open(json_path) as f:
             return json.load(f)
 
-    logger.info("Building SAML settings from environment variables")
+    logger.warning("SAML settings file not found at '{}' — falling back to environment variables", json_path)
     return {
         "strict": settings.SAML_STRICT,
         "debug": False,
