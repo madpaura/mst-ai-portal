@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
+import { useTheme } from '../context/theme';
+import type { PortalTheme } from '../context/theme';
 
 interface ForgeSetting {
   id: string;
@@ -101,6 +103,23 @@ export const AdminSettings: React.FC = () => {
   // Cache stats
   const [cacheStats, setCacheStats] = useState<Record<string, any> | null>(null);
   const [cacheFlushing, setCacheFlushing] = useState(false);
+
+  // Portal theme
+  const { portalTheme, applyPortalTheme } = useTheme();
+  const [themeSaving, setThemeSaving] = useState(false);
+
+  const handleThemeSave = async (theme: PortalTheme) => {
+    setThemeSaving(true);
+    try {
+      await api.put('/settings/admin/portal_theme', { value: theme });
+      applyPortalTheme(theme);
+      showMsg('success', `Theme set to "${theme}"`);
+    } catch (err: any) {
+      showMsg('error', err.message);
+    } finally {
+      setThemeSaving(false);
+    }
+  };
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
@@ -453,6 +472,81 @@ export const AdminSettings: React.FC = () => {
           <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
             <span className="material-symbols-outlined text-[13px] text-green-400">check_circle</span>
             Currently set to <span className="text-slate-400 font-mono ml-1">{contactEmailSaved}</span>
+          </p>
+        )}
+      </div>
+
+      {/* ── Portal Theme Card ───────────────────────────────────── */}
+      <div className="bg-card-dark rounded-xl border border-white/5 p-6 mb-8">
+        <div className="flex items-center gap-3 mb-5">
+          <span className="material-symbols-outlined text-primary">palette</span>
+          <div>
+            <h2 className="text-base font-bold text-white">Portal Theme</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Choose the visual style applied portal-wide to all users</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Default theme option */}
+          <button
+            onClick={() => handleThemeSave('default')}
+            disabled={themeSaving || portalTheme === 'default'}
+            className={`relative flex flex-col gap-3 p-4 rounded-xl border-2 text-left transition-all ${
+              portalTheme === 'default'
+                ? 'border-primary bg-primary/5'
+                : 'border-white/10 hover:border-white/20 bg-slate-900/50'
+            }`}
+          >
+            {portalTheme === 'default' && (
+              <span className="absolute top-3 right-3 material-symbols-outlined text-primary text-[18px]">check_circle</span>
+            )}
+            {/* Mini preview */}
+            <div className="rounded-lg overflow-hidden border border-white/10 bg-[#0a0f14] p-2">
+              <div className="h-2 w-16 rounded bg-[#258cf4]/30 mb-1.5" />
+              <div className="flex gap-1.5">
+                <div className="flex-1 h-10 rounded bg-[#258cf4]/10 border border-[#258cf4]/20" style={{ boxShadow: '0 0 8px rgba(37,140,244,0.15)' }} />
+                <div className="flex-1 h-10 rounded bg-[#258cf4]/10 border border-[#258cf4]/20" style={{ boxShadow: '0 0 8px rgba(37,140,244,0.15)' }} />
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">Default</p>
+              <p className="text-xs text-slate-400 mt-0.5">Blue glass cards, neon glow, circuit background</p>
+            </div>
+          </button>
+
+          {/* Simple (GitHub) theme option */}
+          <button
+            onClick={() => handleThemeSave('simple')}
+            disabled={themeSaving || portalTheme === 'simple'}
+            className={`relative flex flex-col gap-3 p-4 rounded-xl border-2 text-left transition-all ${
+              portalTheme === 'simple'
+                ? 'border-primary bg-primary/5'
+                : 'border-white/10 hover:border-white/20 bg-slate-900/50'
+            }`}
+          >
+            {portalTheme === 'simple' && (
+              <span className="absolute top-3 right-3 material-symbols-outlined text-primary text-[18px]">check_circle</span>
+            )}
+            {/* Mini preview — split light/dark halves */}
+            <div className="rounded-lg overflow-hidden border border-[#30363d] flex">
+              <div className="flex-1 bg-[#ffffff] p-2">
+                <div className="h-1.5 w-8 rounded bg-[#d0d7de] mb-1.5" />
+                <div className="h-8 rounded bg-[#f6f8fa] border border-[#d0d7de]" />
+              </div>
+              <div className="flex-1 bg-[#0d1117] p-2">
+                <div className="h-1.5 w-8 rounded bg-[#30363d] mb-1.5" />
+                <div className="h-8 rounded bg-[#161b22] border border-[#30363d]" />
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">Simple</p>
+              <p className="text-xs text-slate-400 mt-0.5">GitHub-inspired flat cards, clean borders, no glow — supports light &amp; dark toggle</p>
+            </div>
+          </button>
+        </div>
+        {themeSaving && (
+          <p className="text-xs text-slate-400 mt-3 flex items-center gap-1">
+            <span className="material-symbols-outlined text-[13px] animate-spin">progress_activity</span>
+            Applying theme…
           </p>
         )}
       </div>

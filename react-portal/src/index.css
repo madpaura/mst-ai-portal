@@ -90,3 +90,63 @@
         box-shadow: 0 0 10px rgba(0, 255, 157, 0.3);
     }
 }
+
+/* ── Simple (GitHub-inspired) theme ──────────────────────────── */
+
+/* 1. Strip ALL box-shadows and text-shadows site-wide */
+.theme-simple * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+}
+
+/* 2. Remove circuit/grid background patterns */
+.theme-simple .circuit-bg,
+.theme-simple .circuit-pattern {
+    background-image: none;
+}
+
+/* 3. Hide decorative background blur blobs (blur-[120px] spheres) */
+.theme-simple .blur-\[120px\] {
+    display: none !important;
+}
+
+/* 4. Solid navbar — remove glass blur and transparency */
+.theme-simple nav {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background-color: #ffffff !important;
+}
+.dark.theme-simple nav {
+    background-color: #0d1117 !important;
+}
+
+/* 5. Simple light mode cards */
+.theme-simple .glass-card {
+    background: #ffffff;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid #d0d7de;
+    transition: border-color 0.2s ease;
+}
+.theme-simple .glass-card:hover {
+    background: #f6f8fa;
+    border-color: #0969da;
+}
+
+/* 6. Simple dark mode cards */
+.dark.theme-simple .glass-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+}
+.dark.theme-simple .glass-card:hover {
+    background: #1c2128;
+    border-color: #388bfd;
+}
+
+/* 7. neon-border-glow → plain border */
+.theme-simple .neon-border-glow {
+    border: 1px solid #d0d7de;
+}
+.dark.theme-simple .neon-border-glow {
+    border: 1px solid #30363d;
+}

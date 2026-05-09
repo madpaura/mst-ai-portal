@@ -376,8 +376,8 @@ def _extract_howto(dirpath: str, readme_content: str) -> Optional[str]:
     Extract how-to guide from a component directory (Issue #4).
     Looks for HOWTO.md, GUIDE.md, docs/howto.md, or extracts from README.
     """
-    # Check for dedicated how-to files
-    for name in ["HOWTO.md", "howto.md", "GUIDE.md", "guide.md",
+    # Check for dedicated how-to files (skill.md first — primary convention for skills)
+    for name in ["skill.md", "SKILL.md", "HOWTO.md", "howto.md", "GUIDE.md", "guide.md",
                   "docs/HOWTO.md", "docs/howto.md", "docs/guide.md",
                   "docs/getting-started.md", "docs/quickstart.md"]:
         path = os.path.join(dirpath, name)

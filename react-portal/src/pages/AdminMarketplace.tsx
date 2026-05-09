@@ -17,6 +17,8 @@ interface ForgeComponent {
   downloads: number;
   tags: string[];
   is_active: boolean;
+  howto_guide: string | null;
+  howto_guide_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -34,12 +36,14 @@ interface FormData {
   badge: string;
   author: string;
   tags: string;
+  howto_guide_url: string;
 }
 
 const EMPTY_FORM: FormData = {
   slug: '', name: '', component_type: 'agent', description: '',
   long_description: '', icon: 'smart_toy', icon_color: 'text-primary',
   version: 'v1.0.0', install_command: '', badge: '', author: '', tags: '',
+  howto_guide_url: '',
 };
 
 const ICON_OPTIONS = [
@@ -70,6 +74,7 @@ export const AdminMarketplace: React.FC = () => {
 
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [beautifying, setBeautifying] = useState(false);
+  const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
 
   // Contributing guide video setting
   const [contributingVideoSlug, setContributingVideoSlug] = useState('');
@@ -147,6 +152,7 @@ export const AdminMarketplace: React.FC = () => {
       badge: comp.badge || '',
       author: comp.author || '',
       tags: comp.tags.join(', '),
+      howto_guide_url: comp.howto_guide_url || '',
     });
   };
 
@@ -163,6 +169,7 @@ export const AdminMarketplace: React.FC = () => {
       badge: form.badge || null,
       description: form.description || null,
       long_description: form.long_description || null,
+      howto_guide_url: form.howto_guide_url.trim() || null,
     };
 
     try {
@@ -201,6 +208,17 @@ export const AdminMarketplace: React.FC = () => {
       await api.delete(`/admin/forge/components/${comp.id}`);
       await fetchComponents();
       showMsg('success', 'Component deleted');
+    } catch (err: any) {
+      showMsg('error', err.message);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    try {
+      await api.delete('/admin/forge/components');
+      setDeleteAllConfirm(false);
+      await fetchComponents();
+      showMsg('success', 'All components deleted');
     } catch (err: any) {
       showMsg('error', err.message);
     }
@@ -250,10 +268,32 @@ export const AdminMarketplace: React.FC = () => {
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Marketplace Catalog</h1>
           <p className="text-sm text-slate-400 mt-1">{components.length} component(s) in catalog</p>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
-          <span className="material-symbols-outlined text-sm">add</span>
-          Add Component
-        </button>
+        <div className="flex items-center gap-2">
+          {!deleteAllConfirm ? (
+            <button
+              onClick={() => setDeleteAllConfirm(true)}
+              disabled={components.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/30 text-sm font-bold rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <span className="material-symbols-outlined text-sm">delete_sweep</span>
+              Delete All
+            </button>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/40">
+              <span className="text-xs text-red-400 font-medium">Delete all {components.length} components?</span>
+              <button onClick={handleDeleteAll} className="px-3 py-1 text-xs font-bold bg-red-500 hover:bg-red-600 text-white rounded transition-colors">
+                Confirm
+              </button>
+              <button onClick={() => setDeleteAllConfirm(false)} className="px-3 py-1 text-xs font-bold bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition-colors">
+                Cancel
+              </button>
+            </div>
+          )}
+          <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
+            <span className="material-symbols-outlined text-sm">add</span>
+            Add Component
+          </button>
+        </div>
       </div>
 
       {/* Contributing Guide Config */}
@@ -501,6 +541,20 @@ export const AdminMarketplace: React.FC = () => {
                 <input value={form.tags} onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
                   placeholder="verification, systemverilog, uvm"
                   className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  How-To Guide URL
+                  <span className="ml-1 text-[10px] normal-case text-slate-500 font-normal">(overrides auto-scanned skill.md guide)</span>
+                </label>
+                <input
+                  value={form.howto_guide_url}
+                  onChange={(e) => setForm((f) => ({ ...f, howto_guide_url: e.target.value }))}
+                  placeholder="https://docs.example.com/guide"
+                  type="url"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                />
               </div>
 
               <div className="flex gap-3 pt-4 border-t border-slate-200 dark:border-white/10">
