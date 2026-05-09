@@ -1,8 +1,9 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 const BETA_TAG = import.meta.env.VITE_BETA_TAG as string | undefined;
-import { AuthProvider } from './api/auth';
+const AUTH_MODE = import.meta.env.VITE_AUTH_MODE || 'open';
+import { AuthProvider, useAuth } from './api/auth';
 import { ThemeProvider } from './context/theme';
 import { Solutions } from './pages/Solutions';
 import { Marketplace } from './pages/Marketplace';
@@ -31,6 +32,16 @@ import { AdminContributions } from './pages/AdminContributions';
 import { AdminAuditLog } from './pages/AdminAuditLog';
 import { Contact } from './pages/Contact';
 import { AdminContacts } from './pages/AdminContacts';
+import { Search } from './pages/Search';
+
+function SamlGuard({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (AUTH_MODE === 'saml' && !loading && !user && location.pathname !== '/login') {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+}
 
 function App() {
   useEffect(() => {
@@ -41,6 +52,7 @@ function App() {
     <ThemeProvider>
     <BrowserRouter>
       <AuthProvider>
+        <SamlGuard>
         <Routes>
           {/* Public pages */}
           <Route path="/" element={<Solutions />} />
@@ -60,6 +72,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/contribute" element={<ContributeRequest />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/search" element={<Search />} />
 
           {/* Admin pages (protected by AdminLayout) */}
           <Route path="/admin" element={<AdminLayout />}>
@@ -79,6 +92,7 @@ function App() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </SamlGuard>
       </AuthProvider>
     </BrowserRouter>
     </ThemeProvider>

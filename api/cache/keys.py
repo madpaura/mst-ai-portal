@@ -12,8 +12,9 @@ NS_ARTICLES = "articles"
 NS_FORGE = "forge"
 NS_VIDEO = "video"
 NS_MEMES = "memes"
+NS_SEARCH = "search"
 
-ALL_NAMESPACES = [NS_SOLUTIONS, NS_ARTICLES, NS_FORGE, NS_VIDEO, NS_MEMES]
+ALL_NAMESPACES = [NS_SOLUTIONS, NS_ARTICLES, NS_FORGE, NS_VIDEO, NS_MEMES, NS_SEARCH]
 
 
 def ver_key(namespace: str) -> str:

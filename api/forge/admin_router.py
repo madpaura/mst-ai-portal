@@ -17,7 +17,10 @@ def _row_to_component(r) -> ForgeComponentResponse:
         install_command=r["install_command"], badge=r.get("badge"),
         author=r.get("author"), downloads=r["downloads"],
         tags=list(r["tags"]) if r["tags"] else [],
-        is_active=r["is_active"], created_at=r["created_at"],
+        is_active=r["is_active"],
+        howto_guide=r.get("howto_guide"),
+        howto_guide_url=r.get("howto_guide_url"),
+        created_at=r["created_at"],
         updated_at=r["updated_at"],
     )
 
@@ -40,13 +43,14 @@ async def admin_create_component(req: ForgeComponentCreate, admin: dict = Depend
         """
         INSERT INTO forge_components
             (slug, name, component_type, description, long_description, icon, icon_color,
-             version, install_command, badge, author, tags)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+             version, install_command, badge, author, tags, howto_guide, howto_guide_url)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
         RETURNING *
         """,
         req.slug, req.name, req.component_type, req.description,
         req.long_description, req.icon, req.icon_color, req.version,
         req.install_command, req.badge, req.author, req.tags,
+        req.howto_guide, req.howto_guide_url,
     )
     await cache.bump_version(cache.NS_FORGE)
     return _row_to_component(row)
@@ -76,6 +80,10 @@ async def admin_update_component(
         val = getattr(req, field, None)
         if val is not None:
             fields[field] = val
+    # Allow explicit null to clear these fields
+    for field in ["howto_guide", "howto_guide_url"]:
+        if field in req.model_fields_set:
+            fields[field] = getattr(req, field)
 
     if fields:
         fields["updated_at"] = "now()"
@@ -95,6 +103,15 @@ async def admin_update_component(
     row = await db.fetchrow("SELECT * FROM forge_components WHERE id = $1", component_id)
     await cache.bump_version(cache.NS_FORGE)
     return _row_to_component(row)
+
+
+@router.delete("/components")
+async def admin_delete_all_components(admin: dict = Depends(require_admin)):
+    db = await get_db()
+    result = await db.execute("DELETE FROM forge_components")
+    count = int(result.split()[-1]) if result else 0
+    await cache.bump_version(cache.NS_FORGE)
+    return {"message": f"Deleted {count} component(s)"}
 
 
 @router.delete("/components/{component_id}")

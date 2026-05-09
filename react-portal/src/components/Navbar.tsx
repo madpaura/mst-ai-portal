@@ -3,7 +3,9 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../api/auth';
 import { useTheme } from '../context/theme';
 import { PortalLogo } from './PortalLogo';
+import { SearchBar } from './SearchBar';
 const BETA_TAG = import.meta.env.VITE_BETA_TAG as string | undefined;
+const AUTH_MODE = import.meta.env.VITE_AUTH_MODE || 'open';
 
 interface NavbarProps {
   variant?: 'solutions' | 'marketplace' | 'ignite';
@@ -37,8 +39,8 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
   if (variant === 'solutions') {
     return (
       <nav className="fixed top-0 w-full z-50 border-b border-slate-200 dark:border-primary/10 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md font-sans">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="max-w-screen-2xl mx-auto w-full px-6 h-16 flex items-center gap-4">
+          <div className="flex items-center gap-3 flex-none">
             <Link to="/" className="flex items-center gap-2.5">
               <PortalLogo size={34} />
               <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">MST AI</span>
@@ -49,7 +51,7 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
               </span>
             )}
           </div>
-          <div className="hidden md:flex items-center gap-10">
+          <div className="hidden md:flex flex-1 items-center justify-center gap-8">
             <Link
               className={`text-sm font-medium transition-colors ${isActive('/') ? 'text-primary' : 'text-slate-500 dark:text-slate-400 hover:text-primary'}`}
               to="/"
@@ -97,7 +99,8 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
               Contact
             </Link>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 flex-none">
+          <SearchBar />
             <button
               onClick={toggleTheme}
               className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-primary transition-colors"
@@ -137,12 +140,14 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
                     )}
                   </div>
                 </div>
-                <button
-                  onClick={handleLogout}
-                  className="text-sm text-slate-500 dark:text-slate-400 hover:text-red-400 transition-colors"
-                >
-                  Sign Out
-                </button>
+                {AUTH_MODE !== 'saml' && (
+                  <button
+                    onClick={handleLogout}
+                    className="text-sm text-slate-500 dark:text-slate-400 hover:text-red-400 transition-colors"
+                  >
+                    Sign Out
+                  </button>
+                )}
               </>
             ) : (
               <button

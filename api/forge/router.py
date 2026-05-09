@@ -30,6 +30,7 @@ def _row_to_component(r) -> ForgeComponentResponse:
         tags=list(r["tags"]) if r["tags"] else [],
         is_active=r["is_active"],
         howto_guide=r.get("howto_guide"),
+        howto_guide_url=r.get("howto_guide_url"),
         git_repo_url=r.get("git_repo_url"),
         git_ref=r.get("git_ref"),
         last_synced_at=r.get("last_synced_at"),

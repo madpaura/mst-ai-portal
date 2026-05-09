@@ -37,7 +37,7 @@ export const Solutions: React.FC = () => {
   const [solutionCards, setSolutionCards] = useState<SolutionCard[]>([]);
   const [landingConfig, setLandingConfig] = useState<LandingConfig | null>(null);
   const [cardSearch, setCardSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<Set<string>>(new Set(['SW', 'HW', 'none']));
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [contactEmail, setContactEmail] = useState('ai-tools@mst.internal');
 
   useEffect(() => {
@@ -63,17 +63,8 @@ export const Solutions: React.FC = () => {
     }
   };
 
-  const toggleCategory = (cat: string) => {
-    setCategoryFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(cat)) { if (next.size > 1) next.delete(cat); }
-      else next.add(cat);
-      return next;
-    });
-  };
-
   const filteredCards = solutionCards.filter((c) => {
-    if (!categoryFilter.has(c.category || 'none')) return false;
+    if (categoryFilter !== null && (c.category || 'none') !== categoryFilter) return false;
     if (!cardSearch.trim()) return true;
     const q = cardSearch.toLowerCase();
     return (
@@ -127,25 +118,31 @@ export const Solutions: React.FC = () => {
                 <div className="h-1 w-16 bg-primary rounded-full mt-2" />
               </div>
               <div className="flex items-center gap-4 flex-wrap">
-                {/* Category filter pills */}
-                <div className="flex items-center gap-2">
-                  {(['SW', 'HW', 'none'] as const).map((cat) => {
-                    const active = categoryFilter.has(cat);
-                    const color = cat === 'SW'
-                      ? active ? 'bg-blue-500/15 text-blue-400 border-blue-500/30' : 'text-slate-400 border-slate-200 dark:border-white/10 hover:border-blue-500/30 hover:text-blue-400'
-                      : cat === 'HW'
-                      ? active ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' : 'text-slate-400 border-slate-200 dark:border-white/10 hover:border-amber-500/30 hover:text-amber-400'
-                      : active ? 'bg-slate-500/15 text-slate-300 border-slate-500/30' : 'text-slate-400 border-slate-200 dark:border-white/10 hover:border-slate-400/30';
-                    return (
-                      <button
-                        key={cat}
-                        onClick={() => toggleCategory(cat)}
-                        className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors ${color}`}
-                      >
-                        {cat === 'none' ? 'Other' : cat}
-                      </button>
-                    );
-                  })}
+                {/* Category filter tabs */}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setCategoryFilter(null)}
+                    className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                      categoryFilter === null
+                        ? 'bg-primary text-white'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-primary/10 hover:text-primary'
+                    }`}
+                  >
+                    All
+                  </button>
+                  {(['SW', 'HW', 'none'] as const).map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setCategoryFilter(categoryFilter === cat ? null : cat)}
+                      className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                        categoryFilter === cat
+                          ? 'bg-primary text-white'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-primary/10 hover:text-primary'
+                      }`}
+                    >
+                      {cat === 'none' ? 'Other' : cat}
+                    </button>
+                  ))}
                 </div>
                 {/* Search */}
                 <label className="relative block shrink-0">
@@ -172,9 +169,9 @@ export const Solutions: React.FC = () => {
             </div>
 
             <div
-              className="grid gap-6 overflow-y-auto pr-1"
+              className="grid gap-4 overflow-y-auto pr-1"
               style={{
-                gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
                 maxHeight: '640px',
                 scrollbarWidth: 'thin',
                 scrollbarColor: 'rgba(37,140,244,0.25) transparent',
@@ -184,11 +181,11 @@ export const Solutions: React.FC = () => {
                 <div
                   key={card.id}
                   onClick={() => handleCardClick(card)}
-                  className="glass-card p-8 rounded-2xl flex flex-col gap-6 group cursor-pointer hover:border-primary/30 transition-all"
+                  className="glass-card p-5 rounded-xl flex flex-col gap-4 group cursor-pointer hover:border-primary/30 transition-all"
                 >
                   <div className="flex items-center justify-between">
-                    <div className={`w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center ${card.icon_color} group-hover:bg-primary group-hover:text-white transition-all duration-300`}>
-                      <span className="material-symbols-outlined text-3xl">{card.icon}</span>
+                    <div className={`w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center ${card.icon_color} group-hover:bg-primary group-hover:text-white transition-all duration-300`}>
+                      <span className="material-symbols-outlined text-2xl">{card.icon}</span>
                     </div>
                     {card.badge && (
                       <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-primary/10 text-primary border border-primary/20">
@@ -197,11 +194,11 @@ export const Solutions: React.FC = () => {
                     )}
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1.5 leading-snug">{card.title}</h3>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1 leading-snug">{card.title}</h3>
                     {card.subtitle && (
-                      <p className="text-sm text-primary font-semibold uppercase tracking-wider mb-3">{card.subtitle}</p>
+                      <p className="text-xs text-primary font-semibold uppercase tracking-wider mb-2">{card.subtitle}</p>
                     )}
-                    <p className="text-slate-500 dark:text-slate-400 text-[15px] leading-relaxed">{card.description}</p>
+                    <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed line-clamp-2">{card.description}</p>
                   </div>
                   <div className="mt-auto flex items-center justify-between gap-3">
                     <div className="flex items-center gap-1 text-primary text-sm font-medium group-hover:gap-2 transition-all">
@@ -226,7 +223,7 @@ export const Solutions: React.FC = () => {
                 <div className="col-span-full flex flex-col items-center justify-center py-16 text-slate-400">
                   <span className="material-symbols-outlined text-4xl mb-3">search_off</span>
                   <p className="text-sm">No solutions match your current filters</p>
-                  <button onClick={() => { setCardSearch(''); setCategoryFilter(new Set(['SW', 'HW', 'none'])); }} className="mt-3 text-xs text-primary hover:underline">Clear all filters</button>
+                  <button onClick={() => { setCardSearch(''); setCategoryFilter(null); }} className="mt-3 text-xs text-primary hover:underline">Clear all filters</button>
                 </div>
               )}
             </div>
