@@ -124,7 +124,25 @@ SELECT * FROM (
   WHERE is_active = true
     AND to_tsvector('english', title || ' ' || summary || ' ' || COALESCE(content,''))
         @@ to_tsquery('english', $2)
-  ORDER BY rank DESC LIMIT 2)
+  ORDER BY rank DESC LIMIT 2),
+
+  (SELECT
+    'marketplace' AS type,
+    id::text,
+    slug          AS url_key,
+    name          AS title,
+    COALESCE(description, '')                   AS description,
+    NULL                                        AS thumbnail,
+    component_type                              AS category,
+    ts_rank_cd(
+      to_tsvector('english', name || ' ' || COALESCE(description,'') || ' ' || component_type),
+      to_tsquery('english', $2)
+    )                                           AS rank
+  FROM forge_components
+  WHERE is_active = true
+    AND to_tsvector('english', name || ' ' || COALESCE(description,'') || ' ' || component_type)
+        @@ to_tsquery('english', $2)
+  ORDER BY rank DESC LIMIT 3)
 ) combined
 ORDER BY rank DESC
 LIMIT 10
@@ -135,10 +153,11 @@ def _row_to_suggest(r) -> dict:
     type_ = r["type"]
     url_key = r["url_key"]
     url = {
-        "video":    f"/ignite/{url_key}",
-        "article":  f"/articles/{url_key}",
-        "solution": f"/solutions/{url_key}",
-        "news":     f"/news/{url_key}",
+        "video":       f"/ignite/{url_key}",
+        "article":     f"/articles/{url_key}",
+        "solution":    f"/solutions/{url_key}",
+        "news":        f"/news/{url_key}",
+        "marketplace": f"/marketplace?q={url_key}",
     }.get(type_, "/")
     return {
         "type":        type_,
@@ -164,7 +183,7 @@ async def search(
     if not q:
         return {"total": 0, "page": page, "per_page": per_page, "results": []}
 
-    type_ = type.lower() if type.lower() in ("video","article","solution","news") else "all"
+    type_ = type.lower() if type.lower() in ("video","article","solution","news","marketplace") else "all"
     cache_params = {"q": q.lower(), "type": type_, "page": page, "per_page": per_page}
 
     async def _fetch():
@@ -291,6 +310,30 @@ async def _run_full_search(db, q: str, type_: str, offset: int, per_page: int):
               @@ plainto_tsquery('english', $1)
         """)
 
+    if type_ in ("all", "marketplace"):
+        _add("""
+        SELECT
+          'marketplace' AS type,
+          id::text,
+          slug      AS url_key,
+          name      AS title,
+          COALESCE(description,'') AS description,
+          NULL      AS thumbnail,
+          component_type AS category,
+          ts_headline('english', name || ' ' || COALESCE(description,''),
+            plainto_tsquery('english', $1),
+            'MaxFragments=1,MaxWords=15,MinWords=5,StartSel=<mark>,StopSel=</mark>'
+          ) AS highlight,
+          ts_rank_cd(
+            to_tsvector('english', name||' '||COALESCE(description,'')||' '||component_type),
+            plainto_tsquery('english', $1)
+          ) AS rank
+        FROM forge_components
+        WHERE is_active = true
+          AND to_tsvector('english', name||' '||COALESCE(description,'')||' '||component_type)
+              @@ plainto_tsquery('english', $1)
+        """)
+
     if not parts:
         return [], 0
 
@@ -311,10 +354,11 @@ def _row_to_result(r) -> dict:
     type_ = r["type"]
     url_key = r["url_key"]
     url = {
-        "video":    f"/ignite/{url_key}",
-        "article":  f"/articles/{url_key}",
-        "solution": f"/solutions/{url_key}",
-        "news":     f"/news/{url_key}",
+        "video":       f"/ignite/{url_key}",
+        "article":     f"/articles/{url_key}",
+        "solution":    f"/solutions/{url_key}",
+        "news":        f"/news/{url_key}",
+        "marketplace": f"/marketplace?q={url_key}",
     }.get(type_, "/")
     return {
         "type":        type_,

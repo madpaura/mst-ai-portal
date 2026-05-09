@@ -29,6 +29,7 @@ const TYPE_LABELS: Record<string, string> = {
   article: 'Articles',
   solution: 'Solutions',
   news: 'News',
+  marketplace: 'Marketplace',
 };
 
 const TYPE_ICONS: Record<string, string> = {
@@ -36,6 +37,7 @@ const TYPE_ICONS: Record<string, string> = {
   article: 'article',
   solution: 'lightbulb',
   news: 'newspaper',
+  marketplace: 'store',
 };
 
 const TYPE_COLORS: Record<string, string> = {
@@ -43,6 +45,7 @@ const TYPE_COLORS: Record<string, string> = {
   article: 'text-green-500 bg-green-50 dark:bg-green-950/40',
   solution: 'text-purple-500 bg-purple-50 dark:bg-purple-950/40',
   news: 'text-orange-500 bg-orange-50 dark:bg-orange-950/40',
+  marketplace: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40',
 };
 
 export const Search: React.FC = () => {
@@ -106,7 +109,7 @@ export const Search: React.FC = () => {
                   type="text"
                   value={inputValue}
                   onChange={e => setInputValue(e.target.value)}
-                  placeholder="Search videos, articles, solutions, news..."
+                  placeholder="Search videos, articles, solutions, marketplace..."
                   className="flex-1 bg-transparent text-slate-800 dark:text-slate-200 placeholder-slate-400 outline-none"
                   autoFocus
                 />

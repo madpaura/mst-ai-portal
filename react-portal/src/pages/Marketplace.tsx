@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Navbar } from '../components/Navbar';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { usePageView } from '../hooks/usePageView';
 
@@ -58,7 +59,8 @@ interface ContributingGuide {
 
 export const Marketplace: React.FC = () => {
   usePageView('/marketplace');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [urlParams] = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState(urlParams.get('q') || '');
   const [activeCategory, setActiveCategory] = useState('all');
   const [activeTab, setActiveTab] = useState('');
   const [verifiedOnly, setVerifiedOnly] = useState(false);
