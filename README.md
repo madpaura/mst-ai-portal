@@ -1,359 +1,176 @@
 # MST AI Portal
 
-A full-stack learning platform for AI/ML courses with video streaming, chapter marking, and interactive content.
+Corporate AI learning and tools portal — video courses, solutions showcase, component marketplace, news feed, and site-wide search. Deployed as a self-contained Docker stack.
 
-## 🎯 Overview
+---
 
-The MST AI Portal is a modern web application designed to deliver AI/ML educational content through an intuitive interface. It features video transcoding with HLS streaming, interactive chapter marking, progress tracking, and an admin panel for content management.
+## Features at a glance
 
-### Key Features
+- **Ignite** — HLS video library with courses, chapters, AI-generated transcripts, closed captions, and auto-metadata pipeline
+- **Solutions** — filterable solution card showcase (SW / HW / Other)
+- **Marketplace** — agent, skill, and MCP server registry with GitHub sync, how-to guides, and zip download
+- **Discover** — Articles, Memes, News feed with RSS/ingest support
+- **Search** — site-wide full-text search across all content types
+- **Admin panel** — content management, analytics, digest scheduling, SMTP, and portal settings
+- **Auth** — local (`open`), LDAP, or SAML 2.0 / ADFS
+- **Themes** — Default (glass/neon) and Simple (GitHub-inspired flat), admin-controlled
 
-- **Video Streaming**: HLS adaptive bitrate streaming with multiple quality levels (360p, 720p, 1080p)
-- **Chapter System**: Admins can mark chapters with timeline-based video player
-- **Progress Tracking**: User progress monitoring across courses and videos
-- **Interactive Notes**: Time-stamped notes for videos with rich text support
-- **Admin Panel**: Complete content management system
-- **Responsive Design**: Modern UI built with React, TypeScript, and TailwindCSS
+See [features.md](features.md) for a detailed feature breakdown.
 
-## 🏗️ Architecture
+---
 
-### Frontend (`react-portal/`)
-- **React 19** with TypeScript
-- **Vite** for fast development and building
-- **TailwindCSS** for styling with dark mode support
-- **Material Symbols** for icons
-- **hls.js** for HLS video playback
-- **React Router** for navigation
+## Quick start (Docker)
 
-### Backend (`api/`)
-- **FastAPI** with async/await support
-- **PostgreSQL** with asyncpg driver
-- **JWT** authentication (bcrypt password hashing)
-- **FFmpeg** for video transcoding to HLS
-- **Worker process** for background transcoding jobs
+### 1. Prerequisites
 
-### Database (`db/`)
-- **PostgreSQL 16** with 15 tables
-- **Seed data** for capabilities, courses, and components
-- **Migration-ready** with init.sql schema
+- Docker 24+ with Docker Compose v2
+- 20 GB+ free disk space
+- NVIDIA GPU + `nvidia-container-toolkit` (optional — enables GPU transcoding and faster Whisper)
 
-## 🚀 Quick Start
-
-### Prerequisites
-
-- **Node.js 18+** and npm
-- **Python 3.10+**
-- **PostgreSQL 16**
-- **FFmpeg** (for video transcoding)
-
-### 1. Clone and Setup
+### 2. Clone and configure
 
 ```bash
 git clone <repository-url>
 cd mst-ai-portal
+cp .env.example .env
+# Edit .env — at minimum change JWT_SECRET and POSTGRES_PASSWORD
 ```
 
-### 2. Initialize Everything
+### 3. Deploy
 
 ```bash
-./run.sh init
+./setup.sh deploy
 ```
 
-### 3. Start All Services
-
-```bash
-./run.sh start
-```
-
-### Management Script
-
-The project includes a comprehensive management script (`run.sh`) for easy development:
-
-```bash
-# Install tab completion (one-time setup)
-./install-completion.sh
-source ~/.bash_completion  # or restart terminal
-
-# Available commands with tab completion:
-./run.sh <TAB>              # Show all commands
-./run.sh start              # Start all services
-./run.sh stop               # Stop all services  
-./run.sh restart            # Restart all services
-./run.sh init               # Initialize backend & database
-./run.sh ui                 # Start frontend only
-./run.sh backend            # Start backend only
-./run.sh transcode-worker   # Start transcoder worker only
-./run.sh status             # Show service status
-./run.sh logs <TAB>         # View logs (backend|frontend|worker)
-./run.sh docker-compose ps  # Run docker-compose commands
-./run.sh help               # Show help
-```
-
-### Manual Setup (Alternative)
-
-If you prefer manual setup instead of the management script:
-
-```bash
-# Database Setup
-docker-compose up -d
-cd db
-psql -h localhost -U portal -d mst_portal -f init.sql
-cd ..
-
-# Backend Setup
-cd api
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-mkdir -p storage/videos storage/thumbnails
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-cd ..
-
-# Frontend Setup
-cd react-portal
-npm install
-npm run dev
-cd ..
-
-# Start Transcoder Worker
-cd api
-source venv/bin/activate
-python worker/transcoder.py
-```
-
-## 🌐 Access Points
-
-- **Frontend**: http://localhost:5173
-- **Backend API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs
-- **Admin Panel**: http://localhost:5173/admin/videos
-
-### Default Credentials
-- **Username**: `admin`
-- **Password**: `admin`
-
-## 📁 Project Structure
-
-```
-mst-ai-portal/
-├── api/                    # FastAPI backend
-│   ├── main.py            # Main application entry point
-│   ├── config.py          # Configuration settings
-│   ├── worker/            # Background worker processes
-│   │   └── transcoder.py  # Video transcoding worker
-│   ├── auth/              # Authentication handlers
-│   ├── video/             # Video management endpoints
-│   ├── solutions/         # Solutions API
-│   ├── forge/             # Forge components API
-│   ├── course/            # Course management
-│   └── storage/           # File storage directory
-├── react-portal/          # React frontend
-│   ├── src/
-│   │   ├── components/    # Reusable React components
-│   │   │   ├── HlsPlayer.tsx    # HLS video player
-│   │   │   ├── Navbar.tsx       # Navigation bar
-│   │   │   └── AdminLayout.tsx  # Admin layout wrapper
-│   │   ├── pages/         # Page components
-│   │   │   ├── Ignite.tsx       # Learning interface
-│   │   │   ├── AdminVideos.tsx  # Video management
-│   │   │   └── Login.tsx        # Authentication
-│   │   ├── api/           # API client utilities
-│   │   └── App.tsx        # Main app with routing
-│   ├── public/            # Static assets
-│   └── package.json       # Dependencies and scripts
-├── db/                    # Database
-│   ├── init.sql          # Database schema and seed data
-│   └── schema.sql        # Schema definition
-├── docker-compose.yml     # PostgreSQL service
-└── README.md             # This file
-```
-
-## 🔧 Configuration
-
-### Backend Configuration (`api/config.py`)
-
-```python
-# Authentication
-AUTH_MODE = "open"  # or "ldap"
-JWT_SECRET_KEY = "your-secret-key"
-JWT_ALGORITHM = "HS256"
-
-# Database
-DATABASE_URL = "postgresql://portal:portal123@localhost:5432/mst_portal"
-
-# Storage
-VIDEO_STORAGE_PATH = "/home/vishwa/mst-ai-portal/api/storage/videos"
-THUMBNAIL_STORAGE_PATH = "/home/vishwa/mst-ai-portal/api/storage/thumbnails"
-```
-
-### Frontend Environment (`.env`)
-
-```bash
-VITE_API_URL=http://localhost:8000
-```
-
-## 📊 Features in Detail
-
-### Video Pipeline
-
-1. **Upload**: Admin uploads raw video files through the admin panel
-2. **Transcoding**: Background worker converts videos to HLS with multiple quality levels
-3. **Streaming**: Videos are served via HLS with adaptive bitrate
-4. **Chapter Marking**: Admins can mark chapters using the timeline-based player
-
-### User Experience
-
-- **Course Navigation**: Browse courses and videos with progress tracking
-- **Interactive Player**: Full-featured video player with quality selection
-- **Note Taking**: Time-stamped notes with rich text support
-- **Chapter Navigation**: Jump to specific chapters during playback
-
-### Admin Features
-
-- **Content Management**: Upload, organize, and manage videos
-- **Chapter Creation**: Timeline-based chapter marking with visual feedback
-- **User Progress**: Monitor learning progress across all users
-- **Quality Control**: Manage video quality and transcoding settings
-
-## 🛠️ Development
-
-### Backend Development
-
-```bash
-cd api
-source venv/bin/activate
-
-# Run with auto-reload
-uvicorn main:app --reload
-
-# Run tests
-pytest
-
-# Database migrations
-psql -h localhost -U portal -d mst_portal -f db/migration.sql
-```
-
-### Frontend Development
-
-```bash
-cd react-portal
-
-# Development server
-npm run dev
-
-# Type checking
-npm run type-check
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
-```
-
-### Adding New Features
-
-1. **Backend**: Add new endpoints in appropriate router files
-2. **Frontend**: Create components in `src/components/` and pages in `src/pages/`
-3. **Database**: Modify `db/init.sql` for schema changes
-4. **Styling**: Use TailwindCSS classes with the existing design system
-
-## 🔄 Video Transcoding
-
-The transcoder worker processes videos in the background:
-
-```bash
-# Start worker
-python worker/transcoder.py
-
-# Monitor worker logs
-tail -f worker.log
-```
-
-**Transcoding Process:**
-1. Worker polls `transcode_jobs` table every 5 seconds
-2. Processes pending jobs with FFmpeg
-3. Creates HLS streams with 3 quality levels:
-   - 360p (800 kbps)
-   - 720p (2500 kbps) 
-   - 1080p (5000 kbps)
-4. Updates video status to 'ready' when complete
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**Video stuck on "pending":**
-- Ensure transcoder worker is running
-- Check worker logs for FFmpeg errors
-- Verify storage directory permissions
-
-**Video playback not working:**
-- Confirm `/streams/` static files are mounted in FastAPI
-- Check HLS files exist in storage directory
-- Verify CORS settings if accessing from different domain
-
-**Database connection errors:**
-- Ensure PostgreSQL is running
-- Check connection string in config.py
-- Verify database user permissions
-
-### Logs
-
-- **Backend**: Console output from uvicorn
-- **Worker**: Console output from transcoder.py
-- **Frontend**: Browser developer console
-
-## 📝 API Documentation
-
-Once the backend is running, visit http://localhost:8000/docs for interactive API documentation.
-
-### Key Endpoints
-
-- `POST /auth/login` - Authentication
-- `GET /video/courses` - List courses
-- `GET /video/courses/{slug}` - Get course with videos
-- `POST /video/videos/{slug}/notes` - Add video notes
-- `GET /admin/videos` - Admin video management
-- `POST /admin/videos/{id}/upload` - Upload video files
-
-## 🚀 Deployment
-
-### Production Setup
-
-1. **Environment Variables**: Set production values in `.env`
-2. **Database**: Use production PostgreSQL instance
-3. **Storage**: Configure cloud storage for videos
-4. **Worker**: Run transcoder as systemd service
-5. **Frontend**: Build and serve with Nginx
-6. **Backend**: Run with Gunicorn instead of uvicorn
-
-### Docker Deployment
-
-```bash
-# Build and run with Docker Compose
-docker-compose up --build
-```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 📞 Support
-
-For support and questions:
-- Create an issue in the repository
-- Check the API documentation at `/docs`
-- Review the troubleshooting section above
+`setup.sh` checks prerequisites, detects a GPU, selects the right Compose files, builds images, and starts the stack.
+
+### 4. Access
+
+| Service | URL |
+|---|---|
+| Portal | http://localhost:9810 |
+| Backend API | http://localhost:9800 |
+| API docs | http://localhost:9800/docs |
+| Admin panel | http://localhost:9810/admin/videos |
+| Transcript service | http://localhost:9100 |
+
+Default login: **admin / admin** (change immediately in production)
 
 ---
 
-**Built with ❤️ using React, FastAPI, and PostgreSQL**
+## Setup script reference
+
+```bash
+./setup.sh check       # Verify prerequisites (default)
+./setup.sh deploy      # Build and start all containers
+./setup.sh down        # Stop all containers
+./setup.sh logs <svc>  # Follow logs: backend | worker | auto-processor | transcript-service | frontend | db
+./setup.sh migrate     # Run Alembic migrations inside the running backend
+./setup.sh setup-gpu   # Install nvidia-container-toolkit for GPU transcoding
+```
+
+---
+
+## Architecture
+
+```
+mst-ai-portal/
+├── api/                    # FastAPI backend (Python)
+│   ├── main.py             # App factory, router mounts, lifespan migrations
+│   ├── config.py           # Pydantic Settings (reads .env)
+│   ├── database.py         # asyncpg pool helpers
+│   ├── alembic/versions/   # Incremental DB migrations (run on startup)
+│   ├── auth/               # JWT + SAML + LDAP
+│   ├── video/              # Ignite video CRUD, auto-mode pipeline
+│   ├── worker/             # transcoder.py, auto_processor.py
+│   ├── solutions/          # Solution card CRUD
+│   ├── articles/           # Knowledge articles
+│   ├── forge/              # Marketplace components + GitHub sync
+│   ├── search/             # Site-wide full-text search
+│   ├── forge/              # Marketplace / Forge CRUD + GitHub sync worker
+│   ├── settings/           # SMTP, admin settings, probe endpoint
+│   ├── analytics/          # Page-view tracking
+│   └── email_utils/        # SMTP helpers, digest templates
+├── react-portal/           # Vite + React 19 frontend (TypeScript)
+│   └── src/
+│       ├── pages/          # Page components
+│       ├── components/     # Shared components (Navbar, HlsPlayer, SearchBar…)
+│       ├── api/client.ts   # Typed fetch wrapper
+│       └── index.css       # Tailwind + custom utilities
+├── transcript-service/     # Standalone FastAPI — Whisper inference over SSE
+├── db/init.sql             # Schema for fresh installs
+├── scripts/                # Backup, restore, migrate, nginx, watcher helpers
+├── docker-compose.yml      # Core stack (db, redis, backend, worker, auto-processor, frontend)
+├── docker-compose.gpu.yml  # GPU override for worker (NVENC)
+├── docker-compose.transcript.yml     # CPU Whisper service
+├── docker-compose.transcript.gpu.yml # GPU Whisper service
+└── .env.example            # All environment variables with comments
+```
+
+### Docker services
+
+| Container | Purpose |
+|---|---|
+| `db` | PostgreSQL 16 |
+| `redis` | Response cache (TTL-based) |
+| `backend` | FastAPI API server |
+| `worker` | FFmpeg transcoding worker |
+| `auto-processor` | Transcript → metadata/chapters LLM pipeline |
+| `frontend` | Nginx serving the built React app |
+| `transcript-service` | Whisper speech-to-text (separate compose file) |
+
+---
+
+## Environment variables
+
+See [.env.example](.env.example) for the full annotated list. Critical variables:
+
+| Variable | Default | Notes |
+|---|---|---|
+| `JWT_SECRET` | *(insecure default)* | **Must change in production** |
+| `POSTGRES_PASSWORD` | `portal123` | **Must change in production** |
+| `AUTH_MODE` | `open` | `open` \| `ldap` \| `saml` |
+| `VITE_API_URL` | `http://localhost:9800` | Baked into the frontend build |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | For LLM auto-mode |
+| `FFMPEG_HWACCEL` | `auto` | `auto` detects NVIDIA, `none` forces CPU |
+| `TRANSCRIPT_MOCK` | `false` | `true` skips Whisper for testing |
+| `REDIS_ENABLED` | `true` | Set `false` for local dev without Redis |
+
+---
+
+## Local development (without Docker)
+
+```bash
+./run.sh init     # Create Python venv, install deps, init DB
+./run.sh start    # Start backend + frontend + worker
+./run.sh stop     # Stop all
+./run.sh status   # Show running processes
+./run.sh logs backend
+```
+
+This uses a local Python venv and Vite dev server (not Docker). The database still needs to be running (via Docker or native PostgreSQL).
+
+---
+
+## Scripts
+
+| Script | Purpose |
+|---|---|
+| `scripts/backup.sh` | Backup DB + videos + media + config; supports rsync/scp/rclone remote transfer |
+| `scripts/restore.sh` | Restore from a backup directory |
+| `scripts/migrate.sh` | Live server-to-server migration with automatic rollback |
+| `scripts/setup-nginx.sh` | Configure nginx reverse proxy for production |
+| `scripts/setup-watcher.sh` | Set up the filesystem watcher for auto video ingestion |
+
+---
+
+## Production checklist
+
+1. Change `JWT_SECRET` and `POSTGRES_PASSWORD` in `.env`
+2. Set `VITE_API_URL` to your public domain
+3. Run `sudo ./scripts/setup-nginx.sh --rebuild` for nginx reverse proxy
+4. Set up TLS (certbot / existing certificate)
+5. Install backup cron: `./scripts/backup.sh --schedule`
+6. Set `AUTH_MODE=saml` or `ldap` if using SSO
+
+See [SETUP.md](SETUP.md) for a full step-by-step guide.

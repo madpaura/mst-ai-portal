@@ -1,6 +1,10 @@
 #!/bin/bash
 
-# MST AI Portal Management Script
+# MST AI Portal — Local Development Script
+#
+# For Docker-based deployment use: ./setup.sh deploy
+# This script manages local (non-Docker) processes for development.
+#
 # Usage: ./run.sh [command]
 
 set -e
@@ -43,7 +47,7 @@ command_exists() {
 # Check if PostgreSQL is running
 check_postgres() {
     if command_exists docker; then
-        docker ps | grep -q "mst-ai-portal_db_1" && return 0 || return 1
+        docker ps --format '{{.Names}}' | grep -qE "(mst.*db|db.*mst|mst-ai-portal.*db)" && return 0 || return 1
     else
         pg_isready -h localhost -p 5432 >/dev/null 2>&1 && return 0 || return 1
     fi
@@ -63,12 +67,12 @@ check_frontend() {
 start_postgres() {
     print_header "Starting PostgreSQL"
     if command_exists docker; then
-        if docker ps | grep -q "mst-ai-portal_db_1"; then
+        if docker ps --format '{{.Names}}' | grep -qE "(mst.*db|db.*mst|mst-ai-portal.*db)"; then
             print_status "PostgreSQL is already running"
         else
             print_status "Starting PostgreSQL with Docker Compose..."
             cd "$PROJECT_ROOT"
-            docker-compose up -d db
+            docker compose up -d db
             sleep 3
         fi
     else
@@ -312,7 +316,7 @@ restart_services() {
 docker_compose() {
     print_header "Using Docker Compose"
     cd "$PROJECT_ROOT"
-    docker-compose "$@"
+    docker compose "$@"
 }
 
 # Show status
@@ -377,29 +381,30 @@ show_logs() {
 
 # Show help
 show_help() {
-    echo "MST AI Portal Management Script"
+    echo "MST AI Portal — Local Development Script"
+    echo "(For Docker deployment, use: ./setup.sh deploy)"
     echo ""
     echo "Usage: ./run.sh [command]"
     echo ""
     echo "Commands:"
-    echo "  start           Start all services (PostgreSQL, backend, frontend, worker)"
-    echo "  stop            Stop all running services"
-    echo "  restart         Restart all services"
-    echo "  init            Initialize backend environment and database"
-    echo "  ui              Start frontend only"
-    echo "  backend         Start backend only"
+    echo "  start            Start all services (PostgreSQL, backend, frontend, worker)"
+    echo "  stop             Stop all running services"
+    echo "  restart          Restart all services"
+    echo "  init             Initialize Python venv, install deps, init database"
+    echo "  ui               Start frontend dev server only (Vite)"
+    echo "  backend          Start backend only (uvicorn)"
     echo "  transcode-worker Start transcoder worker only"
-    echo "  docker-compose  Run docker-compose commands"
-    echo "  status          Show status of all services"
-    echo "  logs [service]  Show logs for service (backend|frontend|worker)"
-    echo "  help            Show this help message"
+    echo "  docker-compose   Pass-through to: docker compose <args>"
+    echo "  status           Show status of all services"
+    echo "  logs [service]   Follow logs: backend | frontend | worker"
+    echo "  help             Show this help message"
     echo ""
     echo "Examples:"
-    echo "  ./run.sh init                    # Initialize everything"
+    echo "  ./run.sh init                    # First-time setup"
     echo "  ./run.sh start                   # Start all services"
-    echo "  ./run.sh ui                      # Start frontend only"
+    echo "  ./run.sh ui                      # Start Vite dev server only"
     echo "  ./run.sh logs backend            # Follow backend logs"
-    echo "  ./run.sh docker-compose ps       # Run docker-compose ps"
+    echo "  ./run.sh docker-compose ps       # Show Docker container status"
 }
 
 # Main script logic
