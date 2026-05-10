@@ -32,6 +32,7 @@ import { AdminContributions } from './pages/AdminContributions';
 import { AdminAuditLog } from './pages/AdminAuditLog';
 import { Contact } from './pages/Contact';
 import { AdminContacts } from './pages/AdminContacts';
+import { AdminArtifacts } from './pages/AdminArtifacts';
 import { Search } from './pages/Search';
 
 function SamlGuard({ children }: { children: React.ReactNode }) {
@@ -88,6 +89,7 @@ function App() {
             <Route path="audit-log" element={<AdminAuditLog />} />
             <Route path="contacts" element={<AdminContacts />} />
             <Route path="memes" element={<AdminMemes />} />
+            <Route path="artifacts" element={<AdminArtifacts />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

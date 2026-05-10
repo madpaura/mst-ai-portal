@@ -19,6 +19,7 @@ interface ForgeComponent {
   is_active: boolean;
   howto_guide: string | null;
   howto_guide_url: string | null;
+  video_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -28,7 +29,6 @@ interface FormData {
   name: string;
   component_type: string;
   description: string;
-  long_description: string;
   icon: string;
   icon_color: string;
   version: string;
@@ -36,14 +36,16 @@ interface FormData {
   badge: string;
   author: string;
   tags: string;
+  howto_guide: string;
   howto_guide_url: string;
+  video_url: string;
 }
 
 const EMPTY_FORM: FormData = {
   slug: '', name: '', component_type: 'agent', description: '',
-  long_description: '', icon: 'smart_toy', icon_color: 'text-primary',
+  icon: 'smart_toy', icon_color: 'text-primary',
   version: 'v1.0.0', install_command: '', badge: '', author: '', tags: '',
-  howto_guide_url: '',
+  howto_guide: '', howto_guide_url: '', video_url: '',
 };
 
 const ICON_OPTIONS = [
@@ -85,12 +87,12 @@ export const AdminMarketplace: React.FC = () => {
     setTimeout(() => setMessage(null), 3000);
   };
 
-  const handleBeautifyLongDesc = async () => {
-    if (!form.long_description.trim()) return;
+  const handleBeautifyHowto = async () => {
+    if (!form.howto_guide.trim()) return;
     setBeautifying(true);
     try {
-      const result = await api.post<{ content: string }>('/admin/articles/beautify', { content: form.long_description });
-      setForm((f) => ({ ...f, long_description: result.content }));
+      const result = await api.post<{ content: string }>('/admin/articles/beautify', { content: form.howto_guide });
+      setForm((f) => ({ ...f, howto_guide: result.content }));
       showMsg('success', 'Content beautified with AI');
     } catch (err: any) {
       showMsg('error', 'Beautify failed: ' + err.message);
@@ -144,7 +146,6 @@ export const AdminMarketplace: React.FC = () => {
       name: comp.name,
       component_type: comp.component_type,
       description: comp.description || '',
-      long_description: comp.long_description || '',
       icon: comp.icon || 'smart_toy',
       icon_color: comp.icon_color || 'text-primary',
       version: comp.version,
@@ -152,7 +153,9 @@ export const AdminMarketplace: React.FC = () => {
       badge: comp.badge || '',
       author: comp.author || '',
       tags: comp.tags.join(', '),
+      howto_guide: comp.howto_guide || '',
       howto_guide_url: comp.howto_guide_url || '',
+      video_url: comp.video_url || '',
     });
   };
 
@@ -168,8 +171,9 @@ export const AdminMarketplace: React.FC = () => {
       tags: form.tags.split(',').map((t) => t.trim()).filter(Boolean),
       badge: form.badge || null,
       description: form.description || null,
-      long_description: form.long_description || null,
+      howto_guide: form.howto_guide.trim() || null,
       howto_guide_url: form.howto_guide_url.trim() || null,
+      video_url: form.video_url.trim() || null,
     };
 
     try {
@@ -471,18 +475,22 @@ export const AdminMarketplace: React.FC = () => {
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Long Description (Markdown)</label>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    How-To Guide
+                    <span className="ml-1 text-[10px] normal-case text-slate-500 font-normal">(Markdown — shown in drawer Guide tab)</span>
+                  </label>
                   <button
-                    onClick={handleBeautifyLongDesc}
-                    disabled={beautifying || !form.long_description.trim()}
+                    onClick={handleBeautifyHowto}
+                    disabled={beautifying || !form.howto_guide.trim()}
                     className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-purple-400 hover:text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded transition-colors disabled:opacity-40"
                   >
                     <span className="material-symbols-outlined" style={{ fontSize: '11px' }}>{beautifying ? 'autorenew' : 'auto_fix_high'}</span>
                     {beautifying ? 'Beautifying…' : 'Beautify'}
                   </button>
                 </div>
-                <textarea value={form.long_description} onChange={(e) => setForm((f) => ({ ...f, long_description: e.target.value }))}
-                  rows={5} className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none font-mono" />
+                <textarea value={form.howto_guide} onChange={(e) => setForm((f) => ({ ...f, howto_guide: e.target.value }))}
+                  rows={6} placeholder="## Getting Started&#10;&#10;Step-by-step guide in Markdown..."
+                  className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none font-mono" />
               </div>
 
               <div>
@@ -552,6 +560,20 @@ export const AdminMarketplace: React.FC = () => {
                   value={form.howto_guide_url}
                   onChange={(e) => setForm((f) => ({ ...f, howto_guide_url: e.target.value }))}
                   placeholder="https://docs.example.com/guide"
+                  type="url"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Video Link
+                  <span className="ml-1 text-[10px] normal-case text-slate-500 font-normal">(YouTube, Vimeo, or any video URL — shown as a Watch button on the card)</span>
+                </label>
+                <input
+                  value={form.video_url}
+                  onChange={(e) => setForm((f) => ({ ...f, video_url: e.target.value }))}
+                  placeholder="https://youtube.com/watch?v=..."
                   type="url"
                   className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />

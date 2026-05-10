@@ -28,6 +28,7 @@ export const AdminLayout: React.FC = () => {
     { path: '/admin/marketplace', label: 'Marketplace', icon: 'storefront' },
     { path: '/admin/articles', label: 'Articles', icon: 'article' },
     { path: '/admin/memes', label: 'Memes', icon: 'collections' },
+    { path: '/admin/artifacts', label: 'Artifact Hub', icon: 'hub' },
     ...(isAdmin ? [
       { path: '/admin/digest', label: 'Digest', icon: 'mail' },
       { path: '/admin/solutions', label: 'Solutions', icon: 'dashboard' },

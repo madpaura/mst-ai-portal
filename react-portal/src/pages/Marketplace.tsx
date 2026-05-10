@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Navbar } from '../components/Navbar';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import rehypeRaw from 'rehype-raw';
+import 'highlight.js/styles/github-dark.css';
+import '../styles/howto-markdown.css';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { usePageView } from '../hooks/usePageView';
@@ -20,8 +24,10 @@ interface ForgeComponent {
   author: string | null;
   downloads: number;
   tags: string[];
+  long_description: string | null;
   howto_guide: string | null;
   howto_guide_url: string | null;
+  video_url: string | null;
   git_repo_url: string | null;
   git_ref: string | null;
 }
@@ -67,9 +73,11 @@ export const Marketplace: React.FC = () => {
   const [communityBuilt, setCommunityBuilt] = useState(false);
   const [openSource, setOpenSource] = useState(false);
   const [components, setComponents] = useState<ForgeComponent[]>([]);
-  const [instructionsDialog, setInstructionsDialog] = useState<{ slug: string; name: string } | null>(null);
+  const [selectedCard, setSelectedCard] = useState<ForgeComponent | null>(null);
+  const [drawerTab, setDrawerTab] = useState<'overview' | 'guide'>('overview');
   const [instructions, setInstructions] = useState<Record<string, string>>({});
   const [downloading, setDownloading] = useState<Record<string, boolean>>({});
+  const [copied, setCopied] = useState(false);
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
   const [contributingGuide, setContributingGuide] = useState<ContributingGuide | null>(null);
   const [underConstruction, setUnderConstruction] = useState<{ under_construction: boolean; message: string } | null>(null);
@@ -118,16 +126,30 @@ export const Marketplace: React.FC = () => {
     }
   };
 
-  const handleShowInstructions = async (slug: string, name: string) => {
-    setInstructionsDialog({ slug, name });
-    if (!instructions[slug]) {
-      try {
-        const res = await api.get<{ instructions: string }>(`/forge/components/${slug}/instructions`);
-        setInstructions((prev) => ({ ...prev, [slug]: res.instructions }));
-      } catch {
-        setInstructions((prev) => ({ ...prev, [slug]: 'Failed to load instructions.' }));
+  const handleShowCard = async (card: ForgeComponent) => {
+    setSelectedCard(card);
+    setDrawerTab('overview');
+    setCopied(false);
+    if (card.howto_guide || card.howto_guide_url) {
+      // pre-load guide content if it lives inline
+      if (card.howto_guide && !instructions[card.slug]) {
+        setInstructions((prev) => ({ ...prev, [card.slug]: card.howto_guide! }));
+      } else if (!card.howto_guide && !instructions[card.slug]) {
+        try {
+          const res = await api.get<{ instructions: string }>(`/forge/components/${card.slug}/instructions`);
+          setInstructions((prev) => ({ ...prev, [card.slug]: res.instructions }));
+        } catch {
+          setInstructions((prev) => ({ ...prev, [card.slug]: '' }));
+        }
       }
     }
+  };
+
+  const handleCopyInstall = (cmd: string) => {
+    navigator.clipboard.writeText(cmd).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   };
 
   const handleSort = () => {};
@@ -351,7 +373,7 @@ export const Marketplace: React.FC = () => {
                   <div
                     key={card.id}
                     className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-4 flex flex-col gap-2 hover:border-slate-300 dark:hover:border-slate-500 transition-colors cursor-pointer"
-                    onClick={() => handleShowInstructions(card.slug, card.name)}
+                    onClick={() => handleShowCard(card)}
                   >
                     {/* Name + verification badge */}
                     <div className="flex items-start justify-between gap-2">
@@ -388,12 +410,21 @@ export const Marketplace: React.FC = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              window.open(card.howto_guide_url || `/marketplace/${card.slug}/howto`, '_blank');
+                              handleShowCard(card);
                             }}
                             className="hover:text-primary transition-colors"
                             title="How-To Guide"
                           >
                             <span className="material-symbols-outlined text-[15px]">menu_book</span>
+                          </button>
+                        )}
+                        {card.video_url && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); window.open(card.video_url!, '_blank'); }}
+                            className="hover:text-rose-400 transition-colors"
+                            title="Watch Video"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">play_circle</span>
                           </button>
                         )}
                         {card.git_repo_url && (
@@ -424,7 +455,7 @@ export const Marketplace: React.FC = () => {
                   <div
                     key={card.id}
                     className="px-4 py-4 flex items-center gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-slate-300 dark:hover:border-slate-500 transition-colors cursor-pointer"
-                    onClick={() => handleShowInstructions(card.slug, card.name)}
+                    onClick={() => handleShowCard(card)}
                   >
                     {/* Name + description */}
                     <div className="flex-1 min-w-0">
@@ -458,6 +489,15 @@ export const Marketplace: React.FC = () => {
                           title="How-To guide"
                         >
                           <span className="material-symbols-outlined text-[15px]">menu_book</span>
+                        </button>
+                      )}
+                      {card.video_url && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); window.open(card.video_url!, '_blank'); }}
+                          className="hover:text-rose-400 transition-colors"
+                          title="Watch Video"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">play_circle</span>
                         </button>
                       )}
                       {card.git_repo_url && (
@@ -505,56 +545,272 @@ export const Marketplace: React.FC = () => {
         </footer>
       </div>
 
-      {/* Setup Instructions Dialog */}
-      {instructionsDialog && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onClick={() => setInstructionsDialog(null)}
-        >
+      {/* Right-side detail drawer */}
+      {selectedCard && (
+        <>
+          {/* Backdrop */}
           <div
-            className="relative w-full max-w-2xl max-h-[80vh] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Dialog header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-amber-500 text-[22px]">integration_instructions</span>
-                <div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white">Setup Instructions</h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{instructionsDialog.name}</p>
+            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]"
+            onClick={() => setSelectedCard(null)}
+          />
+
+          {/* Drawer */}
+          <div className="fixed top-0 right-0 z-50 h-full w-full max-w-[420px] flex flex-col bg-white dark:bg-slate-950 border-l border-slate-200 dark:border-slate-800 shadow-2xl">
+
+            {/* ── Header ─────────────────────────────────────── */}
+            <div className="shrink-0 px-5 pt-5 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-start justify-between gap-3 mb-3">
+                {/* Icon + name */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                    <span className={`material-symbols-outlined text-[22px] ${selectedCard.icon_color || 'text-primary'}`}>
+                      {selectedCard.icon || 'smart_toy'}
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-sm font-bold text-slate-900 dark:text-white leading-tight truncate">{selectedCard.name}</h2>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {selectedCard.version}
+                      {selectedCard.author && <> · by <span className="text-slate-500 dark:text-slate-400">{selectedCard.author}</span></>}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Action icons */}
+                <div className="flex items-center gap-1 shrink-0">
+                  {selectedCard.git_repo_url && (
+                    <a
+                      href={selectedCard.git_repo_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      title="GitHub"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">code</span>
+                    </a>
+                  )}
+                  {selectedCard.video_url && (
+                    <a
+                      href={selectedCard.video_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-8 h-8 flex items-center justify-center rounded-lg text-rose-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+                      title="Watch Video"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">play_circle</span>
+                    </a>
+                  )}
+                  <button
+                    onClick={() => setSelectedCard(null)}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">close</span>
+                  </button>
                 </div>
               </div>
-              <button
-                onClick={() => setInstructionsDialog(null)}
-                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
-              >
-                <span className="material-symbols-outlined text-[20px]">close</span>
-              </button>
+
+              {/* Tabs */}
+              <div className="flex gap-0 border-b border-slate-100 dark:border-slate-800 -mb-4">
+                {(['overview', 'guide'] as const).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setDrawerTab(t)}
+                    className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors capitalize ${drawerTab === t
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+                  >
+                    {t === 'guide' ? 'How-To Guide' : 'Overview'}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Dialog body — scrollable markdown */}
-            <div className="overflow-y-auto px-6 py-5 flex-1">
-              {instructions[instructionsDialog.slug] ? (
-                <div className="prose prose-sm prose-slate dark:prose-invert max-w-none
-                  prose-headings:font-bold prose-headings:text-slate-900 dark:prose-headings:text-white
-                  prose-p:text-slate-600 dark:prose-p:text-slate-300
-                  prose-li:text-slate-600 dark:prose-li:text-slate-300
-                  prose-code:text-primary prose-code:bg-slate-100 dark:prose-code:bg-slate-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono
-                  prose-pre:bg-slate-100 dark:prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-200 dark:prose-pre:border-slate-800 prose-pre:rounded-lg prose-pre:text-xs
-                  prose-a:text-primary hover:prose-a:underline">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {instructions[instructionsDialog.slug]}
-                  </ReactMarkdown>
+            {/* ── Body ───────────────────────────────────────── */}
+            <div className="flex-1 overflow-y-auto">
+
+              {/* OVERVIEW TAB */}
+              {drawerTab === 'overview' && (
+                <div className="p-5 space-y-5">
+
+                  {/* Description */}
+                  {selectedCard.description && (
+                    <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                      {selectedCard.description}
+                    </p>
+                  )}
+
+                  {/* Tags */}
+                  {selectedCard.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedCard.tags.map(tag => (
+                        <span key={tag} className="px-2 py-0.5 rounded-full text-[11px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Stats row */}
+                  <div className="flex items-center gap-4 text-xs text-slate-400">
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[14px]">download</span>
+                      {selectedCard.downloads.toLocaleString()} installs
+                    </span>
+                    {selectedCard.badge && (
+                      <span className="flex items-center gap-1 text-emerald-500">
+                        <span className="material-symbols-outlined text-[14px]">verified</span>
+                        {selectedCard.badge.replace('_', ' ')}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* GitHub repo info */}
+                  {selectedCard.git_repo_url && (
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+                      <div className="bg-slate-50 dark:bg-slate-900 px-4 py-3 flex items-center gap-2 border-b border-slate-200 dark:border-slate-800">
+                        <span className="material-symbols-outlined text-[15px] text-slate-400">source</span>
+                        <span className="text-xs font-mono text-slate-500 dark:text-slate-400 truncate">{selectedCard.git_repo_url.replace(/^https?:\/\//, '')}</span>
+                      </div>
+                      <div className="px-4 py-3">
+                        {selectedCard.author && (
+                          <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mb-3">
+                            <span className="text-emerald-500">"author"</span>: <span className="text-amber-500">"{selectedCard.author}"</span>
+                          </p>
+                        )}
+                        <a
+                          href={selectedCard.git_repo_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                          View GitHub Repository
+                        </a>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Install command */}
+                  {selectedCard.install_command && (
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+                      <div className="bg-slate-800 dark:bg-slate-900 px-4 py-2.5 flex items-center justify-between border-b border-slate-700">
+                        <span className="text-xs font-mono text-slate-400">
+                          <span className="text-slate-500">$</span> install
+                        </span>
+                      </div>
+                      <div className="bg-slate-900 px-4 py-3 flex items-center gap-3">
+                        <code className="flex-1 text-xs font-mono text-emerald-400 break-all">
+                          {selectedCard.install_command}
+                        </code>
+                        <button
+                          onClick={() => handleCopyInstall(selectedCard.install_command)}
+                          className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${copied ? 'text-emerald-400 bg-emerald-400/10' : 'text-slate-500 hover:text-white hover:bg-white/10'}`}
+                          title="Copy"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">{copied ? 'check' : 'content_copy'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action buttons */}
+                  <div className="space-y-2.5">
+                    {selectedCard.video_url && (
+                      <a
+                        href={selectedCard.video_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">play_circle</span>
+                        Watch Video
+                      </a>
+                    )}
+
+                    {selectedCard.git_repo_url && (
+                      <button
+                        onClick={() => handleDownload(selectedCard.slug)}
+                        disabled={downloading[selectedCard.slug]}
+                        className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 dark:hover:bg-slate-600 text-white text-sm font-bold transition-colors disabled:opacity-50"
+                      >
+                        <span className={`material-symbols-outlined text-[18px] ${downloading[selectedCard.slug] ? 'animate-spin' : ''}`}>
+                          {downloading[selectedCard.slug] ? 'progress_activity' : 'save_alt'}
+                        </span>
+                        {downloading[selectedCard.slug] ? 'Downloading…' : 'Download ZIP'}
+                      </button>
+                    )}
+
+                    {selectedCard.howto_guide_url && (
+                      <a
+                        href={selectedCard.howto_guide_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">menu_book</span>
+                        Open Full Guide
+                      </a>
+                    )}
+
+                    {(selectedCard.howto_guide || instructions[selectedCard.slug]) && (
+                      <button
+                        onClick={() => setDrawerTab('guide')}
+                        className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl border border-primary/30 text-primary text-sm font-semibold hover:bg-primary/5 transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">auto_stories</span>
+                        Read How-To Guide
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Long description */}
+                  {selectedCard.long_description && (
+                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">About</p>
+                      <div className="howto-markdown text-sm leading-relaxed">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight, rehypeRaw]}>
+                          {selectedCard.long_description}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="flex items-center justify-center py-12 text-slate-400">
-                  <span className="material-symbols-outlined text-2xl animate-spin mr-2">progress_activity</span>
-                  Loading instructions…
+              )}
+
+              {/* GUIDE TAB */}
+              {drawerTab === 'guide' && (
+                <div className="p-5">
+                  {instructions[selectedCard.slug] ? (
+                    <div className="howto-markdown text-sm leading-relaxed">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight, rehypeRaw]}>
+                        {instructions[selectedCard.slug]}
+                      </ReactMarkdown>
+                    </div>
+                  ) : selectedCard.howto_guide_url ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
+                      <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600">open_in_new</span>
+                      <p className="text-sm text-slate-500">This guide is hosted externally.</p>
+                      <a
+                        href={selectedCard.howto_guide_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-blue-600 transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                        Open Guide
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center py-16 text-slate-400">
+                      <span className="material-symbols-outlined text-2xl animate-spin mr-2">progress_activity</span>
+                      Loading guide…
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
