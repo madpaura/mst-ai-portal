@@ -4,15 +4,31 @@ import httpx
 from loguru import logger as log
 
 
-def _parse_github_url(url: str) -> tuple[str, str]:
-    """Returns (owner, repo) from various GitHub URL formats."""
-    # Handles: https://github.com/owner/repo.git, github.com/owner/repo, git@github.com:owner/repo.git
-    match = re.search(r'github\.com[:/]([^/]+)/([^/.]+)', url)
-    if not match:
-        raise ValueError(f"Cannot parse GitHub URL: {url!r}")
-    owner = match.group(1)
-    repo = match.group(2).removesuffix('.git')
-    return owner, repo
+def _parse_github_url(url: str) -> tuple[str, str, str]:
+    """Returns (host, owner, repo) from various GitHub URL formats."""
+    # Handles HTTPS: https://github.example.com/owner/repo.git
+    https_match = re.match(r'https?://([^/]+)/([^/]+)/([^/.]+)', url)
+    if https_match:
+        host = https_match.group(1)
+        owner = https_match.group(2)
+        repo = https_match.group(3).removesuffix('.git')
+        return host, owner, repo
+    # Handles SSH: git@github.example.com:owner/repo.git
+    ssh_match = re.match(r'git@([^:]+):([^/]+)/([^/.]+)', url)
+    if ssh_match:
+        host = ssh_match.group(1)
+        owner = ssh_match.group(2)
+        repo = ssh_match.group(3).removesuffix('.git')
+        return host, owner, repo
+    raise ValueError(f"Cannot parse GitHub URL: {url!r}")
+
+
+def _api_base(host: str) -> str:
+    """Returns the REST API base URL for the given GitHub host."""
+    if host == "api.github.com" or host == "github.com":
+        return "https://api.github.com"
+    # GitHub Enterprise Server uses /api/v3
+    return f"https://{host}/api/v3"
 
 
 async def test_connection(config: dict) -> dict:
@@ -42,22 +58,23 @@ async def test_connection(config: dict) -> dict:
     step("Token present", True, "Token is set")
 
     try:
-        owner, repo = _parse_github_url(url)
+        host, owner, repo = _parse_github_url(url)
     except ValueError as exc:
         step("Parse URL", False, str(exc))
         return {"ok": False, "checks": checks, "error": str(exc)}
 
     step("Parse URL", True, f"{owner}/{repo}")
 
+    api = _api_base(host)
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=15.0, verify=False) as client:
         # 1. Verify token by calling /user
-        r = await client.get("https://api.github.com/user", headers=headers)
+        r = await client.get(f"{api}/user", headers=headers)
         if r.status_code == 401:
             step("Token valid", False, "Token rejected (401 Unauthorized)")
             return {"ok": False, "checks": checks, "error": "GitHub token is invalid or expired"}
@@ -68,7 +85,7 @@ async def test_connection(config: dict) -> dict:
         step("Token valid", True, f"Authenticated as @{login}")
 
         # 2. Verify repo access
-        r = await client.get(f"https://api.github.com/repos/{owner}/{repo}", headers=headers)
+        r = await client.get(f"{api}/repos/{owner}/{repo}", headers=headers)
         if r.status_code == 404:
             step("Repo accessible", False, f"{owner}/{repo} not found or no access")
             return {"ok": False, "checks": checks, "error": f"Repository {owner}/{repo} not found or token lacks access"}
@@ -84,7 +101,7 @@ async def test_connection(config: dict) -> dict:
 
         # 3. Verify branch exists
         r = await client.get(
-            f"https://api.github.com/repos/{owner}/{repo}/branches/{branch}",
+            f"{api}/repos/{owner}/{repo}/branches/{branch}",
             headers=headers,
         )
         if r.status_code == 404:
@@ -124,16 +141,17 @@ async def push_artifact(
     if not config.get("url"):
         raise ValueError("GitHub URL is not configured for this artifact type")
 
-    owner, repo = _parse_github_url(config["url"])
+    host, owner, repo = _parse_github_url(config["url"])
+    api = _api_base(host)
 
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }
-    base_api = f"https://api.github.com/repos/{owner}/{repo}/contents"
+    base_api = f"{api}/repos/{owner}/{repo}/contents"
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
         for file_obj in files:
             fname = file_obj["name"]
             content = file_obj["content"]
@@ -172,4 +190,4 @@ async def push_artifact(
             log.info("Pushed artifact file to GitHub: {}", rel_path)
 
     folder_path = f"{base_folder}/{artifact_name}" if base_folder else artifact_name
-    return f"https://github.com/{owner}/{repo}/tree/{branch}/{folder_path}"
+    return f"https://{host}/{owner}/{repo}/tree/{branch}/{folder_path}"
