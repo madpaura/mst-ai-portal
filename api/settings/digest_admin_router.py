@@ -310,6 +310,50 @@ async def generate_eml(req: GenerateEmlRequest, admin: dict = Depends(require_ad
     )
 
 
+class SendHtmlEmailRequest(BaseModel):
+    subject: str
+    html_content: str
+    to_emails: Optional[List[str]] = None
+    bcc_emails: Optional[List[str]] = None
+    cc_emails: Optional[List[str]] = None
+
+
+class SendHtmlEmailResponse(BaseModel):
+    success: bool
+    message: str
+    sent_count: int
+
+
+@router.post("/send-html-email", response_model=SendHtmlEmailResponse)
+async def send_html_email(req: SendHtmlEmailRequest, admin: dict = Depends(require_admin)):
+    """Send an arbitrary HTML email to the given recipients."""
+    to = req.to_emails or []
+    bcc = req.bcc_emails or []
+    cc = req.cc_emails or []
+    total = len({*to, *bcc, *cc})
+    if total == 0:
+        raise HTTPException(status_code=400, detail="At least one recipient is required")
+
+    success = await send_email_multi(
+        subject=req.subject,
+        html_content=req.html_content,
+        to_emails=to,
+        cc_emails=cc,
+        bcc_emails=bcc,
+    )
+    if success:
+        return SendHtmlEmailResponse(
+            success=True,
+            message=f"Email sent to {total} recipient(s)",
+            sent_count=total,
+        )
+    return SendHtmlEmailResponse(
+        success=False,
+        message="Send failed — check SMTP settings",
+        sent_count=0,
+    )
+
+
 class SmtpTestRequest(BaseModel):
     smtp_server: str
     smtp_port: int

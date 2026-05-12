@@ -31,6 +31,7 @@ export const AdminLayout: React.FC = () => {
     { path: '/admin/artifacts', label: 'Artifact Hub', icon: 'hub' },
     ...(isAdmin ? [
       { path: '/admin/digest', label: 'Digest', icon: 'mail' },
+      { path: '/admin/html-mailer', label: 'HTML Mailer', icon: 'forward_to_inbox' },
       { path: '/admin/solutions', label: 'Solutions', icon: 'dashboard' },
       { path: '/admin/analytics', label: 'Analytics', icon: 'analytics' },
       { path: '/admin/contacts', label: 'Contacts', icon: 'contacts' },

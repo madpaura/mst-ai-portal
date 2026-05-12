@@ -5,7 +5,6 @@ import { useTheme } from '../context/theme';
 import { PortalLogo } from './PortalLogo';
 import { SearchBar } from './SearchBar';
 const BETA_TAG = import.meta.env.VITE_BETA_TAG as string | undefined;
-const AUTH_MODE = import.meta.env.VITE_AUTH_MODE || 'open';
 
 interface NavbarProps {
   variant?: 'solutions' | 'marketplace' | 'ignite';
@@ -14,14 +13,12 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [discoverOpen, setDiscoverOpen] = useState(false);
   const discoverRef = useRef<HTMLDivElement>(null);
 
-  const handleSignIn = () => navigate('/login');
   const handleAdmin = () => navigate('/admin/videos');
-  const handleLogout = () => { logout(); navigate('/'); };
 
   const isActive = (path: string) => location.pathname === path;
   const isDiscoverActive = location.pathname.startsWith('/articles') || location.pathname.startsWith('/memes') || location.pathname.startsWith('/news');
@@ -110,7 +107,7 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
                 {theme === 'dark' ? 'light_mode' : 'dark_mode'}
               </span>
             </button>
-            {user ? (
+            {user && (
               <>
                 {(isAdmin || user?.role === 'content') && (
                   <button
@@ -140,22 +137,7 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
                     )}
                   </div>
                 </div>
-                {AUTH_MODE !== 'saml' && (
-                  <button
-                    onClick={handleLogout}
-                    className="text-sm text-slate-500 dark:text-slate-400 hover:text-red-400 transition-colors"
-                  >
-                    Sign Out
-                  </button>
-                )}
               </>
-            ) : (
-              <button
-                onClick={handleSignIn}
-                className="bg-primary hover:bg-primary/90 text-white text-sm font-bold px-5 py-2 rounded-lg transition-all shadow-[0_0_15px_rgba(37,140,244,0.3)]"
-              >
-                Sign In
-              </button>
             )}
           </div>
         </div>
