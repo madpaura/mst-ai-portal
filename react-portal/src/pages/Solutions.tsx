@@ -38,18 +38,15 @@ export const Solutions: React.FC = () => {
   const [landingConfig, setLandingConfig] = useState<LandingConfig | null>(null);
   const [cardSearch, setCardSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
-  const [contactEmail, setContactEmail] = useState('ai-tools@mst.internal');
-
   useEffect(() => {
     api.get<SolutionCard[]>('/api/solutions/cards').then(setSolutionCards).catch(() => {});
     api.get<LandingConfig>('/api/solutions/landing_page').then(setLandingConfig).catch(() => {});
-    api.get<string | null>('/settings/contact_email').then((v) => { if (v) setContactEmail(v); }).catch(() => {});
   }, []);
 
   const handleGetStarted = () => navigate('/ignite');
   const handleWatchDemos = () => navigate('/ignite');
   const handlePlayVideo = () => navigate('/ignite');
-  const handleContact = () => window.open(`mailto:${contactEmail}`, '_blank');
+  const handleContact = () => navigate('/contact');
   const handleCardClick = (card: SolutionCard) => {
     const target = card.link_url?.trim();
     if (target) {

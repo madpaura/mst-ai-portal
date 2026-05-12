@@ -13,7 +13,7 @@ interface ThemeContextType {
 }
 
 const ThemeContext = createContext<ThemeContextType>({
-  theme: 'dark',
+  theme: 'light',
   toggleTheme: () => {},
   portalTheme: 'default',
   applyPortalTheme: () => {},
@@ -24,7 +24,7 @@ export const useTheme = () => useContext(ThemeContext);
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<Theme>(() => {
     const saved = localStorage.getItem('mst_theme') as Theme | null;
-    return saved || 'dark';
+    return saved || 'light';
   });
   const [portalTheme, setPortalTheme] = useState<PortalTheme>('default');
 
