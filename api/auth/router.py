@@ -290,6 +290,11 @@ async def update_user_role(request: Request, user_id: str, role: str, admin: dic
     if role not in ("user", "content", "admin"):
         raise HTTPException(status_code=400, detail="Role must be user, content, or admin")
     db = await get_db()
+    target = await db.fetchrow("SELECT username FROM users WHERE id = $1", user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target["username"] == "admin":
+        raise HTTPException(status_code=403, detail="System admin role cannot be changed")
     result = await db.execute("UPDATE users SET role = $1 WHERE id = $2", role, user_id)
     if result == "UPDATE 0":
         raise HTTPException(status_code=404, detail="User not found")
@@ -321,6 +326,8 @@ async def reset_user_password(request: Request, user_id: str, body: ResetPasswor
     target = await db.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
+    if target["username"] == "admin" and str(admin["id"]) != user_id:
+        raise HTTPException(status_code=403, detail="System admin password cannot be reset by another admin")
 
     # Admin changing their own password must verify current password first
     if str(admin["id"]) == user_id:
@@ -341,6 +348,9 @@ async def delete_user(request: Request, user_id: str, admin: dict = Depends(requ
     if str(admin["id"]) == user_id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     db = await get_db()
+    target = await db.fetchrow("SELECT username FROM users WHERE id = $1", user_id)
+    if target and target["username"] == "admin":
+        raise HTTPException(status_code=403, detail="System admin account cannot be deleted")
     result = await db.execute("DELETE FROM users WHERE id = $1", user_id)
     if result == "DELETE 0":
         raise HTTPException(status_code=404, detail="User not found")

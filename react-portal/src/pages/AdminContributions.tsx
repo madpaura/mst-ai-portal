@@ -529,6 +529,9 @@ export const AdminContributions: React.FC = () => {
                   {currentUser?.id === u.id && (
                     <span className="text-[10px] text-slate-400 font-medium">(you)</span>
                   )}
+                  {u.username === 'admin' && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-500 font-bold">system</span>
+                  )}
                 </div>
                 <span className="text-xs text-slate-400 font-mono">{u.username}{u.email ? ` · ${u.email}` : ''}</span>
               </div>
@@ -538,8 +541,12 @@ export const AdminContributions: React.FC = () => {
                   <button
                     key={r}
                     onClick={() => handleChangeRole(u, r)}
-                    disabled={changingRoleId === u.id || currentUser?.id === u.id}
-                    title={currentUser?.id === u.id ? "Can't change your own role" : `Set role to ${r}`}
+                    disabled={changingRoleId === u.id || currentUser?.id === u.id || u.username === 'admin'}
+                    title={
+                      u.username === 'admin' ? 'System admin role is protected'
+                      : currentUser?.id === u.id ? "Can't change your own role"
+                      : `Set role to ${r}`
+                    }
                     className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors disabled:cursor-not-allowed ${
                       u.role === r
                         ? r === 'admin' ? 'bg-purple-500/20 border-purple-500/40 text-purple-400'
@@ -554,15 +561,17 @@ export const AdminContributions: React.FC = () => {
               </div>
               {/* Action buttons */}
               <div className="flex items-center gap-1 shrink-0">
-                <button
-                  onClick={() => { setResetTarget(u); setResetPassword(''); setCurrentPassword(''); }}
-                  disabled={deletingId === u.id}
-                  title="Reset password"
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors"
-                >
-                  <span className="material-symbols-outlined text-[18px]">lock_reset</span>
-                </button>
-                {currentUser?.id !== u.id && (
+                {u.username !== 'admin' || currentUser?.id === u.id ? (
+                  <button
+                    onClick={() => { setResetTarget(u); setResetPassword(''); setCurrentPassword(''); }}
+                    disabled={deletingId === u.id}
+                    title="Reset password"
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">lock_reset</span>
+                  </button>
+                ) : null}
+                {currentUser?.id !== u.id && u.username !== 'admin' && (
                   <button
                     onClick={() => handleDeleteUser(u)}
                     disabled={deletingId === u.id}
