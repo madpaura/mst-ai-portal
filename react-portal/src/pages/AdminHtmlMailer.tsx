@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { api } from '../api/client';
 
 const SAVED_MAILER_EMAILS_KEY = 'mst_mailer_saved_emails';
@@ -15,6 +15,64 @@ function persistSavedEmails(emails: string[]) {
   localStorage.setItem(SAVED_MAILER_EMAILS_KEY, JSON.stringify([...new Set(emails)]));
 }
 
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const CHUNK = 8192;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+async function inlineGoogleFonts(
+  html: string,
+  onProgress: (msg: string) => void,
+): Promise<string> {
+  const linkPattern = /<link[^>]*href=["']([^"']*fonts\.googleapis\.com[^"']*)["'][^>]*>/gi;
+  const matches: Array<{ tag: string; url: string }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = linkPattern.exec(html)) !== null) {
+    matches.push({ tag: m[0], url: m[1] });
+  }
+  if (!matches.length) return html;
+
+  let processed = html;
+  for (let i = 0; i < matches.length; i++) {
+    const { tag, url } = matches[i];
+    onProgress(`Fetching font CSS ${i + 1}/${matches.length}…`);
+    try {
+      const cssResp = await fetch(url);
+      if (!cssResp.ok) continue;
+      let css = await cssResp.text();
+
+      // Collect unique gstatic font URLs
+      const fontPattern = /url\(['"]?(https:\/\/fonts\.gstatic\.com[^'")\s]+)['"]?\)/g;
+      const fontUrls: string[] = [];
+      let fm: RegExpExecArray | null;
+      while ((fm = fontPattern.exec(css)) !== null) {
+        if (!fontUrls.includes(fm[1])) fontUrls.push(fm[1]);
+      }
+
+      for (let j = 0; j < fontUrls.length; j++) {
+        const fontUrl = fontUrls[j];
+        onProgress(`Downloading font file ${j + 1}/${fontUrls.length}…`);
+        try {
+          const fontResp = await fetch(fontUrl);
+          if (!fontResp.ok) continue;
+          const buffer = await fontResp.arrayBuffer();
+          const b64 = arrayBufferToBase64(buffer);
+          const fmt = fontUrl.includes('.woff2') ? 'font/woff2' : 'font/woff';
+          css = css.replaceAll(fontUrl, `data:${fmt};base64,${b64}`);
+        } catch { /* skip individual font */ }
+      }
+
+      processed = processed.replace(tag, `<style>\n${css}\n</style>`);
+    } catch { /* skip this link tag */ }
+  }
+  return processed;
+}
+
 export const AdminHtmlMailer: React.FC = () => {
   const [htmlContent, setHtmlContent] = useState('');
   const [fileName, setFileName] = useState('');
@@ -23,6 +81,9 @@ export const AdminHtmlMailer: React.FC = () => {
   const [bccEmails, setBccEmails] = useState('');
   const [sending, setSending] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [inlining, setInlining] = useState(false);
+  const [inlineProgress, setInlineProgress] = useState('');
+  const [fontsInlined, setFontsInlined] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [savedEmails, setSavedEmails] = useState<string[]>(loadSavedEmails);
   const [showSaved, setShowSaved] = useState(false);
@@ -30,6 +91,11 @@ export const AdminHtmlMailer: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
+
+  const hasExternalFonts = useMemo(
+    () => htmlContent.includes('fonts.googleapis.com'),
+    [htmlContent],
+  );
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
@@ -43,18 +109,35 @@ export const AdminHtmlMailer: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
+    setFontsInlined(false);
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
       setHtmlContent(text);
       if (!subject) {
-        // Try to extract <title> from HTML
         const match = text.match(/<title[^>]*>([^<]+)<\/title>/i);
         if (match) setSubject(match[1].trim());
       }
     };
     reader.readAsText(file);
     e.target.value = '';
+  };
+
+  const handleInlineFonts = async () => {
+    setInlining(true);
+    setInlineProgress('Starting…');
+    try {
+      const processed = await inlineGoogleFonts(htmlContent, setInlineProgress);
+      setHtmlContent(processed);
+      setFontsInlined(true);
+      const kb = (new Blob([processed]).size / 1024).toFixed(1);
+      showMsg('success', `Fonts inlined — HTML is now ${kb} KB (self-contained)`);
+    } catch (err: any) {
+      showMsg('error', `Font inlining failed: ${err.message}`);
+    } finally {
+      setInlining(false);
+      setInlineProgress('');
+    }
   };
 
   const handleCsvChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -155,9 +238,10 @@ export const AdminHtmlMailer: React.FC = () => {
     }
   };
 
-  const previewUrl = htmlContent
-    ? URL.createObjectURL(new Blob([htmlContent], { type: 'text/html' }))
-    : null;
+  const previewUrl = useMemo(
+    () => htmlContent ? URL.createObjectURL(new Blob([htmlContent], { type: 'text/html' })) : null,
+    [htmlContent],
+  );
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -208,7 +292,42 @@ export const AdminHtmlMailer: React.FC = () => {
               <p className="mt-2 text-xs text-emerald-400 flex items-center gap-1">
                 <span className="material-symbols-outlined text-sm">check_circle</span>
                 {(new Blob([htmlContent]).size / 1024).toFixed(1)} KB loaded
+                {fontsInlined && <span className="ml-1 text-emerald-500 font-medium">· fonts inlined</span>}
               </p>
+            )}
+
+            {/* Google Fonts warning + inline button */}
+            {htmlContent && hasExternalFonts && !fontsInlined && (
+              <div className="mt-3 px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-2">
+                <span className="material-symbols-outlined text-amber-400 text-base mt-0.5 shrink-0">warning</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-amber-400">Google Fonts detected</p>
+                  <p className="text-xs text-amber-300/70 mt-0.5">
+                    Icons and custom fonts from fonts.googleapis.com won't render in email clients.
+                    Inline them now to embed fonts directly in the HTML.
+                  </p>
+                  <button
+                    onClick={handleInlineFonts}
+                    disabled={inlining}
+                    className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-medium rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {inlining ? (
+                      <>
+                        <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        {inlineProgress || 'Inlining…'}
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-sm">download_for_offline</span>
+                        Inline fonts for email
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             )}
           </div>
 
@@ -236,7 +355,7 @@ export const AdminHtmlMailer: React.FC = () => {
               </h2>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => { setShowSaved(!showSaved); }}
+                  onClick={() => setShowSaved(!showSaved)}
                   className="flex items-center gap-1 text-xs text-slate-500 hover:text-primary transition-colors"
                 >
                   <span className="material-symbols-outlined text-sm">bookmarks</span>
