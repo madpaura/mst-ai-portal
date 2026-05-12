@@ -109,6 +109,15 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
             </button>
             {user && (
               <>
+                {user.role === 'user' && (
+                  <Link
+                    to="/contribute"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 text-sm font-medium transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">volunteer_activism</span>
+                    Contribute
+                  </Link>
+                )}
                 {(isAdmin || user?.role === 'content') && (
                   <button
                     onClick={handleAdmin}
