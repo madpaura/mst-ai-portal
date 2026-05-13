@@ -236,23 +236,23 @@ export const AdminAnalytics: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
             <span className="material-symbols-outlined text-primary text-3xl">analytics</span>
             Analytics Dashboard
           </h1>
-          <p className="text-sm text-slate-400 mt-1">Complete metrics across all portal sections</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Complete metrics across all portal sections</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <button onClick={exportToHtml} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-white/10 flex items-center gap-1.5 transition-colors">
+            <button onClick={exportToHtml} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white border border-slate-300 dark:border-white/10 flex items-center gap-1.5 transition-colors">
               <span className="material-symbols-outlined text-sm">html</span> Export HTML
             </button>
-            <button onClick={exportToPdf} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-white/10 flex items-center gap-1.5 transition-colors">
+            <button onClick={exportToPdf} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white border border-slate-300 dark:border-white/10 flex items-center gap-1.5 transition-colors">
               <span className="material-symbols-outlined text-sm">picture_as_pdf</span> Export PDF
             </button>
           </div>
           <div className="h-6 w-px bg-white/10" />
-          <div className="flex items-center gap-2 bg-slate-800/50 border border-white/10 rounded-lg p-1">
+          <div className="flex items-center gap-2 bg-slate-200/50 dark:bg-slate-800/50 border border-slate-300 dark:border-white/10 rounded-lg p-1">
             {PERIOD_OPTIONS.map(opt => (
               <button
                 key={opt.value}
@@ -260,7 +260,7 @@ export const AdminAnalytics: React.FC = () => {
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                   days === opt.value
                     ? 'bg-primary text-white'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/50'
                 }`}
               >
                 {opt.label}
@@ -279,7 +279,7 @@ export const AdminAnalytics: React.FC = () => {
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-all ${
               activeSection === s.key
                 ? 'text-primary border-primary bg-primary/5'
-                : 'text-slate-400 hover:text-white border-transparent'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white border-transparent'
             }`}
           >
             <span className="material-symbols-outlined text-base">{s.icon}</span>
@@ -412,7 +412,7 @@ export const AdminAnalytics: React.FC = () => {
                 <ChartCard title="Top Pages" icon="web">
                   <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
                     {topPages.map((p, i) => (
-                      <div key={p.path} className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/30 border border-white/5">
+                      <div key={p.path} className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-100/30 dark:bg-slate-800/30 border border-slate-100 dark:border-white/5">
                         <span className="text-xs font-bold text-slate-500 w-5 text-right">{i + 1}</span>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-white truncate font-mono">{p.path}</p>
@@ -677,23 +677,23 @@ export const AdminAnalytics: React.FC = () => {
 // ── Sub-components ───────────────────────────────────────
 
 const StatCard: React.FC<{ icon: string; label: string; value: string; color: string; small?: boolean }> = ({ icon, label, value, color, small }) => (
-  <div className="stat-card bg-card-dark border border-white/5 rounded-xl p-4 flex items-center gap-4 hover:border-white/10 transition-colors">
+  <div className="stat-card bg-card-light dark:bg-card-dark border border-slate-100 dark:border-white/5 rounded-xl p-4 flex items-center gap-4 hover:border-slate-200 dark:hover:border-white/10 transition-colors">
     <div className={`w-10 h-10 shrink-0 rounded-lg bg-white/5 flex items-center justify-center ${color}`}>
       <span className="material-symbols-outlined text-xl">{icon}</span>
     </div>
     <div className="min-w-0" style={{ overflow: 'hidden' }}>
       <p className="text-[10px] text-slate-500 uppercase tracking-wider font-medium truncate">{label}</p>
-      <p className={`font-bold text-white ${small ? 'text-sm truncate' : 'text-xl'}`}>{value}</p>
+      <p className={`font-bold text-slate-900 dark:text-white ${small ? 'text-sm truncate' : 'text-xl'}`}>{value}</p>
     </div>
   </div>
 );
 
 const ChartCard: React.FC<{ title: string; icon: string; subtitle?: string; children: React.ReactNode }> = ({ title, icon, subtitle, children }) => (
-  <div className="chart-card bg-card-dark border border-white/5 rounded-xl overflow-hidden" style={{ pageBreakInside: 'avoid' }}>
+  <div className="chart-card bg-card-light dark:bg-card-dark border border-slate-100 dark:border-white/5 rounded-xl overflow-hidden" style={{ pageBreakInside: 'avoid' }}>
     <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
       <span className="material-symbols-outlined shrink-0 text-primary text-lg">{icon}</span>
       <div className="min-w-0 flex-1">
-        <h3 className="text-sm font-bold text-white truncate">{title}</h3>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">{title}</h3>
         {subtitle && <p className="text-[10px] text-slate-500 truncate">{subtitle}</p>}
       </div>
     </div>

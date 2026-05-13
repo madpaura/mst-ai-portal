@@ -385,7 +385,7 @@ export const AdminHtmlMailer: React.FC = () => {
                         <button
                           onClick={() => toggleSavedEmailInField(email, 'to')}
                           className={`text-xs px-2 py-0.5 rounded-l border transition-colors ${
-                            inTo ? 'bg-blue-500/20 border-blue-400/40 text-blue-300' : 'bg-slate-700/50 border-slate-600 text-slate-400 hover:text-white'
+                            inTo ? 'bg-blue-500/20 border-blue-400/40 text-blue-300' : 'bg-slate-700/50 border-slate-600 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white'
                           }`}
                           title="Toggle in To"
                         >
@@ -394,7 +394,7 @@ export const AdminHtmlMailer: React.FC = () => {
                         <button
                           onClick={() => toggleSavedEmailInField(email, 'bcc')}
                           className={`text-xs px-2 py-0.5 border-y border-r transition-colors ${
-                            inBcc ? 'bg-purple-500/20 border-purple-400/40 text-purple-300' : 'bg-slate-700/50 border-slate-600 text-slate-400 hover:text-white'
+                            inBcc ? 'bg-purple-500/20 border-purple-400/40 text-purple-300' : 'bg-slate-700/50 border-slate-600 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white'
                           }`}
                           title="Toggle in BCC"
                         >
@@ -441,7 +441,7 @@ export const AdminHtmlMailer: React.FC = () => {
                   rows={3}
                   className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none font-mono"
                 />
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   {parseEmails(bccEmails).length + parseEmails(toEmails).length} total recipient(s)
                 </p>
               </div>
@@ -496,7 +496,7 @@ export const AdminHtmlMailer: React.FC = () => {
               Preview
             </h2>
             {htmlContent && (
-              <span className="text-xs text-slate-400">{fileName}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">{fileName}</span>
             )}
           </div>
           {htmlContent && previewUrl ? (

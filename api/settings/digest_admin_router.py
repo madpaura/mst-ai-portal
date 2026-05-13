@@ -8,6 +8,7 @@ from email.mime.multipart import MIMEMultipart
 import smtplib
 import socket
 import asyncpg
+import httpx
 
 from auth.dependencies import require_admin
 from email_utils.digest import generate_learning_digest
@@ -612,6 +613,30 @@ async def update_announcement(
         id=str(row["id"]), title=row["title"], content=row.get("content"),
         badge=row.get("badge"), is_active=row["is_active"], created_at=row["created_at"],
     )
+
+
+class OllamaTestRequest(BaseModel):
+    base_url: str
+
+
+@router.post("/test-ollama")
+async def test_ollama(req: OllamaTestRequest, admin: dict = Depends(require_admin)):
+    """Test connectivity to an Ollama instance and return available models."""
+    url = req.base_url.rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get(f"{url}/api/tags")
+        if resp.status_code == 200:
+            data = resp.json()
+            models = [m.get("name", "") for m in data.get("models", [])]
+            return {"ok": True, "models": models}
+        return {"ok": False, "error": f"Ollama returned HTTP {resp.status_code}"}
+    except httpx.ConnectError:
+        return {"ok": False, "error": f"Cannot connect to {url}"}
+    except httpx.TimeoutException:
+        return {"ok": False, "error": f"Connection timed out — is Ollama running at {url}?"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
 
 
 @router.delete("/announcements/{announcement_id}")

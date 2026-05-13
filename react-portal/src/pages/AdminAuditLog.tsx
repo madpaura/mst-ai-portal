@@ -78,7 +78,7 @@ export const AdminAuditLog: React.FC = () => {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Audit Log</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Audit Log</h1>
           <p className="text-slate-400 text-sm mt-1">All privileged admin actions — {total} total entries</p>
         </div>
         <form onSubmit={handleFilter} className="flex items-center gap-2">
@@ -86,7 +86,7 @@ export const AdminAuditLog: React.FC = () => {
             value={filterAction}
             onChange={e => setFilterAction(e.target.value)}
             placeholder="Filter by action…"
-            className="px-3 py-1.5 text-sm rounded-lg bg-slate-800 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-primary w-52"
+            className="px-3 py-1.5 text-sm rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-primary w-52"
           />
           <button
             type="submit"
@@ -98,7 +98,7 @@ export const AdminAuditLog: React.FC = () => {
             <button
               type="button"
               onClick={() => { setFilterAction(''); setPage(0); }}
-              className="px-3 py-1.5 text-sm text-slate-400 hover:text-white transition-colors"
+              className="px-3 py-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors"
             >
               Clear
             </button>
@@ -106,7 +106,7 @@ export const AdminAuditLog: React.FC = () => {
         </form>
       </div>
 
-      <div className="bg-slate-900/50 rounded-xl border border-white/10 overflow-hidden">
+      <div className="bg-slate-100/50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20 text-slate-400">
             <span className="material-symbols-outlined animate-spin mr-2">autorenew</span>
@@ -140,7 +140,7 @@ export const AdminAuditLog: React.FC = () => {
                       {new Date(entry.ts).toLocaleString()}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-white">{entry.admin_name || '—'}</div>
+                      <div className="font-medium text-slate-900 dark:text-white">{entry.admin_name || '—'}</div>
                       {entry.username && (
                         <div className="text-xs text-slate-500">@{entry.username}</div>
                       )}
@@ -173,7 +173,7 @@ export const AdminAuditLog: React.FC = () => {
                         <div className="space-y-2">
                           {Object.keys(entry.details).length > 0 && (
                             <div>
-                              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Details</div>
+                              <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Details</div>
                               <pre className="text-xs text-slate-300 bg-slate-900 rounded p-3 overflow-x-auto">
                                 {JSON.stringify(entry.details, null, 2)}
                               </pre>
@@ -196,7 +196,7 @@ export const AdminAuditLog: React.FC = () => {
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-slate-400">
+        <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
           <span>Page {page + 1} of {totalPages} ({total} entries)</span>
           <div className="flex items-center gap-2">
             <button

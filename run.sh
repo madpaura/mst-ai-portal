@@ -144,13 +144,22 @@ start_backend() {
         return
     fi
     
+    # Wait for port 8000 to be fully released before binding
+    for i in $(seq 1 10); do
+        if ! lsof -i :8000 -t >/dev/null 2>&1; then
+            break
+        fi
+        print_status "Waiting for port 8000 to be released... ($i/10)"
+        sleep 1
+    done
+
     print_status "Starting FastAPI server..."
     nohup uvicorn main:app --host 0.0.0.0 --port 8000 --reload > backend.log 2>&1 &
     BACKEND_PID=$!
     echo $BACKEND_PID > backend.pid
-    
-    sleep 2
-    
+
+    sleep 4
+
     if check_backend; then
         print_status "Backend started successfully (PID: $BACKEND_PID)"
         print_status "API Documentation: http://localhost:8000/docs"
@@ -278,15 +287,17 @@ stop_services() {
     # Stop backend
     if [ -f "$API_DIR/backend.pid" ]; then
         BACKEND_PID=$(cat "$API_DIR/backend.pid")
-        if ps -p $BACKEND_PID > /dev/null; then
+        if ps -p $BACKEND_PID > /dev/null 2>&1; then
             print_status "Stopping backend (PID: $BACKEND_PID)..."
-            kill $BACKEND_PID
-            rm "$API_DIR/backend.pid"
+            # Kill child processes first (uvicorn --reload spawns a server child that holds the port)
+            pkill -P $BACKEND_PID 2>/dev/null || true
+            kill $BACKEND_PID 2>/dev/null || true
         fi
+        rm -f "$API_DIR/backend.pid"
     fi
-    
-    # Kill any remaining backend processes
-    pkill -f "uvicorn.*8000" 2>/dev/null || true
+
+    # Kill any remaining uvicorn processes
+    pkill -f "uvicorn" 2>/dev/null || true
     
     # Stop worker
     if [ -f "$API_DIR/worker.pid" ]; then
@@ -308,7 +319,6 @@ stop_services() {
 restart_services() {
     print_header "Restarting Services"
     stop_services
-    sleep 2
     start_all
 }
 

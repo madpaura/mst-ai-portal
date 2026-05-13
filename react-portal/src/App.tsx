@@ -32,7 +32,6 @@ import { AdminContributions } from './pages/AdminContributions';
 import { AdminAuditLog } from './pages/AdminAuditLog';
 import { Contact } from './pages/Contact';
 import { AdminContacts } from './pages/AdminContacts';
-import { AdminArtifacts } from './pages/AdminArtifacts';
 import { AdminHtmlMailer } from './pages/AdminHtmlMailer';
 import { Search } from './pages/Search';
 
@@ -90,7 +89,7 @@ function App() {
             <Route path="audit-log" element={<AdminAuditLog />} />
             <Route path="contacts" element={<AdminContacts />} />
             <Route path="memes" element={<AdminMemes />} />
-            <Route path="artifacts" element={<AdminArtifacts />} />
+            <Route path="artifacts" element={<Navigate to="/admin/marketplace" replace />} />
             <Route path="html-mailer" element={<AdminHtmlMailer />} />
           </Route>
 

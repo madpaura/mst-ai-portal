@@ -107,7 +107,7 @@ export const AdminContacts: React.FC = () => {
   const divisionNames = [...new Set(contacts.map(c => c.division))].sort();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-6">
+    <div className="min-h-screen p-6 text-slate-900 dark:text-white">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8 flex items-center justify-between">
           <div>
@@ -135,60 +135,60 @@ export const AdminContacts: React.FC = () => {
 
         {/* Form */}
         {showForm && (
-          <div className="mb-6 bg-slate-800/60 rounded-xl border border-white/10 p-6 space-y-4">
+          <div className="mb-6 bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/10 p-6 space-y-4">
             <h2 className="text-sm font-bold text-slate-200">{editing ? 'Edit Contact' : 'New Contact'}</h2>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Division *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Division *</label>
                 <input
                   type="text"
                   list="division-list"
                   value={form.division}
                   onChange={e => setForm(f => ({ ...f, division: e.target.value }))}
                   placeholder="e.g. Engineering, Product"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />
                 <datalist id="division-list">
                   {divisionNames.map(d => <option key={d} value={d} />)}
                 </datalist>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Name *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Name *</label>
                 <input
                   type="text"
                   value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   placeholder="Full name"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Title / Role</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Title / Role</label>
                 <input
                   type="text"
                   value={form.title}
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                   placeholder="e.g. Team Lead, Product Manager"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Email *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Email *</label>
                 <input
                   type="email"
                   value={form.email}
                   onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   placeholder="name@company.com"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Sort Order</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Sort Order</label>
                 <input
                   type="number"
                   value={form.sort_order}
                   onChange={e => setForm(f => ({ ...f, sort_order: parseInt(e.target.value) || 0 }))}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />
               </div>
               <div className="flex items-end pb-1">
@@ -225,8 +225,8 @@ export const AdminContacts: React.FC = () => {
         ) : (
           <div className="space-y-6">
             {divisions.map(division => (
-              <div key={division} className="bg-slate-800/40 rounded-xl border border-white/8 overflow-hidden">
-                <div className="px-5 py-3 bg-slate-800/60 border-b border-white/8">
+              <div key={division} className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                <div className="px-5 py-3 bg-slate-100 dark:bg-slate-800/60 border-b border-slate-200 dark:border-white/10">
                   <span className="text-xs font-bold uppercase tracking-widest text-slate-400">{division}</span>
                   <span className="ml-2 text-xs text-slate-600">({grouped[division].length})</span>
                 </div>
@@ -237,8 +237,8 @@ export const AdminContacts: React.FC = () => {
                         <span className="text-sm font-bold text-primary">{c.name.charAt(0).toUpperCase()}</span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-sm text-white truncate">{c.name}</div>
-                        <div className="text-xs text-slate-400 truncate">{c.title && `${c.title} · `}{c.email}</div>
+                        <div className="font-semibold text-sm text-slate-900 dark:text-white truncate">{c.name}</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{c.title && `${c.title} · `}{c.email}</div>
                       </div>
                       {!c.is_active && (
                         <span className="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-400 border border-white/10">Inactive</span>

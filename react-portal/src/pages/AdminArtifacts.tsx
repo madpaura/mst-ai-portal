@@ -101,7 +101,7 @@ function slugify(v: string) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export const AdminArtifacts: React.FC = () => {
+export const AdminArtifacts: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
   const { user, isAdmin } = useAuth();
   const [tab, setTab] = useState<'list' | 'new' | 'config'>('list');
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
@@ -142,12 +142,12 @@ export const AdminArtifacts: React.FC = () => {
   };
 
   return (
-    <div className="flex h-full min-h-screen">
+    <div className={`flex h-full ${embedded ? '' : 'min-h-screen'}`}>
       {/* Left panel — list */}
-      <div className="w-80 shrink-0 border-r border-white/10 bg-sidebar-dark flex flex-col">
-        <div className="p-4 border-b border-white/10">
+      <div className="w-80 shrink-0 border-r border-slate-200 dark:border-white/10 bg-sidebar-light dark:bg-sidebar-dark flex flex-col">
+        <div className="p-4 border-b border-slate-200 dark:border-white/10">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold text-white">Artifact Hub</h2>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Artifact Hub</h2>
             <div className="flex gap-1">
               <button
                 onClick={() => {
@@ -161,10 +161,10 @@ export const AdminArtifacts: React.FC = () => {
                 <span className="material-symbols-outlined text-sm">add</span>
                 New
               </button>
-              {isAdmin && (
+              {isAdmin && !embedded && (
                 <button
                   onClick={() => setTab('config')}
-                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${tab === 'config' ? 'bg-white/20 text-white' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${tab === 'config' ? 'bg-white/20 text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10'}`}
                 >
                   <span className="material-symbols-outlined text-sm">settings</span>
                 </button>
@@ -212,7 +212,7 @@ export const AdminArtifacts: React.FC = () => {
                 className={`w-full text-left px-4 py-3 border-b border-white/5 transition-colors hover:bg-white/5 ${selected?.id === a.id ? 'bg-primary/10 border-l-2 border-l-primary' : ''}`}
               >
                 <div className="flex items-start justify-between gap-2 mb-1">
-                  <span className="text-sm font-medium text-white truncate">{a.display_name}</span>
+                  <span className="text-sm font-medium text-slate-900 dark:text-white truncate">{a.display_name}</span>
                   <Badge label={a.status} cls={STATUS_COLORS[a.status]} />
                 </div>
                 <div className="flex items-center gap-2">
@@ -231,7 +231,7 @@ export const AdminArtifacts: React.FC = () => {
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 overflow-y-auto bg-background-dark">
+      <div className="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark">
         {tab === 'config' && isAdmin ? (
           <GithubConfigPanel />
         ) : tab === 'new' ? (
@@ -369,7 +369,7 @@ const ArtifactDetail: React.FC<{
               onChange={e => setEditData(d => ({ ...d, display_name: e.target.value }))}
             />
           ) : (
-            <h1 className="text-xl font-bold text-white">{artifact.display_name}</h1>
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white">{artifact.display_name}</h1>
           )}
           <p className="text-xs text-slate-500 mt-1 font-mono">{artifact.name}</p>
         </div>
@@ -1069,8 +1069,8 @@ const NewArtifactForm: React.FC<{
   return (
     <form onSubmit={handleSubmit} className="p-6 max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-white">New Artifact Submission</h2>
-        <button type="button" onClick={onCancel} className="text-slate-500 hover:text-white transition-colors">
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white">New Artifact Submission</h2>
+        <button type="button" onClick={onCancel} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
           <span className="material-symbols-outlined">close</span>
         </button>
       </div>
@@ -1222,7 +1222,7 @@ interface ConnCheckResult {
   error: string | null;
 }
 
-const GithubConfigPanel: React.FC = () => {
+export const GithubConfigPanel: React.FC = () => {
   const [config, setConfig] = useState<GithubConfig>(EMPTY_GITHUB_CONFIG);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1273,7 +1273,7 @@ const GithubConfigPanel: React.FC = () => {
     <div className="p-6 max-w-2xl">
       <div className="flex items-center gap-3 mb-6">
         <span className="material-symbols-outlined text-slate-400">settings</span>
-        <h2 className="text-lg font-bold text-white">GitHub Backend Configuration</h2>
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white">GitHub Backend Configuration</h2>
       </div>
 
       <div className="mb-6 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20 text-sm text-blue-300">
@@ -1290,7 +1290,7 @@ const GithubConfigPanel: React.FC = () => {
           <button
             key={t}
             onClick={() => setActiveType(t)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeType === t ? `${TYPE_COLORS[t]} border border-current` : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeType === t ? `${TYPE_COLORS[t]} border border-current` : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'}`}
           >
             <span className="material-symbols-outlined text-sm">{TYPE_ICONS[t]}</span>
             {TYPE_LABELS[t]}

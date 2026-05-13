@@ -1,76 +1,21 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
 import { useTheme } from '../context/theme';
 import type { PortalTheme } from '../context/theme';
 
-interface ForgeSetting {
-  id: string;
-  git_url: string;
-  git_token: string | null;
-  git_branch: string;
-  scan_paths: string[];
-  update_frequency: string;
-  llm_provider: string;
-  llm_model: string;
-  llm_api_key: string | null;
-  auto_update_release_tag: boolean;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-interface SyncJob {
-  id: number;
-  settings_id: string;
-  trigger_type: string;
-  status: string;
-  components_found: number;
-  components_updated: number;
-  components_created: number;
-  error: string | null;
-  log: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  created_at: string;
-}
-
-interface SettingForm {
-  git_url: string;
-  git_token: string;
-  git_branch: string;
-  scan_paths: string;
-  update_frequency: string;
-  llm_provider: string;
-  llm_model: string;
-  llm_api_key: string;
-  ollama_url: string;
-  auto_update_release_tag: boolean;
-}
-
-const EMPTY_FORM: SettingForm = {
-  git_url: '', git_token: '', git_branch: 'main',
-  scan_paths: '.', update_frequency: 'nightly',
-  llm_provider: 'openai', llm_model: 'gpt-4o-mini',
-  llm_api_key: '', ollama_url: '', auto_update_release_tag: true,
-};
-
 export const AdminSettings: React.FC = () => {
-  const [settings, setSettings] = useState<ForgeSetting[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<ForgeSetting | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState<SettingForm>(EMPTY_FORM);
-  const [jobs, setJobs] = useState<SyncJob[]>([]);
-  const [selectedSettingId, setSelectedSettingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [verifyResults, setVerifyResults] = useState<Record<string, { git: any; llm: any } | null>>({});
-  const [verifying, setVerifying] = useState<Record<string, boolean>>({});
-  const [syncing, setSyncing] = useState<Record<string, boolean>>({});
-  const [expandedJobId, setExpandedJobId] = useState<number | null>(null);
-  const logEndRef = useRef<HTMLDivElement>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Transcript service settings
+  // Ollama configuration
+  const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
+  const [ollamaModel, setOllamaModel] = useState('');
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [ollamaSaved, setOllamaSaved] = useState({ url: '', model: '' });
+  const [ollamaSaving, setOllamaSaving] = useState(false);
+  const [ollamaTesting, setOllamaTesting] = useState(false);
+  const [ollamaTestResult, setOllamaTestResult] = useState<{ ok: boolean; models?: string[]; error?: string } | null>(null);
+
+  // Transcript service
   const [transcriptForm, setTranscriptForm] = useState({ url: '', api_key: '', model: 'large-v3' });
   const [transcriptTesting, setTranscriptTesting] = useState(false);
   const [transcriptSaving, setTranscriptSaving] = useState(false);
@@ -82,12 +27,7 @@ export const AdminSettings: React.FC = () => {
   const [contactEmailSaved, setContactEmailSaved] = useState('');
   const [contactEmailSaving, setContactEmailSaving] = useState(false);
 
-  // Marketplace status
-  const [marketplaceStatus, setMarketplaceStatus] = useState<{ under_construction: boolean; message: string } | null>(null);
-  const [marketplaceSaving, setMarketplaceSaving] = useState(false);
-  const [marketplaceForm, setMarketplaceForm] = useState({ under_construction: false, message: '' });
-
-  // SMTP settings
+  // SMTP
   const [smtpConfig, setSmtpConfig] = useState<Record<string, string> | null>(null);
   const [showSmtpModal, setShowSmtpModal] = useState(false);
   const [smtpForm, setSmtpForm] = useState({
@@ -100,13 +40,18 @@ export const AdminSettings: React.FC = () => {
   const [smtpProbing, setSmtpProbing] = useState(false);
   const [smtpProbeResult, setSmtpProbeResult] = useState<{ steps: { step: string; ok: boolean; detail: string }[]; reachable: boolean; hint?: string } | null>(null);
 
-  // Cache stats
+  // Redis cache
   const [cacheStats, setCacheStats] = useState<Record<string, any> | null>(null);
   const [cacheFlushing, setCacheFlushing] = useState(false);
 
   // Portal theme
   const { portalTheme, applyPortalTheme } = useTheme();
   const [themeSaving, setThemeSaving] = useState(false);
+
+  const showMsg = (type: 'success' | 'error', text: string) => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage(null), 3000);
+  };
 
   const handleThemeSave = async (theme: PortalTheme) => {
     setThemeSaving(true);
@@ -121,41 +66,100 @@ export const AdminSettings: React.FC = () => {
     }
   };
 
-  const showMsg = (type: 'success' | 'error', text: string) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage(null), 3000);
-  };
-
   const fetchTranscriptConfig = useCallback(async () => {
     try {
       const cfg = await api.get<{ url?: string; api_key?: string; model?: string } | null>('/settings/transcript_config');
       if (cfg) {
-        setTranscriptForm({
-          url: cfg.url || '',
-          api_key: '',  // server returns masked value; never pre-fill
-          model: cfg.model || 'large-v3',
-        });
+        setTranscriptForm({ url: cfg.url || '', api_key: '', model: cfg.model || 'large-v3' });
       }
-    } catch { /* no saved config yet */ }
-  }, []);
-
-  const fetchSettings = useCallback(async () => {
-    try {
-      const data = await api.get<ForgeSetting[]>('/admin/forge/settings');
-      setSettings(data);
-    } catch (err: any) {
-      showMsg('error', err.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch { }
   }, []);
 
   const fetchContactEmail = useCallback(async () => {
     try {
       const data = await api.get<string | null>('/settings/contact_email');
       if (data) { setContactEmail(data); setContactEmailSaved(data); }
-    } catch { /* not set yet */ }
+    } catch { }
   }, []);
+
+  const fetchSmtpSettings = useCallback(async () => {
+    try {
+      const data = await api.get<Record<string, string> | null>('/settings/smtp_config');
+      setSmtpConfig(data);
+      if (data) {
+        setSmtpForm(f => ({
+          ...f,
+          smtp_server: data.smtp_server || '',
+          smtp_port: data.smtp_port || '1025',
+          smtp_user: data.smtp_user || '',
+          smtp_password: '',
+          smtp_from_email: data.smtp_from_email || '',
+          smtp_from_name: data.smtp_from_name || '',
+        }));
+      }
+    } catch { }
+  }, []);
+
+  const fetchCacheStats = useCallback(async () => {
+    try {
+      const data = await api.get<Record<string, any>>('/admin/cache/stats');
+      setCacheStats(data);
+    } catch { }
+  }, []);
+
+  const fetchOllamaConfig = useCallback(async () => {
+    try {
+      const data = await api.get<{ base_url: string; model?: string } | null>('/settings/ollama_config');
+      if (data?.base_url) {
+        setOllamaUrl(data.base_url);
+        setOllamaModel(data.model || '');
+        setOllamaSaved({ url: data.base_url, model: data.model || '' });
+      }
+    } catch { }
+  }, []);
+
+  useEffect(() => {
+    fetchSmtpSettings();
+    fetchTranscriptConfig();
+    fetchContactEmail();
+    fetchCacheStats();
+    fetchOllamaConfig();
+  }, [fetchSmtpSettings, fetchTranscriptConfig, fetchContactEmail, fetchCacheStats, fetchOllamaConfig]);
+
+  const handleOllamaSave = async () => {
+    setOllamaSaving(true);
+    try {
+      await api.put('/settings/admin/ollama_config', { value: { base_url: ollamaUrl.trim(), model: ollamaModel } });
+      setOllamaSaved({ url: ollamaUrl.trim(), model: ollamaModel });
+      showMsg('success', 'Ollama configuration saved');
+    } catch (err: any) {
+      showMsg('error', err.message);
+    } finally {
+      setOllamaSaving(false);
+    }
+  };
+
+  const handleOllamaTest = async () => {
+    setOllamaTesting(true);
+    setOllamaTestResult(null);
+    setOllamaModels([]);
+    try {
+      const res = await api.post<{ ok: boolean; models?: string[]; error?: string }>('/admin/test-ollama', {
+        base_url: ollamaUrl.trim(),
+      });
+      setOllamaTestResult(res);
+      if (res.ok && res.models) {
+        setOllamaModels(res.models);
+        if (!ollamaModel || !res.models.includes(ollamaModel)) {
+          setOllamaModel(res.models[0] || '');
+        }
+      }
+    } catch (err: any) {
+      setOllamaTestResult({ ok: false, error: err.message });
+    } finally {
+      setOllamaTesting(false);
+    }
+  };
 
   const handleContactEmailSave = async () => {
     setContactEmailSaving(true);
@@ -169,63 +173,6 @@ export const AdminSettings: React.FC = () => {
       setContactEmailSaving(false);
     }
   };
-
-  const fetchMarketplaceStatus = useCallback(async () => {
-    try {
-      const data = await api.get<{ under_construction: boolean; message: string } | null>('/settings/marketplace_status');
-      if (data) {
-        setMarketplaceStatus(data);
-        setMarketplaceForm({ under_construction: data.under_construction, message: data.message || '' });
-      }
-    } catch { /* no saved status yet */ }
-  }, []);
-
-  const handleMarketplaceSave = async () => {
-    setMarketplaceSaving(true);
-    try {
-      await api.put('/settings/admin/marketplace_status', { value: marketplaceForm });
-      setMarketplaceStatus(marketplaceForm);
-      showMsg('success', 'Marketplace status saved');
-    } catch (err: any) {
-      showMsg('error', err.message);
-    } finally {
-      setMarketplaceSaving(false);
-    }
-  };
-
-  const fetchSmtpSettings = useCallback(async () => {
-    try {
-      const data = await api.get<Record<string, string> | null>('/settings/smtp_config');
-      setSmtpConfig(data);
-      if (data) {
-        setSmtpForm((f) => ({
-          ...f,
-          smtp_server: data.smtp_server || '',
-          smtp_port: data.smtp_port || '1025',
-          smtp_user: data.smtp_user || '',
-          smtp_password: '', // never show stored password
-          smtp_from_email: data.smtp_from_email || '',
-          smtp_from_name: data.smtp_from_name || '',
-        }));
-      }
-    } catch { /* no saved settings yet */ }
-  }, []);
-
-  const fetchJobs = useCallback(async (settingId: string) => {
-    try {
-      const data = await api.get<SyncJob[]>(`/admin/forge/settings/${settingId}/jobs`);
-      setJobs(data);
-    } catch (err: any) {
-      showMsg('error', err.message);
-    }
-  }, []);
-
-  const fetchCacheStats = useCallback(async () => {
-    try {
-      const data = await api.get<Record<string, any>>('/admin/cache/stats');
-      setCacheStats(data);
-    } catch { /* redis may be disabled */ }
-  }, []);
 
   const handleCacheFlush = async (namespace?: string) => {
     setCacheFlushing(true);
@@ -243,150 +190,6 @@ export const AdminSettings: React.FC = () => {
     } finally { setCacheFlushing(false); }
   };
 
-  useEffect(() => { fetchSettings(); fetchSmtpSettings(); fetchTranscriptConfig(); fetchMarketplaceStatus(); fetchContactEmail(); fetchCacheStats(); }, [fetchSettings, fetchSmtpSettings, fetchTranscriptConfig, fetchMarketplaceStatus, fetchContactEmail, fetchCacheStats]);
-
-  useEffect(() => {
-    if (selectedSettingId) fetchJobs(selectedSettingId);
-  }, [selectedSettingId, fetchJobs]);
-
-  const openCreate = () => {
-    setEditing(null);
-    setForm(EMPTY_FORM);
-    setCreating(true);
-  };
-
-  const openEdit = (s: ForgeSetting) => {
-    setCreating(false);
-    setEditing(s);
-    setForm({
-      git_url: s.git_url,
-      git_token: '',
-      git_branch: s.git_branch,
-      scan_paths: s.scan_paths.join(', '),
-      update_frequency: s.update_frequency,
-      llm_provider: s.llm_provider,
-      llm_model: s.llm_model,
-      llm_api_key: '',
-      ollama_url: (s as any).ollama_url || '',
-      auto_update_release_tag: s.auto_update_release_tag,
-    });
-  };
-
-  const closeForm = () => {
-    setCreating(false);
-    setEditing(null);
-    setForm(EMPTY_FORM);
-  };
-
-  const handleSave = async () => {
-    const payload: any = {
-      git_url: form.git_url,
-      git_branch: form.git_branch,
-      scan_paths: form.scan_paths.split(',').map((s) => s.trim()).filter(Boolean),
-      update_frequency: form.update_frequency,
-      llm_provider: form.llm_provider,
-      llm_model: form.llm_model,
-      auto_update_release_tag: form.auto_update_release_tag,
-    };
-    if (form.git_token) payload.git_token = form.git_token;
-    if (form.llm_api_key) payload.llm_api_key = form.llm_api_key;
-    if (form.llm_provider === 'ollama') payload.ollama_url = form.ollama_url || null;
-
-    try {
-      if (creating) {
-        await api.post('/admin/forge/settings', payload);
-        showMsg('success', 'Setting created');
-      } else if (editing) {
-        await api.put(`/admin/forge/settings/${editing.id}`, payload);
-        showMsg('success', 'Setting updated');
-      }
-      closeForm();
-      await fetchSettings();
-    } catch (err: any) {
-      showMsg('error', err.message);
-    }
-  };
-
-  const handleDelete = async (s: ForgeSetting) => {
-    if (!confirm(`Delete setting for "${s.git_url}"?`)) return;
-    try {
-      await api.delete(`/admin/forge/settings/${s.id}`);
-      await fetchSettings();
-      showMsg('success', 'Setting deleted');
-    } catch (err: any) {
-      showMsg('error', err.message);
-    }
-  };
-
-  const handleSync = async (settingId: string) => {
-    setSyncing((v) => ({ ...v, [settingId]: true }));
-    try {
-      await api.post(`/admin/forge/settings/${settingId}/sync`);
-      showMsg('success', 'Sync job started');
-      setSelectedSettingId(settingId);
-      fetchJobs(settingId);
-      // Start polling for live updates
-      if (pollRef.current) clearInterval(pollRef.current);
-      pollRef.current = setInterval(async () => {
-        try {
-          const data = await api.get<SyncJob[]>(`/admin/forge/settings/${settingId}/jobs`);
-          setJobs(data);
-          const running = data.some((j) => j.status === 'running' || j.status === 'pending');
-          if (!running) {
-            if (pollRef.current) clearInterval(pollRef.current);
-            pollRef.current = null;
-            setSyncing((v) => ({ ...v, [settingId]: false }));
-          }
-          // Auto-expand the latest running job
-          const runningJob = data.find((j) => j.status === 'running');
-          if (runningJob) setExpandedJobId(runningJob.id);
-        } catch { /* ignore */ }
-      }, 2000);
-    } catch (err: any) {
-      showMsg('error', err.message);
-      setSyncing((v) => ({ ...v, [settingId]: false }));
-    }
-  };
-
-  useEffect(() => {
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
-
-  useEffect(() => {
-    if (expandedJobId && logEndRef.current) {
-      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [jobs, expandedJobId]);
-
-  const handleVerify = async (settingId: string) => {
-    setVerifying((v) => ({ ...v, [settingId]: true }));
-    setVerifyResults((v) => ({ ...v, [settingId]: null }));
-    try {
-      const res = await api.post<{ git: any; llm: any }>(`/admin/forge/settings/${settingId}/verify`);
-      setVerifyResults((v) => ({ ...v, [settingId]: res }));
-    } catch (err: any) {
-      const detail = err.message || 'Unknown error';
-      setVerifyResults((v) => ({
-        ...v,
-        [settingId]: {
-          git: { status: 'error', message: `Verification request failed: ${detail}` },
-          llm: { status: 'error', message: `Verification request failed: ${detail}` },
-        },
-      }));
-    } finally {
-      setVerifying((v) => ({ ...v, [settingId]: false }));
-    }
-  };
-
-  const handleSyncAll = async () => {
-    try {
-      const res = await api.post<{ message: string }>('/admin/forge/sync-all');
-      showMsg('success', res.message);
-    } catch (err: any) {
-      showMsg('error', err.message);
-    }
-  };
-
   const handleTranscriptSave = async () => {
     setTranscriptSaving(true);
     try {
@@ -394,7 +197,7 @@ export const AdminSettings: React.FC = () => {
       if (transcriptForm.api_key) payload.api_key = transcriptForm.api_key;
       await api.put('/settings/admin/transcript_config', { value: payload });
       showMsg('success', 'Transcript service settings saved');
-      setTranscriptForm((f) => ({ ...f, api_key: '' }));
+      setTranscriptForm(f => ({ ...f, api_key: '' }));
     } catch (err: any) {
       showMsg('error', err.message);
     } finally {
@@ -419,12 +222,6 @@ export const AdminSettings: React.FC = () => {
     }
   };
 
-  if (loading) {
-    return <div className="flex items-center justify-center h-full text-slate-400 p-20">Loading settings...</div>;
-  }
-
-  const showForm = creating || editing;
-
   return (
     <div className="p-6 lg:p-8 max-w-6xl mx-auto">
       {/* Toast */}
@@ -436,28 +233,117 @@ export const AdminSettings: React.FC = () => {
         </div>
       )}
 
-      {/* Page Header */}
       <div className="mb-8">
-        <h1 className="text-xl font-bold text-white">Admin Settings</h1>
-        <p className="text-sm text-slate-400 mt-1">Configure SMTP email and marketplace repository scanning</p>
+        <h1 className="text-xl font-bold text-slate-900 dark:text-white">Admin Settings</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Portal configuration — email, theme, transcription, and caching</p>
       </div>
 
-      {/* ── Contact Email Card ──────────────────────────────────── */}
-      <div className="bg-card-dark rounded-xl border border-white/5 p-6 mb-8">
+      {/* ── Ollama Configuration ───────────────────────────────────── */}
+      <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-100 dark:border-white/5 p-6 mb-8">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="material-symbols-outlined text-primary">psychology</span>
+          <div>
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">Ollama Configuration</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Global Ollama endpoint — used by video Auto Mode and article AI features</p>
+          </div>
+        </div>
+        <div className="space-y-4">
+          {/* URL + Test */}
+          <div>
+            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Base URL</label>
+            <div className="flex gap-3">
+              <input
+                type="url"
+                value={ollamaUrl}
+                onChange={e => { setOllamaUrl(e.target.value); setOllamaTestResult(null); setOllamaModels([]); }}
+                placeholder="http://localhost:11434"
+                className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm font-mono focus:border-primary outline-none"
+              />
+              <button
+                onClick={handleOllamaTest}
+                disabled={ollamaTesting || !ollamaUrl.trim()}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-slate-200 text-sm font-bold rounded-lg transition-colors border border-white/10"
+              >
+                <span className={`material-symbols-outlined text-sm ${ollamaTesting ? 'animate-spin' : ''}`}>
+                  {ollamaTesting ? 'progress_activity' : 'wifi_tethering'}
+                </span>
+                {ollamaTesting ? 'Testing…' : 'Test Connection'}
+              </button>
+            </div>
+          </div>
+
+          {/* Test result */}
+          {ollamaTestResult && (
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${ollamaTestResult.ok
+              ? 'bg-green-500/10 text-green-400 border-green-500/30'
+              : 'bg-red-500/10 text-red-400 border-red-500/30'
+            }`}>
+              <span className="material-symbols-outlined text-base">{ollamaTestResult.ok ? 'check_circle' : 'error'}</span>
+              {ollamaTestResult.ok
+                ? `Connected — ${ollamaTestResult.models?.length ?? 0} model(s) available`
+                : ollamaTestResult.error}
+            </div>
+          )}
+
+          {/* Model selection — shown once models are loaded */}
+          <div>
+            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Model</label>
+            {ollamaModels.length > 0 ? (
+              <select
+                value={ollamaModel}
+                onChange={e => setOllamaModel(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+              >
+                {ollamaModels.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-100/50 dark:bg-slate-900/50 border border-slate-100 dark:border-white/5">
+                {ollamaSaved.model ? (
+                  <span className="text-sm text-slate-300 font-mono">{ollamaSaved.model}</span>
+                ) : (
+                  <span className="text-sm text-slate-500">Test connection to load available models</span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Save */}
+          <div className="flex items-center justify-between pt-1">
+            <button
+              onClick={handleOllamaSave}
+              disabled={ollamaSaving || (ollamaUrl.trim() === ollamaSaved.url && ollamaModel === ollamaSaved.model)}
+              className="flex items-center gap-2 px-5 py-2 bg-primary hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-bold rounded-lg transition-colors"
+            >
+              <span className="material-symbols-outlined text-sm">save</span>
+              {ollamaSaving ? 'Saving…' : 'Save'}
+            </button>
+            {ollamaSaved.url && (
+              <p className="text-xs text-slate-500 flex items-center gap-1">
+                <span className="material-symbols-outlined text-[13px] text-green-400">check_circle</span>
+                <span className="font-mono text-slate-400">{ollamaSaved.url}</span>
+                {ollamaSaved.model && <span className="ml-1 text-slate-500">· {ollamaSaved.model}</span>}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Contact Email ──────────────────────────────────────────── */}
+      <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-100 dark:border-white/5 p-6 mb-8">
         <div className="flex items-center gap-3 mb-4">
           <span className="material-symbols-outlined text-primary">contact_mail</span>
           <div>
-            <h2 className="text-base font-bold text-white">Contact Email</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Email address shown when users click "Contact" in the navigation</p>
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">Contact Email</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Email address shown when users click "Contact" in the navigation</p>
           </div>
         </div>
         <div className="flex gap-3 items-center">
           <input
             type="email"
             value={contactEmail}
-            onChange={(e) => setContactEmail(e.target.value)}
+            onChange={e => setContactEmail(e.target.value)}
             placeholder="ai-tools@mst.internal"
-            className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
+            className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
           />
           <button
             onClick={handleContactEmailSave}
@@ -476,30 +362,26 @@ export const AdminSettings: React.FC = () => {
         )}
       </div>
 
-      {/* ── Portal Theme Card ───────────────────────────────────── */}
-      <div className="bg-card-dark rounded-xl border border-white/5 p-6 mb-8">
+      {/* ── Portal Theme ───────────────────────────────────────────── */}
+      <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-100 dark:border-white/5 p-6 mb-8">
         <div className="flex items-center gap-3 mb-5">
           <span className="material-symbols-outlined text-primary">palette</span>
           <div>
-            <h2 className="text-base font-bold text-white">Portal Theme</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Choose the visual style applied portal-wide to all users</p>
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">Portal Theme</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Choose the visual style applied portal-wide to all users</p>
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Default theme option */}
           <button
             onClick={() => handleThemeSave('default')}
             disabled={themeSaving || portalTheme === 'default'}
             className={`relative flex flex-col gap-3 p-4 rounded-xl border-2 text-left transition-all ${
-              portalTheme === 'default'
-                ? 'border-primary bg-primary/5'
-                : 'border-white/10 hover:border-white/20 bg-slate-900/50'
+              portalTheme === 'default' ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20 bg-slate-100/50 dark:bg-slate-900/50'
             }`}
           >
             {portalTheme === 'default' && (
               <span className="absolute top-3 right-3 material-symbols-outlined text-primary text-[18px]">check_circle</span>
             )}
-            {/* Mini preview */}
             <div className="rounded-lg overflow-hidden border border-white/10 bg-[#0a0f14] p-2">
               <div className="h-2 w-16 rounded bg-[#258cf4]/30 mb-1.5" />
               <div className="flex gap-1.5">
@@ -509,24 +391,20 @@ export const AdminSettings: React.FC = () => {
             </div>
             <div>
               <p className="text-sm font-semibold text-white">Default</p>
-              <p className="text-xs text-slate-400 mt-0.5">Blue glass cards, neon glow, circuit background</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Blue glass cards, neon glow, circuit background</p>
             </div>
           </button>
 
-          {/* Simple (GitHub) theme option */}
           <button
             onClick={() => handleThemeSave('simple')}
             disabled={themeSaving || portalTheme === 'simple'}
             className={`relative flex flex-col gap-3 p-4 rounded-xl border-2 text-left transition-all ${
-              portalTheme === 'simple'
-                ? 'border-primary bg-primary/5'
-                : 'border-white/10 hover:border-white/20 bg-slate-900/50'
+              portalTheme === 'simple' ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20 bg-slate-100/50 dark:bg-slate-900/50'
             }`}
           >
             {portalTheme === 'simple' && (
               <span className="absolute top-3 right-3 material-symbols-outlined text-primary text-[18px]">check_circle</span>
             )}
-            {/* Mini preview — split light/dark halves */}
             <div className="rounded-lg overflow-hidden border border-[#30363d] flex">
               <div className="flex-1 bg-[#ffffff] p-2">
                 <div className="h-1.5 w-8 rounded bg-[#d0d7de] mb-1.5" />
@@ -539,26 +417,26 @@ export const AdminSettings: React.FC = () => {
             </div>
             <div>
               <p className="text-sm font-semibold text-white">Simple</p>
-              <p className="text-xs text-slate-400 mt-0.5">GitHub-inspired flat cards, clean borders, no glow — supports light &amp; dark toggle</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">GitHub-inspired flat cards, clean borders — supports light &amp; dark toggle</p>
             </div>
           </button>
         </div>
         {themeSaving && (
-          <p className="text-xs text-slate-400 mt-3 flex items-center gap-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-3 flex items-center gap-1">
             <span className="material-symbols-outlined text-[13px] animate-spin">progress_activity</span>
             Applying theme…
           </p>
         )}
       </div>
 
-      {/* ── Transcript Service Card ─────────────────────────────── */}
-      <div className="bg-card-dark rounded-xl border border-white/5 p-6 mb-8">
+      {/* ── Transcript Service ─────────────────────────────────────── */}
+      <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-100 dark:border-white/5 p-6 mb-8">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="material-symbols-outlined text-primary">mic</span>
             <div>
-              <h2 className="text-base font-bold text-white">Transcript Service</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Configure the remote GPU-hosted speech-to-text service for Auto Mode video processing</p>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">Transcript Service</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Configure the remote speech-to-text service for Auto Mode video processing</p>
             </div>
           </div>
           <button
@@ -571,61 +449,55 @@ export const AdminSettings: React.FC = () => {
         </div>
         {transcriptForm.url && (
           <div className="mt-4 pt-4 border-t border-white/5">
-            <div className="flex flex-wrap gap-4 text-xs text-slate-400">
-              <span className="flex items-center gap-1">
-                <span className="material-symbols-outlined text-xs">link</span>
-                {transcriptForm.url}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="material-symbols-outlined text-xs">model_training</span>
-                Model: {transcriptForm.model}
-              </span>
+            <div className="flex flex-wrap gap-4 text-xs text-slate-500 dark:text-slate-400">
+              <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">link</span>{transcriptForm.url}</span>
+              <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">model_training</span>Model: {transcriptForm.model}</span>
             </div>
           </div>
         )}
       </div>
 
-      {/* Transcript Service Modal */}
+      {/* Transcript Modal */}
       {showTranscriptModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60" onClick={() => setShowTranscriptModal(false)} />
-          <div className="relative w-full max-w-md bg-background-dark border border-white/10 rounded-xl shadow-2xl p-6">
+          <div className="relative w-full max-w-md bg-white dark:bg-background-dark border border-slate-200 dark:border-white/10 rounded-xl shadow-2xl p-6">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-base font-bold text-white">Transcript Service</h2>
-              <button onClick={() => setShowTranscriptModal(false)} className="text-slate-400 hover:text-white">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">Transcript Service</h2>
+              <button onClick={() => setShowTranscriptModal(false)} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Service URL</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Service URL</label>
                 <input
                   value={transcriptForm.url}
-                  onChange={(e) => setTranscriptForm((f) => ({ ...f, url: e.target.value }))}
+                  onChange={e => setTranscriptForm(f => ({ ...f, url: e.target.value }))}
                   placeholder="http://transcript-service:9100"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />
                 <p className="text-xs text-slate-500 mt-1">
-                  Same machine (Docker): <button type="button" className="text-primary hover:underline font-mono" onClick={() => setTranscriptForm((f) => ({ ...f, url: 'http://transcript-service:9100' }))}>http://transcript-service:9100</button>
-                  {' · '}External server: <span className="font-mono">http://&lt;host-ip&gt;:9100</span>
+                  Same machine (Docker): <button type="button" className="text-primary hover:underline font-mono" onClick={() => setTranscriptForm(f => ({ ...f, url: 'http://transcript-service:9100' }))}>http://transcript-service:9100</button>
+                  {' · '}External: <span className="font-mono">http://&lt;host-ip&gt;:9100</span>
                 </p>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">API Key</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">API Key</label>
                 <input
                   type="password"
                   value={transcriptForm.api_key}
-                  onChange={(e) => setTranscriptForm((f) => ({ ...f, api_key: e.target.value }))}
+                  onChange={e => setTranscriptForm(f => ({ ...f, api_key: e.target.value }))}
                   placeholder="(leave blank to keep existing)"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Whisper Model</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Whisper Model</label>
                 <select
                   value={transcriptForm.model}
-                  onChange={(e) => setTranscriptForm((f) => ({ ...f, model: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                  onChange={e => setTranscriptForm(f => ({ ...f, model: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 >
                   <option value="large-v3">large-v3 (best quality, needs ≥10 GB VRAM)</option>
                   <option value="medium">medium (good quality, ~5 GB VRAM)</option>
@@ -662,14 +534,14 @@ export const AdminSettings: React.FC = () => {
         </div>
       )}
 
-      {/* ── SMTP Settings Card ──────────────────────────────────── */}
-      <div className="bg-card-dark rounded-xl border border-white/5 p-6 mb-8">
+      {/* ── SMTP Email ─────────────────────────────────────────────── */}
+      <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-100 dark:border-white/5 p-6 mb-8">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="material-symbols-outlined text-primary">mail</span>
             <div>
-              <h2 className="text-base font-bold text-white">SMTP Email Configuration</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Configure outgoing email server for newsletters</p>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">SMTP Email Configuration</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Configure outgoing email server for newsletters</p>
             </div>
           </div>
           <button
@@ -682,36 +554,27 @@ export const AdminSettings: React.FC = () => {
         </div>
         {smtpConfig && (
           <div className="mt-4 pt-4 border-t border-white/5">
-            <div className="flex flex-wrap gap-4 text-xs text-slate-400">
-              <span className="flex items-center gap-1">
-                <span className="material-symbols-outlined text-xs">server</span>
-                {smtpConfig.smtp_server}:{smtpConfig.smtp_port}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="material-symbols-outlined text-xs">email</span>
-                From: {smtpConfig.smtp_from_email}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="material-symbols-outlined text-xs">verified_user</span>
-                Auth: {smtpConfig.smtp_user ? 'Yes' : 'No'}
-              </span>
+            <div className="flex flex-wrap gap-4 text-xs text-slate-500 dark:text-slate-400">
+              <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">server</span>{smtpConfig.smtp_server}:{smtpConfig.smtp_port}</span>
+              <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">email</span>From: {smtpConfig.smtp_from_email}</span>
+              <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">verified_user</span>Auth: {smtpConfig.smtp_user ? 'Yes' : 'No'}</span>
             </div>
           </div>
         )}
       </div>
 
-      {/* ── Redis Cache Card ─────────────────────────────────── */}
-      <div className="bg-card-dark rounded-xl border border-white/5 p-6 mb-8">
+      {/* ── Redis Cache ────────────────────────────────────────────── */}
+      <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-100 dark:border-white/5 p-6 mb-8">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="material-symbols-outlined text-primary">memory</span>
             <div>
-              <h2 className="text-base font-bold text-white">Redis Cache</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Read-through cache for hot public endpoints — version-based invalidation</p>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">Redis Cache</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Version-based invalidation for hot public endpoints</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={fetchCacheStats} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg transition-colors border border-white/10">
+            <button onClick={fetchCacheStats} className="flex items-center gap-2 px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg transition-colors border border-slate-300 dark:border-white/10">
               <span className="material-symbols-outlined text-xs">refresh</span>Refresh
             </button>
             <button onClick={() => handleCacheFlush()} disabled={cacheFlushing} className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-bold rounded-lg transition-colors border border-red-500/20 disabled:opacity-50">
@@ -734,19 +597,19 @@ export const AdminSettings: React.FC = () => {
                     { label: 'Cache Hits', value: (cacheStats.keyspace_hits ?? 0).toLocaleString() },
                     { label: 'Cache Misses', value: (cacheStats.keyspace_misses ?? 0).toLocaleString() },
                   ].map(({ label, value }) => (
-                    <div key={label} className="bg-slate-900/50 rounded-lg p-3">
-                      <p className="text-xs text-slate-400">{label}</p>
+                    <div key={label} className="bg-slate-100/50 dark:bg-slate-900/50 rounded-lg p-3">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{label}</p>
                       <p className="text-sm font-bold text-white mt-0.5">{value ?? '—'}</p>
                     </div>
                   ))}
                 </div>
                 {cacheStats.namespace_versions && (
                   <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Namespace Versions</p>
+                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Namespace Versions</p>
                     <div className="flex flex-wrap gap-2">
                       {Object.entries(cacheStats.namespace_versions as Record<string, number>).map(([ns, ver]) => (
-                        <div key={ns} className="flex items-center gap-1.5 bg-slate-900/50 rounded-lg px-3 py-1.5">
-                          <span className="text-xs text-slate-400">{ns}</span>
+                        <div key={ns} className="flex items-center gap-1.5 bg-slate-100/50 dark:bg-slate-900/50 rounded-lg px-3 py-1.5">
+                          <span className="text-xs text-slate-500 dark:text-slate-400">{ns}</span>
                           <span className="text-xs font-mono text-primary">v{ver}</span>
                           <button onClick={() => handleCacheFlush(ns)} disabled={cacheFlushing} className="ml-1 text-slate-500 hover:text-red-400 transition-colors" title={`Flush ${ns}`}>
                             <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>close</span>
@@ -762,453 +625,69 @@ export const AdminSettings: React.FC = () => {
         )}
       </div>
 
-      {/* ── Marketplace Status Card ─────────────────────────── */}
-      <div className="bg-card-dark rounded-xl border border-white/5 p-6 mb-8">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="material-symbols-outlined text-primary">store</span>
-            <div>
-              <h2 className="text-base font-bold text-white">Marketplace Status</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Control marketplace visibility — set under construction to show users a friendly notice</p>
-            </div>
-          </div>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <span className="text-xs text-slate-400">Under Construction</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={marketplaceForm.under_construction}
-              onClick={() => setMarketplaceForm((f) => ({ ...f, under_construction: !f.under_construction }))}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                marketplaceForm.under_construction ? 'bg-amber-500' : 'bg-slate-700'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                  marketplaceForm.under_construction ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
-          </label>
-        </div>
-
-        {marketplaceForm.under_construction && (
-          <div className="mt-4 pt-4 border-t border-white/5 space-y-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Message shown to users</label>
-              <textarea
-                rows={2}
-                value={marketplaceForm.message}
-                onChange={(e) => setMarketplaceForm((f) => ({ ...f, message: e.target.value }))}
-                placeholder="We're upgrading the marketplace with new features — check back soon!"
-                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none resize-none"
-              />
-            </div>
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-              <span className="material-symbols-outlined text-amber-400 text-sm">warning</span>
-              <p className="text-xs text-amber-400">Marketplace will be hidden from all users until this is turned off.</p>
-            </div>
-          </div>
-        )}
-
-        {(marketplaceStatus?.under_construction !== marketplaceForm.under_construction ||
-          (marketplaceStatus?.message || '') !== marketplaceForm.message) && (
-          <div className="mt-4 pt-4 border-t border-white/5 flex gap-2">
-            <button
-              onClick={handleMarketplaceSave}
-              disabled={marketplaceSaving}
-              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-bold rounded-lg transition-colors"
-            >
-              <span className="material-symbols-outlined text-sm">save</span>
-              {marketplaceSaving ? 'Saving…' : 'Save Status'}
-            </button>
-            <button
-              onClick={() => setMarketplaceForm({ under_construction: marketplaceStatus?.under_construction ?? false, message: marketplaceStatus?.message ?? '' })}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg transition-colors"
-            >
-              Discard
-            </button>
-          </div>
-        )}
-
-        {marketplaceStatus && (
-          <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
-            <span className={`w-1.5 h-1.5 rounded-full ${marketplaceStatus.under_construction ? 'bg-amber-400' : 'bg-green-400'}`} />
-            {marketplaceStatus.under_construction ? 'Currently under construction' : 'Marketplace is live'}
-          </div>
-        )}
-      </div>
-
-      {/* ── Marketplace Settings Header ────────────────────── */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-base font-bold text-white">Marketplace Settings</h2>
-          <p className="text-sm text-slate-400 mt-1">Configure git repositories for auto-scanning marketplace components</p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={handleSyncAll} className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold rounded-lg transition-colors border border-white/10">
-            <span className="material-symbols-outlined text-sm">sync</span>
-            Sync All
-          </button>
-          <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
-            <span className="material-symbols-outlined text-sm">add</span>
-            Add Repository
-          </button>
-        </div>
-      </div>
-
-      {/* Settings List */}
-      <div className="space-y-4 mb-8">
-        {settings.map((s) => (
-          <div key={s.id} className="bg-card-dark rounded-xl border border-white/5 p-5">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
-                  <span className="material-symbols-outlined text-primary">folder_open</span>
-                  <h3 className="text-sm font-bold text-white">{s.git_url}</h3>
-                  {s.is_active ? (
-                    <span className="px-2 py-0.5 text-[10px] rounded bg-green-500/10 text-green-400">Active</span>
-                  ) : (
-                    <span className="px-2 py-0.5 text-[10px] rounded bg-slate-700 text-slate-400">Inactive</span>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-4 text-xs text-slate-400">
-                  <span className="flex items-center gap-1">
-                    <span className="material-symbols-outlined text-xs">commit</span>
-                    {s.git_branch}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="material-symbols-outlined text-xs">schedule</span>
-                    {s.update_frequency}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="material-symbols-outlined text-xs">smart_toy</span>
-                    {s.llm_provider}/{s.llm_model}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="material-symbols-outlined text-xs">key</span>
-                    Token: {s.git_token || 'not set'}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="material-symbols-outlined text-xs">new_releases</span>
-                    Auto-tag: {s.auto_update_release_tag ? 'On' : 'Off'}
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => handleVerify(s.id)}
-                  disabled={verifying[s.id]}
-                  className="p-2 rounded hover:bg-slate-700 text-slate-400 hover:text-green-400 transition-colors disabled:opacity-40"
-                  title="Verify connection"
-                >
-                  <span className={`material-symbols-outlined text-sm ${verifying[s.id] ? 'animate-spin' : ''}`}>
-                    {verifying[s.id] ? 'progress_activity' : 'verified'}
-                  </span>
-                </button>
-                <button
-                  onClick={() => handleSync(s.id)}
-                  disabled={syncing[s.id]}
-                  className="p-2 rounded hover:bg-slate-700 text-slate-400 hover:text-primary transition-colors disabled:opacity-40"
-                  title="Trigger sync"
-                >
-                  <span className={`material-symbols-outlined text-sm ${syncing[s.id] ? 'animate-spin' : ''}`}>
-                    {syncing[s.id] ? 'progress_activity' : 'sync'}
-                  </span>
-                </button>
-                <button
-                  onClick={() => setSelectedSettingId(selectedSettingId === s.id ? null : s.id)}
-                  className="p-2 rounded hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
-                  title="View jobs"
-                >
-                  <span className="material-symbols-outlined text-sm">history</span>
-                </button>
-                <button onClick={() => openEdit(s)} className="p-2 rounded hover:bg-slate-700 text-slate-400 hover:text-white transition-colors">
-                  <span className="material-symbols-outlined text-sm">edit</span>
-                </button>
-                <button onClick={() => handleDelete(s)} className="p-2 rounded hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors">
-                  <span className="material-symbols-outlined text-sm">delete</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Verify Results */}
-            {verifyResults[s.id] && (
-              <div className="mt-4 pt-4 border-t border-white/5">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Connection Verification</h4>
-                  <button onClick={() => setVerifyResults((v) => ({ ...v, [s.id]: null }))} className="text-slate-500 hover:text-white transition-colors">
-                    <span className="material-symbols-outlined text-sm">close</span>
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {(['git', 'llm'] as const).map((key) => {
-                    const r = verifyResults[s.id]?.[key];
-                    if (!r) return null;
-                    const icon = r.status === 'ok' ? 'check_circle' : r.status === 'warning' ? 'warning' : 'error';
-                    const colors = r.status === 'ok' ? 'bg-green-500/10 text-green-400 border-green-500/30'
-                      : r.status === 'warning' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                      : 'bg-red-500/10 text-red-400 border-red-500/30';
-                    return (
-                      <div key={key} className={`flex items-start gap-3 p-3 rounded-lg border ${colors}`}>
-                        <span className="material-symbols-outlined text-base mt-0.5">{icon}</span>
-                        <div>
-                          <span className="text-xs font-bold uppercase tracking-wider">{key === 'git' ? 'Git Repository' : 'LLM Provider'}</span>
-                          <p className="text-xs mt-0.5 opacity-80">{r.message}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Sync Jobs */}
-            {selectedSettingId === s.id && (
-              <div className="mt-4 pt-4 border-t border-white/5">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Recent Sync Jobs</h4>
-                {jobs.length === 0 ? (
-                  <p className="text-xs text-slate-500">No sync jobs yet</p>
-                ) : (
-                  <div className="space-y-2">
-                    {jobs.map((job) => (
-                      <div key={job.id} className="bg-slate-900/50 rounded-lg overflow-hidden">
-                        <div
-                          className="flex items-center justify-between px-3 py-2 text-xs cursor-pointer hover:bg-slate-800/50 transition-colors"
-                          onClick={() => setExpandedJobId(expandedJobId === job.id ? null : job.id)}
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className={`px-2 py-0.5 rounded font-bold ${
-                              job.status === 'completed' ? 'bg-green-500/10 text-green-400' :
-                              job.status === 'running' ? 'bg-blue-500/10 text-blue-400 animate-pulse' :
-                              job.status === 'failed' ? 'bg-red-500/10 text-red-400' :
-                              'bg-slate-700 text-slate-400'
-                            }`}>
-                              {job.status === 'running' ? '● running' : job.status}
-                            </span>
-                            <span className="text-slate-400 capitalize">{job.trigger_type}</span>
-                          </div>
-                          <div className="flex items-center gap-4 text-slate-500">
-                            <span>Found: {job.components_found}</span>
-                            <span>Created: {job.components_created}</span>
-                            <span>Updated: {job.components_updated}</span>
-                            <span>{new Date(job.created_at).toLocaleString()}</span>
-                            <span className="material-symbols-outlined text-xs">
-                              {expandedJobId === job.id ? 'expand_less' : 'expand_more'}
-                            </span>
-                          </div>
-                        </div>
-                        {expandedJobId === job.id && (
-                          <div className="border-t border-white/5 px-3 py-2">
-                            {job.error && (
-                              <div className="text-xs text-red-400 mb-2 bg-red-500/10 border border-red-500/30 rounded p-2">
-                                <span className="font-bold">Error: </span>{job.error}
-                              </div>
-                            )}
-                            <div className="bg-black/40 rounded p-3 max-h-60 overflow-y-auto font-mono text-[11px] text-slate-400 leading-relaxed whitespace-pre-wrap">
-                              {job.log || (job.status === 'pending' ? 'Waiting to start...' : 'No logs available')}
-                              <div ref={logEndRef} />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
-
-        {settings.length === 0 && (
-          <div className="text-center py-16 bg-card-dark rounded-xl border border-white/5">
-            <span className="material-symbols-outlined text-4xl text-slate-600 mb-3 block">settings</span>
-            <p className="text-slate-500 mb-4">No repository settings configured</p>
-            <button onClick={openCreate} className="px-4 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
-              Add Repository
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Slide-out Form */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div className="absolute inset-0 bg-black/50" onClick={closeForm} />
-          <div className="relative w-full max-w-lg bg-background-dark border-l border-white/10 overflow-y-auto p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-white">
-                {creating ? 'New Repository' : 'Edit Repository'}
-              </h2>
-              <button onClick={closeForm} className="text-slate-400 hover:text-white transition-colors">
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Git Repository URL</label>
-                <input value={form.git_url} onChange={(e) => setForm((f) => ({ ...f, git_url: e.target.value }))}
-                  placeholder="https://github.com/org/repo"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Branch</label>
-                  <input value={form.git_branch} onChange={(e) => setForm((f) => ({ ...f, git_branch: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Update Frequency</label>
-                  <select value={form.update_frequency} onChange={(e) => setForm((f) => ({ ...f, update_frequency: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none">
-                    <option value="hourly">Hourly</option>
-                    <option value="nightly">Nightly</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="manual">Manual Only</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Git Token (Personal Access Token)</label>
-                <input type="password" value={form.git_token} onChange={(e) => setForm((f) => ({ ...f, git_token: e.target.value }))}
-                  placeholder={editing ? '(leave blank to keep existing)' : 'ghp_...'}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Scan Paths (comma-separated)</label>
-                <input value={form.scan_paths} onChange={(e) => setForm((f) => ({ ...f, scan_paths: e.target.value }))}
-                  placeholder="., skills/, agents/"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
-              </div>
-
-              <div className="border-t border-white/10 pt-4">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">LLM Configuration</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Provider</label>
-                    <select value={form.llm_provider} onChange={(e) => setForm((f) => ({ ...f, llm_provider: e.target.value }))}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none">
-                      <option value="openai">OpenAI</option>
-                      <option value="ollama">Ollama (Local)</option>
-                      <option value="anthropic">Anthropic</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Model</label>
-                    <input value={form.llm_model} onChange={(e) => setForm((f) => ({ ...f, llm_model: e.target.value }))}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
-                  </div>
-                </div>
-
-                {form.llm_provider === 'ollama' && (
-                  <div className="mt-3">
-                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Ollama URL</label>
-                    <input
-                      value={form.ollama_url}
-                      onChange={(e) => setForm((f) => ({ ...f, ollama_url: e.target.value }))}
-                      placeholder="http://localhost:11434"
-                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none font-mono"
-                    />
-                    <p className="text-[11px] text-slate-500 mt-1">Leave blank to use the OLLAMA_BASE_URL environment variable</p>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">LLM API Key</label>
-                <input type="password" value={form.llm_api_key} onChange={(e) => setForm((f) => ({ ...f, llm_api_key: e.target.value }))}
-                  placeholder={editing ? '(leave blank to keep existing)' : 'sk-...'}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
-              </div>
-
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={form.auto_update_release_tag}
-                  onChange={(e) => setForm((f) => ({ ...f, auto_update_release_tag: e.target.checked }))}
-                  className="rounded border-slate-600 text-primary focus:ring-primary bg-transparent" />
-                <span className="text-sm text-slate-300">Auto-update release tag version</span>
-              </label>
-
-              <div className="flex gap-3 pt-4 border-t border-white/10">
-                <button onClick={handleSave} className="flex-1 px-6 py-2.5 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
-                  {creating ? 'Add Repository' : 'Save Changes'}
-                </button>
-                <button onClick={closeForm} className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg transition-colors">
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SMTP Settings Modal */}
+      {/* SMTP Modal */}
       {showSmtpModal && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowSmtpModal(false)} />
-          <div className="relative w-full max-w-lg bg-background-dark border-l border-white/10 overflow-y-auto p-6">
+          <div className="relative w-full max-w-lg bg-white dark:bg-background-dark border-l border-slate-200 dark:border-white/10 overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-white">SMTP Email Configuration</h2>
-              <button onClick={() => setShowSmtpModal(false)} className="text-slate-400 hover:text-white transition-colors">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">SMTP Email Configuration</h2>
+              <button onClick={() => setShowSmtpModal(false)} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">SMTP Server</label>
-                <input value={smtpForm.smtp_server} onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_server: e.target.value }))}
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">SMTP Server</label>
+                <input value={smtpForm.smtp_server} onChange={e => setSmtpForm(f => ({ ...f, smtp_server: e.target.value }))}
                   placeholder="smtp.gmail.com"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                 <p className="text-xs text-slate-500 mt-1">Common: smtp.gmail.com, smtp.office365.com, smtp.sendgrid.net</p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">SMTP Port</label>
-                <input value={smtpForm.smtp_port} onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_port: e.target.value }))}
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">SMTP Port</label>
+                <input value={smtpForm.smtp_port} onChange={e => setSmtpForm(f => ({ ...f, smtp_port: e.target.value }))}
                   placeholder="587"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
-                <p className="text-xs text-slate-500 mt-1">587 (STARTTLS) · 465 (SSL) · 25 (unencrypted, blocked inside Docker)</p>
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                <p className="text-xs text-slate-500 mt-1">587 (STARTTLS) · 465 (SSL) · 25 (unencrypted)</p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Username</label>
-                <input value={smtpForm.smtp_user} onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_user: e.target.value }))}
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Username</label>
+                <input value={smtpForm.smtp_user} onChange={e => setSmtpForm(f => ({ ...f, smtp_user: e.target.value }))}
                   placeholder="user@example.com"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
-                <p className="text-xs text-slate-500 mt-1">Usually your full email address</p>
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Password</label>
-                <input type="password" value={smtpForm.smtp_password} onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_password: e.target.value }))}
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Password</label>
+                <input type="password" value={smtpForm.smtp_password} onChange={e => setSmtpForm(f => ({ ...f, smtp_password: e.target.value }))}
                   placeholder="(leave blank to keep existing)"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                 <p className="text-xs text-slate-500 mt-1">Gmail: Use App Password, not regular password</p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">From Email</label>
-                <input value={smtpForm.smtp_from_email} onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_from_email: e.target.value }))}
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">From Email</label>
+                <input value={smtpForm.smtp_from_email} onChange={e => setSmtpForm(f => ({ ...f, smtp_from_email: e.target.value }))}
                   placeholder="noreply@company.com"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">From Name</label>
-                <input value={smtpForm.smtp_from_name} onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_from_name: e.target.value }))}
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">From Name</label>
+                <input value={smtpForm.smtp_from_name} onChange={e => setSmtpForm(f => ({ ...f, smtp_from_name: e.target.value }))}
                   placeholder="MST AI Portal"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Test Recipient Email</label>
-                <input value={smtpForm.test_recipient} onChange={(e) => setSmtpForm((f) => ({ ...f, test_recipient: e.target.value }))}
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Test Recipient Email</label>
+                <input value={smtpForm.test_recipient} onChange={e => setSmtpForm(f => ({ ...f, test_recipient: e.target.value }))}
                   placeholder="test@example.com"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               {smtpProbeResult && (
@@ -1216,7 +695,7 @@ export const AdminSettings: React.FC = () => {
                   <div className={`flex items-center gap-2 px-3 py-2 text-xs font-bold ${smtpProbeResult.reachable ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
                     <span className="material-symbols-outlined text-sm">{smtpProbeResult.reachable ? 'check_circle' : 'error'}</span>
                     {smtpProbeResult.reachable ? 'Server reachable' : 'Server not reachable'}
-                    <button onClick={() => setSmtpProbeResult(null)} className="ml-auto text-slate-400 hover:text-white">
+                    <button onClick={() => setSmtpProbeResult(null)} className="ml-auto text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white">
                       <span className="material-symbols-outlined text-sm">close</span>
                     </button>
                   </div>
@@ -1227,11 +706,9 @@ export const AdminSettings: React.FC = () => {
                     </div>
                   )}
                   <div className="divide-y divide-white/5">
-                    {smtpProbeResult.steps.map((s) => (
-                      <div key={s.step} className="flex items-start gap-3 px-3 py-2 bg-slate-900/40">
-                        <span className={`material-symbols-outlined text-sm mt-0.5 ${s.ok ? 'text-green-400' : 'text-red-400'}`}>
-                          {s.ok ? 'check' : 'close'}
-                        </span>
+                    {smtpProbeResult.steps.map(s => (
+                      <div key={s.step} className="flex items-start gap-3 px-3 py-2 bg-slate-100/40 dark:bg-slate-900/40">
+                        <span className={`material-symbols-outlined text-sm mt-0.5 ${s.ok ? 'text-green-400' : 'text-red-400'}`}>{s.ok ? 'check' : 'close'}</span>
                         <div className="flex-1 min-w-0">
                           <span className="text-[11px] font-bold text-slate-300">{s.step}</span>
                           <p className="text-[11px] text-slate-500 truncate">{s.detail}</p>
@@ -1315,7 +792,7 @@ export const AdminSettings: React.FC = () => {
                       if (smtpForm.smtp_password) payload.smtp_password = smtpForm.smtp_password;
                       await api.put('/settings/admin/smtp_config', { value: payload });
                       showMsg('success', 'SMTP settings saved');
-                      await fetchSmtpSettings(); // Refresh config display
+                      await fetchSmtpSettings();
                       setShowSmtpModal(false);
                     } catch (err: any) {
                       showMsg('error', err.message);
@@ -1327,7 +804,7 @@ export const AdminSettings: React.FC = () => {
                   <span className="material-symbols-outlined text-sm">save</span>
                   {smtpSaving ? 'Saving...' : 'Save'}
                 </button>
-                <button onClick={() => setShowSmtpModal(false)} className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg transition-colors">
+                <button onClick={() => setShowSmtpModal(false)} className="px-6 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
                   Cancel
                 </button>
               </div>

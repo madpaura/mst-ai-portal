@@ -420,7 +420,7 @@ export const AdminDigest: React.FC = () => {
   const recipientList = recipientEmails.split('\n').map(e => e.trim()).filter(Boolean);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-6">
+    <div className="min-h-screen p-6 text-slate-900 dark:text-white">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -443,25 +443,25 @@ export const AdminDigest: React.FC = () => {
           {/* Left Panel */}
           <div className="col-span-1 space-y-6">
             {/* Digest Settings */}
-            <div className="bg-slate-800/50 rounded-xl border border-white/10 p-6">
+            <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/10 p-6">
               <h2 className="text-lg font-bold mb-4">Digest Settings</h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Time Period (days)</label>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Time Period (days)</label>
                   <input
                     type="number" min="1" max="30" value={digestDays}
                     onChange={(e) => setDigestDays(parseInt(e.target.value) || 7)}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                   />
                   <p className="text-xs text-slate-500 mt-1">Look back this many days for content</p>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Custom Message</label>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Custom Message</label>
                   <textarea
                     value={customContent}
                     onChange={(e) => setCustomContent(e.target.value)}
                     placeholder="Add a personal message to include in the digest..."
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none resize-none"
+                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
                     rows={4}
                   />
                 </div>
@@ -489,7 +489,7 @@ export const AdminDigest: React.FC = () => {
 
             {/* Summary Stats */}
             {preview && (
-              <div className="bg-slate-800/50 rounded-xl border border-white/10 p-6">
+              <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/10 p-6">
                 <h3 className="text-sm font-bold mb-4">Summary</h3>
                 <div className="space-y-2 text-sm">
                   {[['Videos', preview.summary.videos_count], ['Articles', preview.summary.articles_count],
@@ -504,21 +504,21 @@ export const AdminDigest: React.FC = () => {
             )}
 
             {/* Previous Issues */}
-            <div className="bg-slate-800/50 rounded-xl border border-white/10 p-6">
+            <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/10 p-6">
               <h3 className="text-sm font-bold mb-4">Previous Issues</h3>
               {loadingIssues ? (
-                <p className="text-xs text-slate-400">Loading...</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Loading...</p>
               ) : digestIssues.length === 0 ? (
-                <p className="text-xs text-slate-400">No previous issues</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">No previous issues</p>
               ) : (
                 <div className="space-y-3">
                   {digestIssues.map((issue) => (
-                    <div key={issue.id} className="bg-slate-900/50 rounded-lg p-3 border border-white/5">
+                    <div key={issue.id} className="bg-slate-100/50 dark:bg-slate-900/50 rounded-lg p-3 border border-slate-100 dark:border-white/5">
                       <div className="flex items-start justify-between mb-1 gap-1">
                         <span className="text-xs font-bold text-white leading-snug">{issue.title}</span>
                         {issue.sent_at && <span className="shrink-0 text-xs text-green-400 font-medium">Sent</span>}
                       </div>
-                      <div className="text-xs text-slate-400">
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
                         {issue.recipient_count} recipients · {issue.days_covered}d · {new Date(issue.created_at).toLocaleDateString()}
                       </div>
                       <div className="flex items-center gap-1.5 mt-2">
@@ -559,7 +559,7 @@ export const AdminDigest: React.FC = () => {
             {preview ? (
               <>
                 {/* Preview */}
-                <div className="bg-slate-800/50 rounded-xl border border-white/10 p-6">
+                <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/10 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-bold">Preview</h2>
                     <div className="flex items-center gap-2">
@@ -576,15 +576,15 @@ export const AdminDigest: React.FC = () => {
                   </div>
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Subject</label>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Subject</label>
                       <input
                         type="text" value={editedSubject}
                         onChange={(e) => setEditedSubject(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm font-semibold focus:border-primary outline-none"
+                        className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm font-semibold focus:border-primary outline-none"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Email Preview</label>
+                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Email Preview</label>
                       <div
                         className="bg-white rounded-lg p-4 text-slate-900 text-sm max-h-96 overflow-y-auto border border-white/10"
                         dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(preview.html_content) }}
@@ -594,7 +594,7 @@ export const AdminDigest: React.FC = () => {
                 </div>
 
                 {/* Send Recipients */}
-                <div className="bg-slate-800/50 rounded-xl border border-white/10 p-6 space-y-4">
+                <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/10 p-6 space-y-4">
                   <h2 className="text-lg font-bold">Send To Recipients</h2>
 
                   {/* Toolbar: CSV load + saved */}
@@ -622,16 +622,16 @@ export const AdminDigest: React.FC = () => {
 
                   {/* Saved emails quick-select */}
                   {showSavedEmails && savedEmails.length > 0 && (
-                    <div className="p-3 bg-slate-900/60 rounded-lg border border-white/5 space-y-1.5 max-h-48 overflow-y-auto">
+                    <div className="p-3 bg-slate-100/60 dark:bg-slate-900/60 rounded-lg border border-slate-100 dark:border-white/5 space-y-1.5 max-h-48 overflow-y-auto">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Saved Addresses</span>
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Saved Addresses</span>
                         <button
                           onClick={() => {
                             const current = recipientEmails.split('\n').map(e => e.trim()).filter(Boolean);
                             const merged = [...new Set([...current, ...savedEmails])];
                             setRecipientEmails(merged.join('\n'));
                           }}
-                          className="text-xs text-primary hover:text-white transition-colors"
+                          className="text-xs text-primary hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors"
                         >
                           Add all
                         </button>
@@ -643,7 +643,7 @@ export const AdminDigest: React.FC = () => {
                             <button
                               onClick={() => toggleSavedEmail(email)}
                               className={`flex-1 text-left text-xs px-2 py-1.5 rounded transition-colors font-mono truncate ${
-                                active ? 'bg-primary/15 text-primary border border-primary/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                                active ? 'bg-primary/15 text-primary border border-primary/20' : 'text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
                               }`}
                             >
                               {active && <span className="mr-1">✓</span>}{email}
@@ -659,14 +659,14 @@ export const AdminDigest: React.FC = () => {
 
                   {/* Recipient textarea */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
                       Recipient Emails (one per line)
                     </label>
                     <textarea
                       value={recipientEmails}
                       onChange={(e) => setRecipientEmails(e.target.value)}
                       placeholder={"user1@example.com\nuser2@example.com\nteam@example.com"}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none resize-none font-mono"
+                      className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none font-mono"
                       rows={5}
                     />
                     <div className="flex items-center justify-between mt-1">
@@ -713,7 +713,7 @@ export const AdminDigest: React.FC = () => {
                 </div>
               </>
             ) : (
-              <div className="bg-slate-800/50 rounded-xl border border-white/10 p-12 text-center">
+              <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/10 p-12 text-center">
                 <span className="material-symbols-outlined text-6xl mb-4 opacity-20 block">mail</span>
                 <p className="text-slate-400">Generate a digest preview to get started, or load a previous issue</p>
               </div>
@@ -722,11 +722,11 @@ export const AdminDigest: React.FC = () => {
         </div>
 
         {/* Announcements Management */}
-        <div className="mt-6 bg-slate-800/50 rounded-xl border border-white/10 p-6">
+        <div className="mt-6 bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/10 p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-bold">Announcements</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Active announcements are included in digest emails unless skipped above</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Active announcements are included in digest emails unless skipped above</p>
             </div>
             <button
               onClick={openCreateAnn}
@@ -739,37 +739,37 @@ export const AdminDigest: React.FC = () => {
 
           {/* Create / Edit form */}
           {showAnnForm && (
-            <div className="mb-4 p-4 bg-slate-900/60 rounded-xl border border-white/10 space-y-3">
+            <div className="mb-4 p-4 bg-slate-100/60 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-white/10 space-y-3">
               <h3 className="text-sm font-bold text-slate-200">{editingAnn ? 'Edit Announcement' : 'New Announcement'}</h3>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Title *</label>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Title *</label>
                   <input
                     type="text"
                     value={annForm.title}
                     onChange={(e) => setAnnForm(f => ({ ...f, title: e.target.value }))}
                     placeholder="Announcement title"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Badge (optional)</label>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Badge (optional)</label>
                   <input
                     type="text"
                     value={annForm.badge}
                     onChange={(e) => setAnnForm(f => ({ ...f, badge: e.target.value }))}
                     placeholder="e.g. New, Update"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Content</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Content</label>
                 <textarea
                   value={annForm.content}
                   onChange={(e) => setAnnForm(f => ({ ...f, content: e.target.value }))}
                   placeholder="Announcement body text..."
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-primary outline-none resize-none"
+                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
                   rows={3}
                 />
               </div>
@@ -804,13 +804,13 @@ export const AdminDigest: React.FC = () => {
 
           {/* Announcements list */}
           {loadingAnn ? (
-            <p className="text-xs text-slate-400">Loading announcements…</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Loading announcements…</p>
           ) : announcements.length === 0 ? (
-            <p className="text-xs text-slate-400">No announcements yet. Create one to include in digest emails.</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">No announcements yet. Create one to include in digest emails.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {announcements.map((ann) => (
-                <div key={ann.id} className={`rounded-lg border p-4 transition-colors ${ann.is_active ? 'bg-slate-900/50 border-white/10' : 'bg-slate-900/20 border-white/5 opacity-60'}`}>
+                <div key={ann.id} className={`rounded-lg border p-4 transition-colors ${ann.is_active ? 'bg-slate-100/50 dark:bg-slate-900/50 border-slate-200 dark:border-white/10' : 'bg-slate-100/20 dark:bg-slate-900/20 border-slate-100 dark:border-white/5 opacity-60'}`}>
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <span className="text-sm font-semibold text-white leading-snug">{ann.title}</span>
                     {ann.badge && (
@@ -818,7 +818,7 @@ export const AdminDigest: React.FC = () => {
                     )}
                   </div>
                   {ann.content && (
-                    <p className="text-xs text-slate-400 mb-3 line-clamp-2">{ann.content}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 line-clamp-2">{ann.content}</p>
                   )}
                   <div className="flex items-center gap-2">
                     <button
