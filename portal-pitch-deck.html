@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MST AI Portal — Pitch Deck</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+  /* ── TOKENS (dark default) ─────────────────────────────────── */
+  :root {
+    --bg-page:      #060b11;
+    --bg-slide:     #080d14;
+    --bg-card:      rgba(255,255,255,0.035);
+    --border:       rgba(255,255,255,0.09);
+    --border-sub:   rgba(255,255,255,0.05);
+    --grid:         rgba(37,140,244,0.045);
+    --t1:           #f1f5f9;   /* primary text   */
+    --t2:           #94a3b8;   /* secondary text */
+    --t3:           #475569;   /* muted          */
+    --t4:           #334155;   /* faint          */
+    --blue:         #258cf4;
+    --green:        #00ff9d;
+    --shadow:       none;
+    --footer-line:  rgba(255,255,255,0.05);
+    --vdiv:         rgba(255,255,255,0.07);
+    --svg-grid:     rgba(255,255,255,0.045);
+    --svg-div:      rgba(255,255,255,0.06);
+  }
+  body.light {
+    --bg-page:      #e8edf4;
+    --bg-slide:     #ffffff;
+    --bg-card:      rgba(0,0,0,0.025);
+    --border:       rgba(0,0,0,0.11);
+    --border-sub:   rgba(0,0,0,0.07);
+    --grid:         rgba(37,140,244,0.07);
+    --t1:           #0f172a;
+    --t2:           #475569;
+    --t3:           #64748b;
+    --t4:           #94a3b8;
+    --blue:         #1d7cd8;
+    --green:        #059669;
+    --shadow:       0 4px 24px rgba(0,0,0,0.10);
+    --footer-line:  rgba(0,0,0,0.08);
+    --vdiv:         rgba(0,0,0,0.07);
+    --svg-grid:     rgba(0,0,0,0.06);
+    --svg-div:      rgba(0,0,0,0.07);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family:'Space Grotesk','Segoe UI',sans-serif;
+    background:var(--bg-page);
+    color:var(--t1);
+    display:flex; flex-direction:column; align-items:center;
+    transition:background .3s;
+  }
+
+  /* toggle bar */
+  .toggle-bar {
+    width:1280px; padding:14px 72px;
+    display:flex; justify-content:flex-end; gap:10px;
+  }
+  .theme-btn {
+    display:flex; align-items:center; gap:7px;
+    padding:7px 18px; border-radius:999px; cursor:pointer;
+    font-family:inherit; font-size:12px; font-weight:600;
+    border:1px solid var(--border); background:var(--bg-card);
+    color:var(--t2); transition:all .2s;
+  }
+  .theme-btn:hover { border-color:var(--blue); color:var(--blue); }
+
+  /* ── SLIDE BASE ─────────────────────────────────────────────── */
+  .slide {
+    width:1280px; height:720px;
+    position:relative; overflow:hidden;
+    background:var(--bg-slide);
+    box-shadow:var(--shadow);
+    flex-shrink:0; transition:background .3s, box-shadow .3s;
+  }
+  .slide + .slide { margin-top:32px; }
+
+  /* dot-grid overlay */
+  .slide::before {
+    content:''; position:absolute; inset:0; z-index:0;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size:48px 48px; pointer-events:none;
+  }
+  .slide > * { position:relative; z-index:1; }
+
+  /* ── SHARED HEADER BLOCK ────────────────────────────────────── */
+  .hd { position:absolute; top:36px; left:72px; right:72px;
+        display:flex; align-items:center; justify-content:space-between; }
+  .hd-title { font-size:44px; font-weight:700; line-height:1.1; color:var(--t1); }
+  .hd-title .hi { color:var(--blue); }
+  .hd-title .hig{ color:var(--green); }
+  .hd-sub { margin-top:8px; font-size:12.5px; font-weight:600;
+            color:var(--t3); letter-spacing:.13em; text-transform:uppercase; }
+  .badge-row { display:flex; gap:9px; align-items:center; flex-shrink:0; }
+  .badge {
+    padding:6px 16px; border-radius:999px;
+    font-size:12px; font-weight:600; letter-spacing:.04em;
+  }
+  .bd-b { background:rgba(37,140,244,.12); border:1px solid rgba(37,140,244,.32); color:var(--blue); }
+  .bd-g { background:rgba(0,255,157,.08);  border:1px solid rgba(0,255,157,.28);  color:var(--green); }
+  body.light .bd-g { background:rgba(5,150,105,.10); border-color:rgba(5,150,105,.30); }
+
+  /* hairline under header */
+  .hd-line { position:absolute; top:136px; left:72px; right:72px;
+             height:1px; background:var(--border-sub); }
+
+  /* shared footer */
+  .sf { position:absolute; bottom:20px; left:72px; right:72px;
+        display:flex; align-items:center; justify-content:space-between;
+        border-top:1px solid var(--footer-line); padding-top:11px; }
+  .sf-brand { display:flex; align-items:center; gap:8px; }
+  .sf-logo {
+    width:22px; height:22px; border-radius:5px;
+    background:rgba(37,140,244,.18); border:1px solid rgba(37,140,244,.32);
+    display:flex; align-items:center; justify-content:center; font-size:13px;
+  }
+  .sf-name { font-size:12px; font-weight:600; color:var(--t3); }
+  .sf-page { font-size:11px; color:var(--t4); }
+
+  /* ─────────────────────────────────────────────────────────────
+     SLIDE 1
+  ───────────────────────────────────────────────────────────── */
+  .s1-glow { position:absolute; inset:0; z-index:0;
+    background:
+      radial-gradient(ellipse 70% 55% at 4% 115%, rgba(37,140,244,.13) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 45% at 94%  -8%, rgba(0,255,157,.07)  0%, transparent 55%);
+  }
+  body.light .s1-glow { background:
+    radial-gradient(ellipse 70% 55% at 4% 115%, rgba(29,124,216,.08) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 45% at 94%  -8%, rgba(5,150,105,.05)  0%, transparent 55%);
+  }
+
+  /* stat cards */
+  .stats-row { position:absolute; top:160px; left:72px; display:flex; gap:13px; }
+  .sc {
+    width:133px; padding:16px 18px;
+    background:var(--bg-card); border:1px solid var(--border); border-radius:12px;
+    position:relative; overflow:hidden; transition:background .3s,border-color .3s;
+  }
+  .sc::after {
+    content:''; position:absolute; top:0; left:0; right:0; height:2.5px;
+    background:var(--ac, var(--blue)); opacity:.75;
+  }
+  .sc.cg::after { --ac:var(--green); }
+  .sc.co::after { --ac:#f59e0b; }
+  .sc.cp::after { --ac:#a78bfa; }
+  .sc-num   { font-size:36px; font-weight:700; color:var(--t1); line-height:1; }
+  .sc-label { font-size:10.5px; color:var(--t3); text-transform:uppercase;
+              letter-spacing:.1em; margin-top:5px; }
+  .sc-sub   { font-size:12px; color:var(--t4); margin-top:3px; }
+
+  /* chart */
+  .chart-wrap { position:absolute; top:154px; left:650px; right:72px; }
+  .chart-lbl  { font-size:11px; font-weight:700; text-transform:uppercase;
+                letter-spacing:.12em; color:var(--t3); margin-bottom:10px; }
+
+  /* timeline — pulled lower */
+  .tl { position:absolute; top:468px; left:72px; right:72px; }
+  .tl-hd { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .tl-title { font-size:11px; font-weight:700; text-transform:uppercase;
+              letter-spacing:.13em; color:var(--t3); }
+  .tl-span  { font-size:11px; color:var(--t4); font-weight:600; }
+
+  .tl-track { position:relative; height:3px; }
+  .tl-line  {
+    position:absolute; inset:0; border-radius:999px;
+    background:linear-gradient(90deg, var(--blue) 0%, var(--green) 100%); opacity:.6;
+  }
+  .tl-node {
+    position:absolute; top:50%; transform:translate(-50%,-50%);
+    width:10px; height:10px; border-radius:50%;
+    background:var(--blue); box-shadow:0 0 9px var(--blue); z-index:2;
+  }
+  .tl-node.last { background:var(--green); box-shadow:0 0 10px var(--green); }
+  /* label below */
+  .tl-node::after {
+    content:attr(data-label); position:absolute; top:17px; left:50%;
+    transform:translateX(-50%); white-space:pre; text-align:center;
+    font-size:10px; font-weight:600; color:var(--t2); line-height:1.4;
+  }
+  /* label above */
+  .tl-node.up::after { top:auto; bottom:17px; }
+
+  .tl-dates { display:flex; justify-content:space-between; margin-top:60px; }
+  .tl-dates span { font-size:10px; color:var(--t4); font-weight:600;
+                   text-transform:uppercase; letter-spacing:.07em; }
+
+  /* ─────────────────────────────────────────────────────────────
+     SLIDE 2
+  ───────────────────────────────────────────────────────────── */
+  .s2-glow { position:absolute; inset:0; z-index:0;
+    background:
+      radial-gradient(ellipse 60% 55% at 100%  0%,  rgba(0,255,157,.06) 0%, transparent 55%),
+      radial-gradient(ellipse 55% 55% at   0% 100%, rgba(37,140,244,.09) 0%, transparent 55%);
+  }
+  body.light .s2-glow { background:
+    radial-gradient(ellipse 60% 55% at 100%  0%,  rgba(5,150,105,.05)  0%, transparent 55%),
+    radial-gradient(ellipse 55% 55% at   0% 100%, rgba(29,124,216,.06) 0%, transparent 55%);
+  }
+
+  /* section label */
+  .sec-lbl {
+    font-size:11px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.13em; color:var(--t3);
+    display:flex; align-items:center; gap:8px; margin-bottom:14px;
+  }
+  .sec-lbl .dot { width:7px; height:7px; border-radius:50%;
+                  background:var(--blue); box-shadow:0 0 8px var(--blue); flex-shrink:0; }
+  .sec-lbl.gd .dot { background:var(--green); box-shadow:0 0 8px var(--green); }
+
+  /* ── FULL-WIDTH PIPELINE ────────────────────────────────────── */
+  .pipe-wrap { position:absolute; top:157px; left:72px; right:72px; }
+
+  /* flow row — full width */
+  .flow { display:flex; align-items:stretch; gap:0; }
+  .fs {                            /* flow step */
+    flex:1; position:relative;
+    background:rgba(37,140,244,.06); border:1px solid rgba(37,140,244,.16);
+    border-radius:12px; padding:20px 12px 16px; text-align:center;
+    transition:background .3s;
+  }
+  .fs.ai {
+    background:rgba(0,255,157,.06); border-color:rgba(0,255,157,.18);
+  }
+  body.light .fs     { background:rgba(29,124,216,.05); border-color:rgba(29,124,216,.18); }
+  body.light .fs.ai  { background:rgba(5,150,105,.06);  border-color:rgba(5,150,105,.18);  }
+
+  .fa { display:flex; align-items:center; padding:0 6px;
+        color:var(--t4); font-size:18px; flex-shrink:0; }
+  .fi { font-size:28px; margin-bottom:8px; }
+  .ft { font-size:11px; font-weight:700; color:var(--t1);
+        text-transform:uppercase; letter-spacing:.07em; margin-bottom:5px; }
+  .fd { font-size:10px; color:var(--t3); line-height:1.5; }
+
+  .ai-pill {
+    position:absolute; top:-9px; left:50%; transform:translateX(-50%);
+    background:rgba(0,255,157,.14); border:1px solid rgba(0,255,157,.32);
+    color:var(--green); font-size:8px; font-weight:700;
+    padding:2px 9px; border-radius:999px; letter-spacing:.1em;
+    text-transform:uppercase; white-space:nowrap;
+  }
+  body.light .ai-pill { background:rgba(5,150,105,.10); border-color:rgba(5,150,105,.30); }
+
+  /* ── CHIPS (detail row) ─────────────────────────────────────── */
+  .chips { display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin-top:11px; }
+  .chip {
+    background:var(--bg-card); border:1px solid var(--border-sub);
+    border-radius:9px; padding:9px 10px;
+    display:flex; align-items:center; gap:8px;
+    transition:background .3s;
+  }
+  .chip-ico { font-size:16px; flex-shrink:0; }
+  .chip-txt { font-size:10px; color:var(--t2); line-height:1.4; }
+  .chip-txt strong { color:var(--t1); display:block; font-size:11px; }
+
+  /* ── CONTRIBUTE SECTION ─────────────────────────────────────── */
+  .contrib-sec { position:absolute; top:420px; left:72px; right:72px; }
+
+  .contrib-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  .cc {
+    background:var(--bg-card); border:1px solid var(--border);
+    border-radius:12px; padding:14px 16px;
+    position:relative; overflow:hidden; transition:background .3s, border-color .3s;
+  }
+  .cc::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:2.5px;
+    background:var(--cx, var(--blue)); opacity:.75;
+  }
+  .cc.cx-b::before { --cx:var(--blue); }
+  .cc.cx-o::before { --cx:#f59e0b; }
+  .cc.cx-p::before { --cx:#a78bfa; }
+  .cc.cx-g::before { --cx:var(--green); }
+  .cc-ico   { font-size:20px; margin-bottom:6px; }
+  .cc-title { font-size:12.5px; font-weight:700; color:var(--t1); margin-bottom:4px; }
+  .cc-desc  { font-size:10px; color:var(--t3); line-height:1.55; }
+  .cc-pill  {
+    display:inline-block; margin-top:6px;
+    padding:2px 9px; border-radius:999px; font-size:9.5px; font-weight:600;
+    background:rgba(37,140,244,.10); border:1px solid rgba(37,140,244,.22); color:var(--blue);
+  }
+  .cc-pill.pg { background:rgba(0,255,157,.08); border-color:rgba(0,255,157,.22); color:var(--green); }
+  .cc-pill.po { background:rgba(245,158,11,.08); border-color:rgba(245,158,11,.22); color:#f59e0b; }
+  .cc-pill.pp { background:rgba(167,139,250,.08);border-color:rgba(167,139,250,.22);color:#a78bfa; }
+
+  /* who row */
+  .who-row { display:flex; gap:9px; margin-top:10px; }
+  .wc {
+    flex:1; background:var(--bg-card); border:1px solid var(--border-sub);
+    border-radius:10px; padding:10px 13px;
+    text-align:center; transition:background .3s;
+  }
+  .wc-av {
+    width:30px; height:30px; border-radius:50%;
+    background:rgba(37,140,244,.12); border:1px solid rgba(37,140,244,.22);
+    display:flex; align-items:center; justify-content:center;
+    font-size:15px; margin:0 auto 5px;
+  }
+  .wc-av.g { background:rgba(0,255,157,.08); border-color:rgba(0,255,157,.22); }
+  .wc-av.o { background:rgba(245,158,11,.08); border-color:rgba(245,158,11,.22); }
+  .wc-name { font-size:11px; font-weight:700; color:var(--t1); margin-bottom:2px; }
+  .wc-sub  { font-size:9.5px; color:var(--t3); line-height:1.4; }
+
+  /* print */
+  @media print {
+    .toggle-bar,.hint-bar { display:none; }
+    .slide { page-break-after:always; margin:0 !important; }
+    @page { size:1280px 720px; margin:0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── THEME TOGGLE ───────────────────────────────────────────── -->
+<div class="toggle-bar">
+  <button class="theme-btn" onclick="toggleTheme()">
+    <span id="ti">☀️</span><span id="tl">Light Theme</span>
+  </button>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     SLIDE 1 — JOURNEY
+════════════════════════════════════════════════════════════ -->
+<div class="slide" id="s1">
+  <div class="s1-glow"></div>
+
+  <!-- header -->
+  <div class="hd">
+    <div>
+      <div class="hd-title">From <span class="hi">Seed</span> to Product &mdash; 10 Weeks</div>
+      <div class="hd-sub">MST AI Portal &nbsp;·&nbsp; Development Journey</div>
+    </div>
+    <div class="badge-row">
+      <div class="badge bd-b">Internal Tool</div>
+      <div class="badge bd-g">v1.0.1 Shipped</div>
+    </div>
+  </div>
+  <div class="hd-line"></div>
+
+  <!-- stat cards -->
+  <div class="stats-row">
+    <div class="sc">
+      <div class="sc-num">179</div>
+      <div class="sc-label">Commits</div>
+      <div class="sc-sub">~18 / week</div>
+    </div>
+    <div class="sc cg">
+      <div class="sc-num">50K</div>
+      <div class="sc-label">Lines of Code</div>
+      <div class="sc-sub">225 files</div>
+    </div>
+    <div class="sc co">
+      <div class="sc-num">78</div>
+      <div class="sc-label">Issues</div>
+      <div class="sc-sub">tracked &amp; closed</div>
+    </div>
+    <div class="sc cp">
+      <div class="sc-num">17</div>
+      <div class="sc-label">Pull Requests</div>
+      <div class="sc-sub">all merged</div>
+    </div>
+  </div>
+
+  <!-- chart -->
+  <div class="chart-wrap">
+    <div class="chart-lbl">Commit Velocity — Weekly Breakdown</div>
+    <svg id="csv" viewBox="0 0 578 270" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:270px;overflow:visible">
+      <defs>
+        <linearGradient id="gMar" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#258cf4" stop-opacity=".9"/>
+          <stop offset="100%" stop-color="#258cf4" stop-opacity=".15"/>
+        </linearGradient>
+        <linearGradient id="gGrn" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#00ff9d" stop-opacity=".9"/>
+          <stop offset="100%" stop-color="#00ff9d" stop-opacity=".15"/>
+        </linearGradient>
+        <filter id="gl">
+          <feGaussianBlur stdDeviation="1.5" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <!-- grid -->
+      <line x1="20" y1="20"  x2="578" y2="20"  stroke="rgba(255,255,255,.045)" stroke-width="1" class="sg"/>
+      <line x1="20" y1="73"  x2="578" y2="73"  stroke="rgba(255,255,255,.045)" stroke-width="1" class="sg"/>
+      <line x1="20" y1="126" x2="578" y2="126" stroke="rgba(255,255,255,.045)" stroke-width="1" class="sg"/>
+      <line x1="20" y1="179" x2="578" y2="179" stroke="rgba(255,255,255,.045)" stroke-width="1" class="sg"/>
+      <line x1="20" y1="232" x2="578" y2="232" stroke="rgba(255,255,255,.06)"  stroke-width="1" class="sg"/>
+      <!-- Y labels -->
+      <text x="15" y="17"  font-size="10" fill="#475569" text-anchor="end">20</text>
+      <text x="15" y="70"  font-size="10" fill="#475569" text-anchor="end">15</text>
+      <text x="15" y="123" font-size="10" fill="#475569" text-anchor="end">10</text>
+      <text x="15" y="176" font-size="10" fill="#475569" text-anchor="end">5</text>
+      <!-- baseline at y=232 · 1 commit = 10.6px -->
+      <!-- MARCH: W1=8, W2=7, W3=9, W4=8 -->
+      <rect x="22"  y="147" width="30" height="85" fill="url(#gMar)" rx="3" filter="url(#gl)"/>
+      <rect x="60"  y="158" width="30" height="74" fill="url(#gMar)" rx="3" filter="url(#gl)"/>
+      <rect x="98"  y="136" width="30" height="96" fill="url(#gMar)" rx="3" filter="url(#gl)"/>
+      <rect x="136" y="147" width="30" height="85" fill="url(#gMar)" rx="3" filter="url(#gl)"/>
+      <!-- APRIL: W1=16, W2=18, W3=12, W4=14, W5=12 -->
+      <rect x="196" y="62"  width="30" height="170" fill="url(#gGrn)" rx="3" filter="url(#gl)"/>
+      <rect x="234" y="41"  width="30" height="191" fill="url(#gGrn)" rx="3" filter="url(#gl)"/>
+      <rect x="272" y="105" width="30" height="127" fill="url(#gGrn)" rx="3" filter="url(#gl)"/>
+      <rect x="310" y="83"  width="30" height="149" fill="url(#gGrn)" rx="3" filter="url(#gl)"/>
+      <rect x="348" y="105" width="30" height="127" fill="url(#gGrn)" rx="3" filter="url(#gl)"/>
+      <!-- MAY: W1=20, W2=22, W3=18, W4=15 -->
+      <rect x="408" y="20"  width="30" height="212" fill="url(#gGrn)" rx="3" filter="url(#gl)"/>
+      <rect x="446" y="8"   width="30" height="224" fill="url(#gGrn)" rx="3" filter="url(#gl)"/>
+      <rect x="484" y="41"  width="30" height="191" fill="url(#gGrn)" rx="3" filter="url(#gl)"/>
+      <rect x="522" y="73"  width="30" height="159" fill="url(#gGrn)" rx="3" filter="url(#gl)"/>
+      <!-- month labels -->
+      <text x="102" y="252" text-anchor="middle" font-size="10.5" fill="#475569" font-weight="600">MARCH · 32</text>
+      <text x="278" y="252" text-anchor="middle" font-size="10.5" fill="#475569" font-weight="600">APRIL · 72</text>
+      <text x="460" y="252" text-anchor="middle" font-size="10.5" fill="#475569" font-weight="600">MAY · 75</text>
+      <!-- dividers -->
+      <line x1="178" y1="0" x2="178" y2="235" stroke="rgba(255,255,255,.05)" stroke-width="1" stroke-dasharray="3,3" class="sd"/>
+      <line x1="390" y1="0" x2="390" y2="235" stroke="rgba(255,255,255,.05)" stroke-width="1" stroke-dasharray="3,3" class="sd"/>
+    </svg>
+  </div>
+
+  <!-- timeline — pulled lower to top:468 -->
+  <div class="tl">
+    <div class="tl-hd">
+      <div class="tl-title">Feature Timeline</div>
+      <div class="tl-span">Mar 7, 2026 &rarr; May 13, 2026</div>
+    </div>
+    <div class="tl-track">
+      <div class="tl-line"></div>
+      <!-- 10 nodes alternating above/below, well-spaced -->
+      <div class="tl-node"      style="left:0%"   data-label="🚀 Ignite&#10;Video"></div>
+      <div class="tl-node up"   style="left:11%"  data-label="📦 Marketplace&#10;Sync"></div>
+      <div class="tl-node"      style="left:22%"  data-label="📊 Analytics&#10;&amp; Articles"></div>
+      <div class="tl-node up"   style="left:33%"  data-label="📧 Email&#10;Digest"></div>
+      <div class="tl-node"      style="left:46%"  data-label="🔐 SAML&#10;Auth"></div>
+      <div class="tl-node up"   style="left:56%"  data-label="👥 Roles&#10;&amp; Courses"></div>
+      <div class="tl-node"      style="left:65%"  data-label="📨 Video&#10;Emails"></div>
+      <div class="tl-node up"   style="left:78%"  data-label="🔍 Search&#10;&amp; Memes"></div>
+      <div class="tl-node"      style="left:89%"  data-label="🛡️ Artifact&#10;Hub"></div>
+      <div class="tl-node last up" style="left:100%" data-label="✅ v1.0.1&#10;Released"></div>
+    </div>
+    <div class="tl-dates">
+      <span>Mar 7</span>
+      <span>Mar 21</span>
+      <span>Apr 4</span>
+      <span>Apr 18</span>
+      <span>May 2</span>
+      <span>May 13</span>
+    </div>
+  </div>
+
+  <div class="sf">
+    <div class="sf-brand"><div class="sf-logo">🤖</div><div class="sf-name">MST AI Portal</div></div>
+    <div class="sf-page">1 / 2</div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     SLIDE 2 — FULL-WIDTH FEATURES
+════════════════════════════════════════════════════════════ -->
+<div class="slide" id="s2">
+  <div class="s2-glow"></div>
+
+  <!-- header -->
+  <div class="hd">
+    <div>
+      <div class="hd-title">What Makes It <span class="hig">Different</span></div>
+      <div class="hd-sub">AI-native design &nbsp;·&nbsp; open ecosystem &nbsp;·&nbsp; zero lock-in</div>
+    </div>
+    <div class="badge-row">
+      <div class="badge bd-b">AI-Native</div>
+      <div class="badge bd-g">Open to Contribute</div>
+    </div>
+  </div>
+  <div class="hd-line"></div>
+
+  <!-- full-width AI pipeline -->
+  <div class="pipe-wrap">
+    <div class="sec-lbl">
+      <div class="dot"></div>
+      Ignite — AI-Driven Video Experience
+    </div>
+
+    <div class="flow">
+      <div class="fs">
+        <div class="fi">📁</div>
+        <div class="ft">Upload</div>
+        <div class="fd">Any format<br>drag &amp; drop<br>batch support</div>
+      </div>
+      <div class="fa">›</div>
+
+      <div class="fs">
+        <div class="fi">⚙️</div>
+        <div class="ft">Transcode</div>
+        <div class="fd">HLS · 1080p/720p/480p<br>GPU-accelerated<br>background job</div>
+      </div>
+      <div class="fa">›</div>
+
+      <div class="fs ai">
+        <div class="ai-pill">AI · Whisper</div>
+        <div class="fi">🎙️</div>
+        <div class="ft">Transcript</div>
+        <div class="fd">Auto speech-to-text<br>SSE streaming<br>editable in portal</div>
+      </div>
+      <div class="fa">›</div>
+
+      <div class="fs ai">
+        <div class="ai-pill">AI · Ollama LLM</div>
+        <div class="fi">🧠</div>
+        <div class="ft">Enrich</div>
+        <div class="fd">Title + description<br>Chapter markers<br>How-to guide</div>
+      </div>
+      <div class="fa">›</div>
+
+      <div class="fs ai">
+        <div class="ai-pill">AI · Auto + Manual</div>
+        <div class="fi">✂️</div>
+        <div class="ft">Edit</div>
+        <div class="fd">Timeline trim/cut<br>Chapter editor<br>No re-encode</div>
+      </div>
+      <div class="fa">›</div>
+
+      <div class="fs">
+        <div class="fi">✅</div>
+        <div class="ft">Publish</div>
+        <div class="fd">Closed captions<br>Chapter nav<br>Site-wide search</div>
+      </div>
+    </div>
+
+    <!-- 6 capability chips -->
+    <div class="chips">
+      <div class="chip">
+        <div class="chip-ico">📼</div>
+        <div class="chip-txt"><strong>HLS Adaptive</strong>3-quality ladder, auto bitrate</div>
+      </div>
+      <div class="chip">
+        <div class="chip-ico">📈</div>
+        <div class="chip-txt"><strong>Progress Tracking</strong>Watch time, subscriptions, resume</div>
+      </div>
+      <div class="chip">
+        <div class="chip-ico">🌐</div>
+        <div class="chip-txt"><strong>Auth Modes</strong>SAML · LDAP · Open — plug &amp; play</div>
+      </div>
+      <div class="chip">
+        <div class="chip-ico">💌</div>
+        <div class="chip-txt"><strong>Email Digest</strong>LLM newsletter, scheduler, CSV send</div>
+      </div>
+      <div class="chip">
+        <div class="chip-ico">🔍</div>
+        <div class="chip-txt"><strong>Site-wide Search</strong>Videos, articles, marketplace unified</div>
+      </div>
+      <div class="chip">
+        <div class="chip-ico">📊</div>
+        <div class="chip-txt"><strong>Analytics</strong>Views, watch hours, top content, PDF export</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- full-width contribute section -->
+  <div class="contrib-sec">
+    <div class="sec-lbl gd">
+      <div class="dot"></div>
+      How to Contribute
+    </div>
+
+    <div class="contrib-row">
+      <div class="cc cx-b">
+        <div class="cc-ico">🎬</div>
+        <div class="cc-title">Upload Videos</div>
+        <div class="cc-desc">Record knowledge sessions — AI auto-generates transcript, chapters &amp; how-to guide.</div>
+        <span class="cc-pill">content role</span>
+      </div>
+      <div class="cc cx-o">
+        <div class="cc-ico">🛒</div>
+        <div class="cc-title">Publish AI Tools</div>
+        <div class="cc-desc">Add agents, MCPs &amp; skills to Artifact Hub — auto-synced from your GitHub repo.</div>
+        <span class="cc-pill po">via GitHub</span>
+      </div>
+      <div class="cc cx-p">
+        <div class="cc-ico">📝</div>
+        <div class="cc-title">Write Articles</div>
+        <div class="cc-desc">Markdown knowledge articles with file attachments, categories &amp; version tracking.</div>
+        <span class="cc-pill pp">markdown + files</span>
+      </div>
+      <div class="cc cx-g">
+        <div class="cc-ico">🧩</div>
+        <div class="cc-title">Share Solutions</div>
+        <div class="cc-desc">Showcase AI use cases and demo cards — discoverable by everyone in the org.</div>
+        <span class="cc-pill pg">org-wide</span>
+      </div>
+    </div>
+
+    <div class="who-row">
+      <div class="wc">
+        <div class="wc-av">👤</div>
+        <div class="wc-name">Anyone</div>
+        <div class="wc-sub">Browse · watch · search · download</div>
+      </div>
+      <div class="wc">
+        <div class="wc-av g">✍️</div>
+        <div class="wc-name">Content Role</div>
+        <div class="wc-sub">Upload videos · write articles · manage marketplace</div>
+      </div>
+      <div class="wc">
+        <div class="wc-av o">🛡️</div>
+        <div class="wc-name">Admin</div>
+        <div class="wc-sub">Digest · analytics · user management · full settings</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sf">
+    <div class="sf-brand"><div class="sf-logo">🤖</div><div class="sf-name">MST AI Portal</div></div>
+    <div class="sf-page">2 / 2</div>
+  </div>
+</div>
+
+<div class="hint-bar" style="width:1280px;padding:14px 72px;color:var(--t4);font-size:11px;font-family:'Space Grotesk',sans-serif;letter-spacing:.04em;">
+  Export: File → Print → Save as PDF · Paper: custom 1280×720 px · Margins: None · Background graphics: ✓
+</div>
+
+<script>
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  document.getElementById('ti').textContent = isLight ? '🌙' : '☀️';
+  document.getElementById('tl').textContent = isLight ? 'Dark Theme' : 'Light Theme';
+
+  const sgc = isLight ? 'rgba(0,0,0,.06)'   : 'rgba(255,255,255,.045)';
+  const sdc = isLight ? 'rgba(0,0,0,.07)'   : 'rgba(255,255,255,.05)';
+  document.querySelectorAll('.sg').forEach(e => e.setAttribute('stroke', sgc));
+  document.querySelectorAll('.sd').forEach(e => e.setAttribute('stroke', sdc));
+
+  const mc = isLight ? '#1d7cd8' : '#258cf4';
+  const gc = isLight ? '#059669' : '#00ff9d';
+  document.querySelector('#gMar stop:first-child').setAttribute('stop-color', mc);
+  document.querySelector('#gMar stop:last-child').setAttribute('stop-color', mc);
+  document.querySelector('#gGrn stop:first-child').setAttribute('stop-color', gc);
+  document.querySelector('#gGrn stop:last-child').setAttribute('stop-color', gc);
+}
+</script>
+</body>
+</html>
