@@ -335,7 +335,7 @@ export const AdminContributions: React.FC = () => {
       )}
 
       {/* User Levels Reference */}
-      <div className="mb-6 p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800/30">
+      <div className="mb-6 p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-input-light dark:bg-input-dark/30">
         <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">User Roles</h2>
         <div className="flex gap-4 text-xs text-slate-500">
           <span><strong className="text-slate-700 dark:text-slate-300">user</strong> — view only</span>
@@ -363,7 +363,7 @@ export const AdminContributions: React.FC = () => {
               </div>
               <span className="text-xs text-slate-500 dark:text-slate-400 font-mono truncate max-w-[180px]">{req.user_id}</span>
             </div>
-            <div className="bg-slate-50 dark:bg-slate-800/40 rounded-lg p-3 mb-3">
+            <div className="bg-input-light dark:bg-input-dark/40 rounded-lg p-3 mb-3">
               <p className="text-xs text-slate-500 mb-1 font-bold uppercase tracking-wider">Reason</p>
               <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">{req.reason}</p>
             </div>

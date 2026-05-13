@@ -244,15 +244,15 @@ export const AdminAnalytics: React.FC = () => {
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <button onClick={exportToHtml} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white border border-slate-300 dark:border-white/10 flex items-center gap-1.5 transition-colors">
+            <button onClick={exportToHtml} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-muted-light dark:bg-muted-dark text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white border border-slate-300 dark:border-white/10 flex items-center gap-1.5 transition-colors">
               <span className="material-symbols-outlined text-sm">html</span> Export HTML
             </button>
-            <button onClick={exportToPdf} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white border border-slate-300 dark:border-white/10 flex items-center gap-1.5 transition-colors">
+            <button onClick={exportToPdf} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-muted-light dark:bg-muted-dark text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white border border-slate-300 dark:border-white/10 flex items-center gap-1.5 transition-colors">
               <span className="material-symbols-outlined text-sm">picture_as_pdf</span> Export PDF
             </button>
           </div>
           <div className="h-6 w-px bg-white/10" />
-          <div className="flex items-center gap-2 bg-slate-200/50 dark:bg-slate-800/50 border border-slate-300 dark:border-white/10 rounded-lg p-1">
+          <div className="flex items-center gap-2 bg-panel-light dark:bg-panel-dark/50 border border-slate-300 dark:border-white/10 rounded-lg p-1">
             {PERIOD_OPTIONS.map(opt => (
               <button
                 key={opt.value}
@@ -429,7 +429,7 @@ export const AdminAnalytics: React.FC = () => {
                 <ChartCard title="Top Visitors" icon="person_search">
                   <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
                     {visitors.map((v, i) => (
-                      <div key={v.ip_address || i} className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/30 border border-white/5">
+                      <div key={v.ip_address || i} className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-100/50 dark:bg-slate-800/30 border border-slate-100 dark:border-white/5">
                         <span className="text-xs font-bold text-slate-500 w-5 text-right">{i + 1}</span>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
@@ -513,7 +513,7 @@ export const AdminAnalytics: React.FC = () => {
                     </thead>
                     <tbody>
                       {videoMetrics.videos.map(v => (
-                        <tr key={v.id} className="border-b border-white/5 hover:bg-slate-800/30 transition-colors">
+                        <tr key={v.id} className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                           <td className="py-2.5 px-3 text-white font-medium">{v.title}</td>
                           <td className="py-2.5 px-3">
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium uppercase">{v.category}</span>
@@ -587,7 +587,7 @@ export const AdminAnalytics: React.FC = () => {
                     </thead>
                     <tbody>
                       {marketplaceMetrics.components.map(c => (
-                        <tr key={c.slug} className="border-b border-white/5 hover:bg-slate-800/30 transition-colors">
+                        <tr key={c.slug} className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                           <td className="py-2.5 px-3 text-white font-medium">{c.name}</td>
                           <td className="py-2.5 px-3">
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-medium uppercase">{c.component_type}</span>
@@ -649,7 +649,7 @@ export const AdminAnalytics: React.FC = () => {
                     </thead>
                     <tbody>
                       {newsMetrics.articles.map(a => (
-                        <tr key={a.id} className="border-b border-white/5 hover:bg-slate-800/30 transition-colors">
+                        <tr key={a.id} className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                           <td className="py-2.5 px-3 text-white font-medium max-w-[300px] truncate">{a.title}</td>
                           <td className="py-2.5 px-3">
                             {a.badge && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 font-medium">{a.badge}</span>}
@@ -690,7 +690,7 @@ const StatCard: React.FC<{ icon: string; label: string; value: string; color: st
 
 const ChartCard: React.FC<{ title: string; icon: string; subtitle?: string; children: React.ReactNode }> = ({ title, icon, subtitle, children }) => (
   <div className="chart-card bg-card-light dark:bg-card-dark border border-slate-100 dark:border-white/5 rounded-xl overflow-hidden" style={{ pageBreakInside: 'avoid' }}>
-    <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+    <div className="px-5 py-4 border-b border-slate-100 dark:border-white/5 flex items-center gap-2">
       <span className="material-symbols-outlined shrink-0 text-primary text-lg">{icon}</span>
       <div className="min-w-0 flex-1">
         <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">{title}</h3>

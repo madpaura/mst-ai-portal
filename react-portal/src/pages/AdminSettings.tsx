@@ -257,12 +257,12 @@ export const AdminSettings: React.FC = () => {
                 value={ollamaUrl}
                 onChange={e => { setOllamaUrl(e.target.value); setOllamaTestResult(null); setOllamaModels([]); }}
                 placeholder="http://localhost:11434"
-                className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm font-mono focus:border-primary outline-none"
+                className="flex-1 px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm font-mono focus:border-primary outline-none"
               />
               <button
                 onClick={handleOllamaTest}
                 disabled={ollamaTesting || !ollamaUrl.trim()}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-slate-200 text-sm font-bold rounded-lg transition-colors border border-white/10"
+                className="flex items-center gap-2 px-4 py-2 bg-muted-light dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-40 text-slate-700 dark:text-slate-200 text-sm font-bold rounded-lg transition-colors border border-slate-300 dark:border-white/10"
               >
                 <span className={`material-symbols-outlined text-sm ${ollamaTesting ? 'animate-spin' : ''}`}>
                   {ollamaTesting ? 'progress_activity' : 'wifi_tethering'}
@@ -292,7 +292,7 @@ export const AdminSettings: React.FC = () => {
               <select
                 value={ollamaModel}
                 onChange={e => setOllamaModel(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
               >
                 {ollamaModels.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
@@ -343,7 +343,7 @@ export const AdminSettings: React.FC = () => {
             value={contactEmail}
             onChange={e => setContactEmail(e.target.value)}
             placeholder="ai-tools@mst.internal"
-            className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+            className="flex-1 px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
           />
           <button
             onClick={handleContactEmailSave}
@@ -382,7 +382,7 @@ export const AdminSettings: React.FC = () => {
             {portalTheme === 'default' && (
               <span className="absolute top-3 right-3 material-symbols-outlined text-primary text-[18px]">check_circle</span>
             )}
-            <div className="rounded-lg overflow-hidden border border-white/10 bg-[#0a0f14] p-2">
+            <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-white/10 bg-panel-light dark:bg-background-dark p-2">
               <div className="h-2 w-16 rounded bg-[#258cf4]/30 mb-1.5" />
               <div className="flex gap-1.5">
                 <div className="flex-1 h-10 rounded bg-[#258cf4]/10 border border-[#258cf4]/20" style={{ boxShadow: '0 0 8px rgba(37,140,244,0.15)' }} />
@@ -475,7 +475,7 @@ export const AdminSettings: React.FC = () => {
                   value={transcriptForm.url}
                   onChange={e => setTranscriptForm(f => ({ ...f, url: e.target.value }))}
                   placeholder="http://transcript-service:9100"
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />
                 <p className="text-xs text-slate-500 mt-1">
                   Same machine (Docker): <button type="button" className="text-primary hover:underline font-mono" onClick={() => setTranscriptForm(f => ({ ...f, url: 'http://transcript-service:9100' }))}>http://transcript-service:9100</button>
@@ -489,7 +489,7 @@ export const AdminSettings: React.FC = () => {
                   value={transcriptForm.api_key}
                   onChange={e => setTranscriptForm(f => ({ ...f, api_key: e.target.value }))}
                   placeholder="(leave blank to keep existing)"
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />
               </div>
               <div>
@@ -497,7 +497,7 @@ export const AdminSettings: React.FC = () => {
                 <select
                   value={transcriptForm.model}
                   onChange={e => setTranscriptForm(f => ({ ...f, model: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 >
                   <option value="large-v3">large-v3 (best quality, needs ≥10 GB VRAM)</option>
                   <option value="medium">medium (good quality, ~5 GB VRAM)</option>
@@ -515,7 +515,7 @@ export const AdminSettings: React.FC = () => {
                 <button
                   onClick={handleTranscriptTest}
                   disabled={transcriptTesting || !transcriptForm.url}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-slate-200 text-sm font-bold rounded-lg transition-colors border border-white/10"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-muted-light dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-40 text-slate-700 dark:text-slate-200 text-sm font-bold rounded-lg transition-colors border border-slate-300 dark:border-white/10"
                 >
                   <span className="material-symbols-outlined text-sm">{transcriptTesting ? 'autorenew' : 'wifi_tethering'}</span>
                   {transcriptTesting ? 'Testing…' : 'Test Connection'}
@@ -574,7 +574,7 @@ export const AdminSettings: React.FC = () => {
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={fetchCacheStats} className="flex items-center gap-2 px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg transition-colors border border-slate-300 dark:border-white/10">
+            <button onClick={fetchCacheStats} className="flex items-center gap-2 px-3 py-1.5 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg transition-colors border border-slate-300 dark:border-white/10">
               <span className="material-symbols-outlined text-xs">refresh</span>Refresh
             </button>
             <button onClick={() => handleCacheFlush()} disabled={cacheFlushing} className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-bold rounded-lg transition-colors border border-red-500/20 disabled:opacity-50">
@@ -585,9 +585,9 @@ export const AdminSettings: React.FC = () => {
         {cacheStats && (
           <div className="mt-4 pt-4 border-t border-white/5">
             {cacheStats.enabled === false ? (
-              <p className="text-sm text-slate-500">Redis is disabled. Set <code className="text-xs bg-slate-800 px-1 rounded">REDIS_ENABLED=true</code> to enable caching.</p>
+              <p className="text-sm text-slate-500">Redis is disabled. Set <code className="text-xs bg-panel-light dark:bg-panel-dark px-1 rounded">REDIS_ENABLED=true</code> to enable caching.</p>
             ) : !cacheStats.connected ? (
-              <p className="text-sm text-amber-400">Redis enabled but not reachable. Check <code className="text-xs bg-slate-800 px-1 rounded">REDIS_URL</code> and ensure the redis container is running.</p>
+              <p className="text-sm text-amber-400">Redis enabled but not reachable. Check <code className="text-xs bg-panel-light dark:bg-panel-dark px-1 rounded">REDIS_URL</code> and ensure the redis container is running.</p>
             ) : (
               <div className="space-y-3">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -642,7 +642,7 @@ export const AdminSettings: React.FC = () => {
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">SMTP Server</label>
                 <input value={smtpForm.smtp_server} onChange={e => setSmtpForm(f => ({ ...f, smtp_server: e.target.value }))}
                   placeholder="smtp.gmail.com"
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                 <p className="text-xs text-slate-500 mt-1">Common: smtp.gmail.com, smtp.office365.com, smtp.sendgrid.net</p>
               </div>
 
@@ -650,7 +650,7 @@ export const AdminSettings: React.FC = () => {
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">SMTP Port</label>
                 <input value={smtpForm.smtp_port} onChange={e => setSmtpForm(f => ({ ...f, smtp_port: e.target.value }))}
                   placeholder="587"
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                 <p className="text-xs text-slate-500 mt-1">587 (STARTTLS) · 465 (SSL) · 25 (unencrypted)</p>
               </div>
 
@@ -658,14 +658,14 @@ export const AdminSettings: React.FC = () => {
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Username</label>
                 <input value={smtpForm.smtp_user} onChange={e => setSmtpForm(f => ({ ...f, smtp_user: e.target.value }))}
                   placeholder="user@example.com"
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Password</label>
                 <input type="password" value={smtpForm.smtp_password} onChange={e => setSmtpForm(f => ({ ...f, smtp_password: e.target.value }))}
                   placeholder="(leave blank to keep existing)"
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                 <p className="text-xs text-slate-500 mt-1">Gmail: Use App Password, not regular password</p>
               </div>
 
@@ -673,21 +673,21 @@ export const AdminSettings: React.FC = () => {
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">From Email</label>
                 <input value={smtpForm.smtp_from_email} onChange={e => setSmtpForm(f => ({ ...f, smtp_from_email: e.target.value }))}
                   placeholder="noreply@company.com"
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">From Name</label>
                 <input value={smtpForm.smtp_from_name} onChange={e => setSmtpForm(f => ({ ...f, smtp_from_name: e.target.value }))}
                   placeholder="MST AI Portal"
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Test Recipient Email</label>
                 <input value={smtpForm.test_recipient} onChange={e => setSmtpForm(f => ({ ...f, test_recipient: e.target.value }))}
                   placeholder="test@example.com"
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               {smtpProbeResult && (
@@ -747,7 +747,7 @@ export const AdminSettings: React.FC = () => {
                     } finally { setSmtpProbing(false); }
                   }}
                   disabled={smtpProbing}
-                  className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-bold rounded-lg transition-colors border border-white/10 disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 bg-muted-light dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-sm font-bold rounded-lg transition-colors border border-slate-300 dark:border-white/10 disabled:opacity-50"
                 >
                   <span className={`material-symbols-outlined text-sm ${smtpProbing ? 'animate-spin' : ''}`}>{smtpProbing ? 'progress_activity' : 'network_check'}</span>
                   {smtpProbing ? 'Probing...' : 'Check Connectivity'}
@@ -804,7 +804,7 @@ export const AdminSettings: React.FC = () => {
                   <span className="material-symbols-outlined text-sm">save</span>
                   {smtpSaving ? 'Saving...' : 'Save'}
                 </button>
-                <button onClick={() => setShowSmtpModal(false)} className="px-6 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+                <button onClick={() => setShowSmtpModal(false)} className="px-6 py-2.5 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
                   Cancel
                 </button>
               </div>

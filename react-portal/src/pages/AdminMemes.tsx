@@ -408,7 +408,7 @@ export const AdminMemes: React.FC = () => {
                   {pendingUploads.map((p) => (
                     <div key={p.uid} className="relative flex flex-col gap-1.5">
                       {/* Thumbnail */}
-                      <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/10">
+                      <div className="relative aspect-square rounded-xl overflow-hidden bg-panel-light dark:bg-input-dark border border-slate-200 dark:border-white/10">
                         <img src={p.objectUrl} alt="" className="w-full h-full object-cover" />
                         {p.uploading && (
                           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
@@ -442,7 +442,7 @@ export const AdminMemes: React.FC = () => {
                             prev.map((x) => (x.uid === p.uid ? { ...x, linkUrl: e.target.value } : x)),
                           )
                         }
-                        className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-[10px] text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:ring-1 focus:ring-primary focus:border-primary"
+                        className="w-full bg-input-light dark:bg-input-dark border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-[10px] text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:ring-1 focus:ring-primary focus:border-primary"
                       />
                     </div>
                   ))}
@@ -465,7 +465,7 @@ export const AdminMemes: React.FC = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                   {memes.map((meme, i) => (
                     <div key={meme.id} className="group relative rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900">
-                      <div className="aspect-square overflow-hidden bg-slate-100 dark:bg-slate-800">
+                      <div className="aspect-square overflow-hidden bg-panel-light dark:bg-input-dark">
                         <img src={mediaUrl(meme.image_url)} alt={meme.title || ''} className="w-full h-full object-cover" />
                       </div>
                       <div className="p-2">
@@ -478,7 +478,7 @@ export const AdminMemes: React.FC = () => {
                             onBlur={() => saveEditLink(meme)}
                             onKeyDown={(e) => { if (e.key === 'Enter') saveEditLink(meme); if (e.key === 'Escape') setEditingMemeId(null); }}
                             placeholder="https://..."
-                            className="w-full bg-white dark:bg-slate-800 border border-primary rounded px-1.5 py-0.5 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none"
+                            className="w-full bg-input-light dark:bg-input-dark border border-primary rounded px-1.5 py-0.5 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none"
                           />
                         ) : (
                           <div className="flex items-center gap-1">
@@ -516,7 +516,7 @@ export const AdminMemes: React.FC = () => {
       {/* Group form modal */}
       {showGroupForm && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/10 p-6 w-full max-w-md shadow-2xl">
+          <div className="bg-input-light dark:bg-input-dark rounded-2xl border border-slate-200 dark:border-white/10 p-6 w-full max-w-md shadow-2xl">
             <h3 className="text-base font-bold text-slate-900 dark:text-white mb-5">
               {editingGroup ? 'Edit Group' : 'Create Meme Group'}
             </h3>
@@ -524,7 +524,7 @@ export const AdminMemes: React.FC = () => {
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Title *</label>
                 <input
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-primary focus:border-primary"
+                  className="w-full bg-input-light dark:bg-input-dark border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-primary focus:border-primary"
                   placeholder="Monday Mood"
                   value={groupForm.title}
                   onChange={(e) => setGroupForm({ ...groupForm, title: e.target.value, slug: editingGroup ? groupForm.slug : slugify(e.target.value) })}
@@ -533,7 +533,7 @@ export const AdminMemes: React.FC = () => {
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Slug *</label>
                 <input
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-slate-900 dark:text-white focus:ring-1 focus:ring-primary focus:border-primary"
+                  className="w-full bg-input-light dark:bg-input-dark border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-mono text-slate-900 dark:text-white focus:ring-1 focus:ring-primary focus:border-primary"
                   placeholder="monday-mood"
                   value={groupForm.slug}
                   onChange={(e) => setGroupForm({ ...groupForm, slug: e.target.value })}
@@ -542,7 +542,7 @@ export const AdminMemes: React.FC = () => {
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Category</label>
                 <select
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-primary focus:border-primary"
+                  className="w-full bg-input-light dark:bg-input-dark border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-primary focus:border-primary"
                   value={groupForm.category}
                   onChange={(e) => setGroupForm({ ...groupForm, category: e.target.value })}
                 >
@@ -553,7 +553,7 @@ export const AdminMemes: React.FC = () => {
                 <label className="block text-xs font-medium text-slate-500 mb-1">Sort Order</label>
                 <input
                   type="number"
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-primary focus:border-primary"
+                  className="w-full bg-input-light dark:bg-input-dark border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-primary focus:border-primary"
                   value={groupForm.sort_order}
                   onChange={(e) => setGroupForm({ ...groupForm, sort_order: parseInt(e.target.value) || 0 })}
                 />

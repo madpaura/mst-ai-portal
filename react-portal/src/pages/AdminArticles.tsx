@@ -246,27 +246,27 @@ export const AdminArticles: React.FC = () => {
               placeholder="Search articles..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-primary outline-none"
+              className="w-full pl-8 pr-3 py-2 bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-primary outline-none"
             />
           </div>
         </div>
 
         {/* Create Form */}
         {showCreate && (
-          <div className="p-4 border-b border-slate-200 dark:border-white/10 space-y-2 bg-slate-100/50 dark:bg-slate-800/50">
+          <div className="p-4 border-b border-slate-200 dark:border-white/10 space-y-2 bg-panel-light/50 dark:bg-panel-dark/50">
             <input
               type="text"
               placeholder="Article title"
               value={createForm.title}
               onChange={(e) => setCreateForm((f) => ({ ...f, title: e.target.value }))}
               onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-primary outline-none"
+              className="w-full px-3 py-2 bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-primary outline-none"
               autoFocus
             />
             <select
               value={createForm.category}
               onChange={(e) => setCreateForm((f) => ({ ...f, category: e.target.value }))}
-              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 rounded-lg text-sm text-slate-900 dark:text-white focus:border-primary outline-none"
+              className="w-full px-3 py-2 bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 rounded-lg text-sm text-slate-900 dark:text-white focus:border-primary outline-none"
             >
               {DEFAULT_CATEGORIES.map((c) => (
                 <option key={c} value={c}>{c}</option>
@@ -290,7 +290,7 @@ export const AdminArticles: React.FC = () => {
               className={`w-full text-left p-4 border-b border-slate-100 dark:border-white/5 transition-colors ${
                 selected?.id === article.id
                   ? 'bg-primary/10 border-l-2 border-l-primary'
-                  : 'hover:bg-slate-100/50 dark:hover:bg-slate-800/50'
+                  : 'hover:bg-panel-light/50 dark:hover:bg-panel-dark/50'
               }`}
             >
               <div className="flex items-center gap-2 mb-1">
@@ -362,7 +362,7 @@ export const AdminArticles: React.FC = () => {
                   <input
                     value={editForm.title}
                     onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 rounded-lg text-sm text-slate-900 dark:text-white focus:border-primary outline-none"
+                    className="w-full px-3 py-2 bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 rounded-lg text-sm text-slate-900 dark:text-white focus:border-primary outline-none"
                   />
                 </div>
                 <div className="w-40">
@@ -370,7 +370,7 @@ export const AdminArticles: React.FC = () => {
                   <select
                     value={editForm.category}
                     onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value }))}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 rounded-lg text-sm text-slate-900 dark:text-white focus:border-primary outline-none"
+                    className="w-full px-3 py-2 bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 rounded-lg text-sm text-slate-900 dark:text-white focus:border-primary outline-none"
                   >
                     {DEFAULT_CATEGORIES.map((c) => (
                       <option key={c} value={c}>{c}</option>
@@ -385,7 +385,7 @@ export const AdminArticles: React.FC = () => {
                   <input
                     value={editForm.slug}
                     onChange={(e) => setEditForm((f) => ({ ...f, slug: e.target.value }))}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 rounded-lg text-sm text-slate-900 dark:text-white focus:border-primary outline-none font-mono"
+                    className="w-full px-3 py-2 bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 rounded-lg text-sm text-slate-900 dark:text-white focus:border-primary outline-none font-mono"
                   />
                 </div>
               </div>
@@ -395,7 +395,7 @@ export const AdminArticles: React.FC = () => {
                   value={editForm.summary}
                   onChange={(e) => setEditForm((f) => ({ ...f, summary: e.target.value }))}
                   placeholder="Brief summary for article cards..."
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:border-primary outline-none"
+                  className="w-full px-3 py-2 bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:border-primary outline-none"
                 />
               </div>
             </div>
@@ -485,7 +485,7 @@ export const AdminArticles: React.FC = () => {
                   {(selected.attachments || []).map((att) => (
                     <div
                       key={att.id}
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/60 group"
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-panel-light dark:bg-panel-dark/60 group"
                     >
                       <span className="material-symbols-outlined text-base text-slate-400">{fileIcon(att.filename)}</span>
                       <a

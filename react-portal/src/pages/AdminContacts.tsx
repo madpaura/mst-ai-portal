@@ -146,7 +146,7 @@ export const AdminContacts: React.FC = () => {
                   value={form.division}
                   onChange={e => setForm(f => ({ ...f, division: e.target.value }))}
                   placeholder="e.g. Engineering, Product"
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />
                 <datalist id="division-list">
                   {divisionNames.map(d => <option key={d} value={d} />)}
@@ -159,7 +159,7 @@ export const AdminContacts: React.FC = () => {
                   value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   placeholder="Full name"
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />
               </div>
               <div>
@@ -169,7 +169,7 @@ export const AdminContacts: React.FC = () => {
                   value={form.title}
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                   placeholder="e.g. Team Lead, Product Manager"
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />
               </div>
               <div>
@@ -179,7 +179,7 @@ export const AdminContacts: React.FC = () => {
                   value={form.email}
                   onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   placeholder="name@company.com"
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />
               </div>
               <div>
@@ -188,7 +188,7 @@ export const AdminContacts: React.FC = () => {
                   type="number"
                   value={form.sort_order}
                   onChange={e => setForm(f => ({ ...f, sort_order: parseInt(e.target.value) || 0 }))}
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />
               </div>
               <div className="flex items-end pb-1">
@@ -204,7 +204,7 @@ export const AdminContacts: React.FC = () => {
               </div>
             </div>
             <div className="flex gap-3 pt-1">
-              <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-slate-700/60 hover:bg-slate-700 text-slate-300 text-sm rounded-lg border border-white/10 transition-colors">
+              <button onClick={() => setShowForm(false)} className="px-4 py-2 bg-muted-light dark:bg-slate-700/60 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg border border-slate-200 dark:border-white/10 transition-colors">
                 Cancel
               </button>
               <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary text-sm font-bold rounded-lg border border-primary/20 transition-colors disabled:opacity-50">
@@ -226,7 +226,7 @@ export const AdminContacts: React.FC = () => {
           <div className="space-y-6">
             {divisions.map(division => (
               <div key={division} className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
-                <div className="px-5 py-3 bg-slate-100 dark:bg-slate-800/60 border-b border-slate-200 dark:border-white/10">
+                <div className="px-5 py-3 bg-panel-light dark:bg-panel-dark/60 border-b border-slate-200 dark:border-white/10">
                   <span className="text-xs font-bold uppercase tracking-widest text-slate-400">{division}</span>
                   <span className="ml-2 text-xs text-slate-600">({grouped[division].length})</span>
                 </div>
@@ -241,7 +241,7 @@ export const AdminContacts: React.FC = () => {
                         <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{c.title && `${c.title} · `}{c.email}</div>
                       </div>
                       {!c.is_active && (
-                        <span className="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-400 border border-white/10">Inactive</span>
+                        <span className="text-xs px-2 py-0.5 rounded bg-muted-light dark:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/10">Inactive</span>
                       )}
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button
@@ -249,7 +249,7 @@ export const AdminContacts: React.FC = () => {
                           className={`flex items-center gap-1 px-2 py-1 rounded text-xs border transition-colors ${
                             c.is_active
                               ? 'bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20'
-                              : 'bg-slate-700/40 border-white/10 text-slate-400 hover:bg-slate-700'
+                              : 'bg-slate-100 dark:bg-slate-700/40 border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
                           }`}
                           title={c.is_active ? 'Deactivate' : 'Activate'}
                         >
@@ -259,7 +259,7 @@ export const AdminContacts: React.FC = () => {
                         </button>
                         <button
                           onClick={() => openEdit(c)}
-                          className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-slate-700/40 hover:bg-slate-700 text-slate-300 border border-white/10 transition-colors"
+                          className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-slate-100 dark:bg-slate-700/40 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 transition-colors"
                         >
                           <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>edit</span>
                         </button>

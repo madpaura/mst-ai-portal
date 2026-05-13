@@ -576,7 +576,7 @@ export const AdminMarketplace: React.FC = () => {
                       value={marketplaceForm.message}
                       onChange={e => setMarketplaceForm(f => ({ ...f, message: e.target.value }))}
                       placeholder="We're upgrading the marketplace — check back soon!"
-                      className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
+                      className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
                     />
                   </div>
                   <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
@@ -599,7 +599,7 @@ export const AdminMarketplace: React.FC = () => {
                   </button>
                   <button
                     onClick={() => setMarketplaceForm({ under_construction: marketplaceStatus?.under_construction ?? false, message: marketplaceStatus?.message ?? '' })}
-                    className="px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors"
+                    className="px-4 py-2 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors"
                   >
                     Discard
                   </button>
@@ -626,7 +626,7 @@ export const AdminMarketplace: React.FC = () => {
                   placeholder="e.g. how-to-contribute-marketplace"
                   value={contributingVideoSlug}
                   onChange={e => setContributingVideoSlug(e.target.value)}
-                  className="flex-1 max-w-sm px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:border-primary outline-none"
+                  className="flex-1 max-w-sm px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-sm text-slate-900 dark:text-white placeholder-slate-500 focus:border-primary outline-none"
                 />
                 <button
                   onClick={handleSaveContributingGuide}
@@ -716,7 +716,7 @@ export const AdminMarketplace: React.FC = () => {
                       <tr key={comp.id} className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/10 flex items-center justify-center">
+                            <div className="w-8 h-8 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-200 dark:border-white/10 flex items-center justify-center">
                               <span className={`material-symbols-outlined text-base ${comp.icon_color || 'text-primary'}`}>{comp.icon || 'smart_toy'}</span>
                             </div>
                             <div>
@@ -777,7 +777,7 @@ export const AdminMarketplace: React.FC = () => {
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Git repositories scanned to populate the marketplace catalog</p>
               </div>
               <div className="flex gap-2">
-                <button onClick={handleSyncAll} className="flex items-center gap-2 px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold rounded-lg transition-colors border border-slate-300 dark:border-white/10">
+                <button onClick={handleSyncAll} className="flex items-center gap-2 px-4 py-2 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold rounded-lg transition-colors border border-slate-300 dark:border-white/10">
                   <span className="material-symbols-outlined text-sm">sync</span>
                   Sync All
                 </button>
@@ -1027,7 +1027,7 @@ export const AdminMarketplace: React.FC = () => {
                         key={icon}
                         onClick={() => setCompForm(f => ({ ...f, icon }))}
                         className={`w-8 h-8 rounded flex items-center justify-center transition-all ${
-                          compForm.icon === icon ? 'bg-primary/20 border border-primary/50 ring-1 ring-primary/30' : 'bg-slate-800 border border-white/5 hover:border-white/20'
+                          compForm.icon === icon ? 'bg-primary/20 border border-primary/50 ring-1 ring-primary/30' : 'bg-panel-light dark:bg-panel-dark border border-slate-100 dark:border-white/5 hover:border-primary/30 dark:hover:border-white/20'
                         }`}
                       >
                         <span className={`material-symbols-outlined text-sm ${compForm.icon === icon ? 'text-primary' : 'text-slate-400'}`}>{icon}</span>
@@ -1093,7 +1093,7 @@ export const AdminMarketplace: React.FC = () => {
                 <button onClick={handleSaveComp} className="flex-1 px-6 py-2.5 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
                   {creatingComp ? 'Create Component' : 'Save Changes'}
                 </button>
-                <button onClick={closeCompForm} className="px-6 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+                <button onClick={closeCompForm} className="px-6 py-2.5 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
                   Cancel
                 </button>
               </div>
@@ -1121,19 +1121,19 @@ export const AdminMarketplace: React.FC = () => {
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Git Repository URL</label>
                 <input value={sourceForm.git_url} onChange={e => setSourceForm(f => ({ ...f, git_url: e.target.value }))}
                   placeholder="https://github.com/org/repo"
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Branch</label>
                   <input value={sourceForm.git_branch} onChange={e => setSourceForm(f => ({ ...f, git_branch: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                    className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Update Frequency</label>
                   <select value={sourceForm.update_frequency} onChange={e => setSourceForm(f => ({ ...f, update_frequency: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none">
+                    className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none">
                     <option value="hourly">Hourly</option>
                     <option value="nightly">Nightly</option>
                     <option value="weekly">Weekly</option>
@@ -1146,14 +1146,14 @@ export const AdminMarketplace: React.FC = () => {
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Git Token (Personal Access Token)</label>
                 <input type="password" value={sourceForm.git_token} onChange={e => setSourceForm(f => ({ ...f, git_token: e.target.value }))}
                   placeholder={editingSource ? '(leave blank to keep existing)' : 'ghp_...'}
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Scan Paths (comma-separated)</label>
                 <input value={sourceForm.scan_paths} onChange={e => setSourceForm(f => ({ ...f, scan_paths: e.target.value }))}
                   placeholder="., skills/, agents/"
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <label className="flex items-center gap-3 cursor-pointer">
@@ -1167,7 +1167,7 @@ export const AdminMarketplace: React.FC = () => {
                 <button onClick={handleSaveSource} className="flex-1 px-6 py-2.5 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
                   {creatingSource ? 'Add Repository' : 'Save Changes'}
                 </button>
-                <button onClick={closeSourceForm} className="px-6 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+                <button onClick={closeSourceForm} className="px-6 py-2.5 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
                   Cancel
                 </button>
               </div>

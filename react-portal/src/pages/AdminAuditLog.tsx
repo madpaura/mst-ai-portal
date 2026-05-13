@@ -86,7 +86,7 @@ export const AdminAuditLog: React.FC = () => {
             value={filterAction}
             onChange={e => setFilterAction(e.target.value)}
             placeholder="Filter by action…"
-            className="px-3 py-1.5 text-sm rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-primary w-52"
+            className="px-3 py-1.5 text-sm rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-primary w-52"
           />
           <button
             type="submit"
@@ -120,7 +120,7 @@ export const AdminAuditLog: React.FC = () => {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-slate-500">
+              <tr className="border-b border-slate-200 dark:border-white/10 text-xs uppercase tracking-wider text-slate-500">
                 <th className="px-4 py-3 text-left font-medium">Timestamp</th>
                 <th className="px-4 py-3 text-left font-medium">Admin</th>
                 <th className="px-4 py-3 text-left font-medium">Action</th>
@@ -168,13 +168,13 @@ export const AdminAuditLog: React.FC = () => {
                     </td>
                   </tr>
                   {expandedId === entry.id && (
-                    <tr className="bg-slate-800/30">
+                    <tr className="bg-panel-light dark:bg-panel-dark/30">
                       <td colSpan={6} className="px-4 py-3">
                         <div className="space-y-2">
                           {Object.keys(entry.details).length > 0 && (
                             <div>
                               <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Details</div>
-                              <pre className="text-xs text-slate-300 bg-slate-900 rounded p-3 overflow-x-auto">
+                              <pre className="text-xs text-slate-600 dark:text-slate-300 bg-panel-light dark:bg-input-dark rounded p-3 overflow-x-auto">
                                 {JSON.stringify(entry.details, null, 2)}
                               </pre>
                             </div>
@@ -202,14 +202,14 @@ export const AdminAuditLog: React.FC = () => {
             <button
               onClick={() => setPage(p => p - 1)}
               disabled={page === 0}
-              className="px-3 py-1.5 rounded-lg border border-white/10 disabled:opacity-40 hover:bg-white/5 transition-colors"
+              className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
             >
               Previous
             </button>
             <button
               onClick={() => setPage(p => p + 1)}
               disabled={page >= totalPages - 1}
-              className="px-3 py-1.5 rounded-lg border border-white/10 disabled:opacity-40 hover:bg-white/5 transition-colors"
+              className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
             >
               Next
             </button>

@@ -451,7 +451,7 @@ export const AdminDigest: React.FC = () => {
                   <input
                     type="number" min="1" max="30" value={digestDays}
                     onChange={(e) => setDigestDays(parseInt(e.target.value) || 7)}
-                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                    className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                   />
                   <p className="text-xs text-slate-500 mt-1">Look back this many days for content</p>
                 </div>
@@ -461,7 +461,7 @@ export const AdminDigest: React.FC = () => {
                     value={customContent}
                     onChange={(e) => setCustomContent(e.target.value)}
                     placeholder="Add a personal message to include in the digest..."
-                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
+                    className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
                     rows={4}
                   />
                 </div>
@@ -525,7 +525,7 @@ export const AdminDigest: React.FC = () => {
                         <button
                           onClick={() => handleLoadIssue(issue.id)}
                           disabled={loadingIssueId === issue.id}
-                          className="flex items-center gap-1 px-2 py-1 bg-slate-700/60 hover:bg-slate-700 text-slate-300 text-xs rounded transition-colors border border-white/10 disabled:opacity-50"
+                          className="flex items-center gap-1 px-2 py-1 bg-muted-light dark:bg-slate-700/60 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded transition-colors border border-slate-200 dark:border-white/10 disabled:opacity-50"
                         >
                           <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>
                             {loadingIssueId === issue.id ? 'hourglass_empty' : 'upload'}
@@ -563,10 +563,10 @@ export const AdminDigest: React.FC = () => {
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-bold">Preview</h2>
                     <div className="flex items-center gap-2">
-                      <button onClick={handleViewInNewTab} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition-colors border border-white/10">
+                      <button onClick={handleViewInNewTab} className="flex items-center gap-1.5 px-3 py-1.5 bg-muted-light dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium rounded-lg transition-colors border border-slate-200 dark:border-white/10">
                         <span className="material-symbols-outlined text-sm">open_in_new</span>View
                       </button>
-                      <button onClick={handleDownloadPdf} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition-colors border border-white/10">
+                      <button onClick={handleDownloadPdf} className="flex items-center gap-1.5 px-3 py-1.5 bg-muted-light dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium rounded-lg transition-colors border border-slate-200 dark:border-white/10">
                         <span className="material-symbols-outlined text-sm">picture_as_pdf</span>PDF
                       </button>
                       <button onClick={handleOpenInEmailClient} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-medium rounded-lg transition-colors border border-blue-500/20">
@@ -580,13 +580,13 @@ export const AdminDigest: React.FC = () => {
                       <input
                         type="text" value={editedSubject}
                         onChange={(e) => setEditedSubject(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm font-semibold focus:border-primary outline-none"
+                        className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm font-semibold focus:border-primary outline-none"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Email Preview</label>
                       <div
-                        className="bg-white rounded-lg p-4 text-slate-900 text-sm max-h-96 overflow-y-auto border border-white/10"
+                        className="bg-white rounded-lg p-4 text-slate-900 text-sm max-h-96 overflow-y-auto border border-slate-200 dark:border-white/10"
                         dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(preview.html_content) }}
                       />
                     </div>
@@ -601,7 +601,7 @@ export const AdminDigest: React.FC = () => {
                   <div className="flex items-center gap-3 flex-wrap">
                     <button
                       onClick={() => csvInputRef.current?.click()}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/60 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition-colors border border-white/10"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-muted-light dark:bg-slate-700/60 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-medium rounded-lg transition-colors border border-slate-200 dark:border-white/10"
                       title="Load email addresses from a CSV file"
                     >
                       <span className="material-symbols-outlined text-sm">upload_file</span>
@@ -666,7 +666,7 @@ export const AdminDigest: React.FC = () => {
                       value={recipientEmails}
                       onChange={(e) => setRecipientEmails(e.target.value)}
                       placeholder={"user1@example.com\nuser2@example.com\nteam@example.com"}
-                      className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none font-mono"
+                      className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none font-mono"
                       rows={5}
                     />
                     <div className="flex items-center justify-between mt-1">
@@ -705,7 +705,7 @@ export const AdminDigest: React.FC = () => {
                     </button>
                     <button
                       onClick={() => { setPreview(null); setEditedSubject(''); setRecipientEmails(''); }}
-                      className="px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 font-bold text-sm rounded-lg transition-colors border border-white/10"
+                      className="px-4 py-2 bg-muted-light dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-sm rounded-lg transition-colors border border-slate-200 dark:border-white/10"
                     >
                       Clear
                     </button>
@@ -749,7 +749,7 @@ export const AdminDigest: React.FC = () => {
                     value={annForm.title}
                     onChange={(e) => setAnnForm(f => ({ ...f, title: e.target.value }))}
                     placeholder="Announcement title"
-                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                    className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                   />
                 </div>
                 <div>
@@ -759,7 +759,7 @@ export const AdminDigest: React.FC = () => {
                     value={annForm.badge}
                     onChange={(e) => setAnnForm(f => ({ ...f, badge: e.target.value }))}
                     placeholder="e.g. New, Update"
-                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                    className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                   />
                 </div>
               </div>
@@ -769,7 +769,7 @@ export const AdminDigest: React.FC = () => {
                   value={annForm.content}
                   onChange={(e) => setAnnForm(f => ({ ...f, content: e.target.value }))}
                   placeholder="Announcement body text..."
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
                   rows={3}
                 />
               </div>
@@ -786,7 +786,7 @@ export const AdminDigest: React.FC = () => {
                 <div className="flex gap-2">
                   <button
                     onClick={() => setShowAnnForm(false)}
-                    className="px-3 py-1.5 bg-slate-700/60 hover:bg-slate-700 text-slate-300 text-xs rounded-lg border border-white/10 transition-colors"
+                    className="px-3 py-1.5 bg-muted-light dark:bg-slate-700/60 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-lg border border-slate-200 dark:border-white/10 transition-colors"
                   >
                     Cancel
                   </button>
@@ -823,7 +823,7 @@ export const AdminDigest: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleToggleAnn(ann)}
-                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors border ${ann.is_active ? 'bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20' : 'bg-slate-700/40 border-white/10 text-slate-400 hover:bg-slate-700'}`}
+                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors border ${ann.is_active ? 'bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20' : 'bg-slate-100 dark:bg-slate-700/40 border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
                       title={ann.is_active ? 'Deactivate' : 'Activate'}
                     >
                       <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>{ann.is_active ? 'visibility' : 'visibility_off'}</span>
@@ -831,7 +831,7 @@ export const AdminDigest: React.FC = () => {
                     </button>
                     <button
                       onClick={() => openEditAnn(ann)}
-                      className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-slate-700/40 hover:bg-slate-700 text-slate-300 border border-white/10 transition-colors"
+                      className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-muted-light dark:bg-slate-700/40 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 transition-colors"
                     >
                       <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>edit</span>
                       Edit

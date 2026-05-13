@@ -1168,7 +1168,7 @@ export const AdminVideos: React.FC = () => {
       {/* Course Creation Popup Modal */}
       {showCourseCreate && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-lg p-6 space-y-4">
+          <div className="bg-input-light dark:bg-input-dark rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-lg p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary">library_add</span>
@@ -1184,7 +1184,7 @@ export const AdminVideos: React.FC = () => {
                 value={courseForm.title}
                 onChange={(e) => setCourseForm(f => ({ ...f, title: e.target.value }))}
                 placeholder="e.g. Introduction to AI Agents"
-                className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
               />
             </div>
             <div>
@@ -1193,7 +1193,7 @@ export const AdminVideos: React.FC = () => {
                 value={courseForm.slug}
                 onChange={(e) => setCourseForm(f => ({ ...f, slug: e.target.value }))}
                 placeholder="auto-generated from title if empty"
-                className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
               />
             </div>
             <div>
@@ -1203,14 +1203,14 @@ export const AdminVideos: React.FC = () => {
                 onChange={(e) => setCourseForm(f => ({ ...f, description: e.target.value }))}
                 rows={3}
                 placeholder="Brief description of this course..."
-                className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
+                className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
               />
             </div>
             <div className="flex gap-3 pt-2">
               <button onClick={handleCreateCourse} className="px-6 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
                 Create Course
               </button>
-              <button onClick={() => setShowCourseCreate(false)} className="px-6 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+              <button onClick={() => setShowCourseCreate(false)} className="px-6 py-2 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
                 Cancel
               </button>
             </div>
@@ -1221,7 +1221,7 @@ export const AdminVideos: React.FC = () => {
       {/* ── Edit Course Modal ───────────────────────────── */}
       {editingCourse && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-lg p-6 space-y-4">
+          <div className="bg-input-light dark:bg-input-dark rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-lg p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary">edit</span>
@@ -1236,7 +1236,7 @@ export const AdminVideos: React.FC = () => {
               <input
                 value={courseEditForm.title}
                 onChange={(e) => setCourseEditForm(f => ({ ...f, title: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -1246,7 +1246,7 @@ export const AdminVideos: React.FC = () => {
                   value={courseEditForm.slug}
                   onChange={(e) => setCourseEditForm(f => ({ ...f, slug: e.target.value }))}
                   placeholder="auto from title if empty"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                  className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />
               </div>
               <div>
@@ -1255,7 +1255,7 @@ export const AdminVideos: React.FC = () => {
                   type="number"
                   value={courseEditForm.sort_order}
                   onChange={(e) => setCourseEditForm(f => ({ ...f, sort_order: parseInt(e.target.value) || 0 }))}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                  className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />
               </div>
             </div>
@@ -1265,14 +1265,14 @@ export const AdminVideos: React.FC = () => {
                 value={courseEditForm.description}
                 onChange={(e) => setCourseEditForm(f => ({ ...f, description: e.target.value }))}
                 rows={2}
-                className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
+                className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
               />
             </div>
             <div className="flex gap-3 pt-2">
               <button onClick={handleSaveCourse} className="px-6 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
                 Save Changes
               </button>
-              <button onClick={() => setEditingCourse(null)} className="px-6 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+              <button onClick={() => setEditingCourse(null)} className="px-6 py-2 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
                 Cancel
               </button>
             </div>
@@ -1283,7 +1283,7 @@ export const AdminVideos: React.FC = () => {
       {/* ── Delete Course Modal ─────────────────────────── */}
       {deletingCourse && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-lg p-6 space-y-4">
+          <div className="bg-input-light dark:bg-input-dark rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-lg p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <span className="material-symbols-outlined text-red-500">delete</span>
@@ -1320,7 +1320,7 @@ export const AdminVideos: React.FC = () => {
                       <select
                         value={courseDeleteMigrateTarget}
                         onChange={(e) => setCourseDeleteMigrateTarget(e.target.value)}
-                        className="mt-2 w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                        className="mt-2 w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                       >
                         <option value="">— Select target course —</option>
                         {courses.filter(c => c.id !== deletingCourse.id).map(c => (
@@ -1357,7 +1357,7 @@ export const AdminVideos: React.FC = () => {
                   ? courseDeleteMode === 'migrate' ? 'Migrate & Delete Course' : 'Delete Videos & Course'
                   : 'Delete Course'}
               </button>
-              <button onClick={() => setDeletingCourse(null)} className="px-6 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+              <button onClick={() => setDeletingCourse(null)} className="px-6 py-2 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
                 Cancel
               </button>
             </div>
@@ -1368,7 +1368,7 @@ export const AdminVideos: React.FC = () => {
       {/* Add Category Popup Modal */}
       {showAddCategory && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-sm p-6 space-y-4">
+          <div className="bg-input-light dark:bg-input-dark rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-sm p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary">category</span>
@@ -1385,20 +1385,20 @@ export const AdminVideos: React.FC = () => {
                 onChange={(e) => setNewCategoryName(e.target.value)}
                 placeholder="e.g. Fine-tuning"
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAddCategory(); }}
-                className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
               />
             </div>
             <div className="flex flex-wrap gap-1.5">
               <span className="text-[10px] text-slate-500 w-full mb-1">Existing categories:</span>
               {allCategories.map(c => (
-                <span key={c} className="px-2 py-0.5 text-[10px] rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700">{c}</span>
+                <span key={c} className="px-2 py-0.5 text-[10px] rounded-full bg-panel-light dark:bg-input-dark text-slate-500 border border-slate-200 dark:border-slate-700">{c}</span>
               ))}
             </div>
             <div className="flex gap-3 pt-2">
               <button onClick={handleAddCategory} className="px-6 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
                 Add Category
               </button>
-              <button onClick={() => setShowAddCategory(false)} className="px-6 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+              <button onClick={() => setShowAddCategory(false)} className="px-6 py-2 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
                 Cancel
               </button>
             </div>
@@ -1409,7 +1409,7 @@ export const AdminVideos: React.FC = () => {
       {/* Cleanup Modal */}
       {showCleanup && storageInfo && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-md p-6 space-y-4">
+          <div className="bg-input-light dark:bg-input-dark rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-md p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <span className="material-symbols-outlined text-amber-400">cleaning_services</span>
@@ -1424,7 +1424,7 @@ export const AdminVideos: React.FC = () => {
               <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Raw Files</p>
               {storageInfo.files.map((f) => (
                 <div key={f.name} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${
-                  f.is_intermediate ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/5'
+                  f.is_intermediate ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-panel-light dark:bg-input-dark border border-slate-200 dark:border-white/5'
                 }`}>
                   <span className={`material-symbols-outlined text-sm ${f.is_intermediate ? 'text-amber-400' : f.is_primary ? 'text-green-400' : 'text-slate-400'}`}>
                     {f.is_primary ? 'check_circle' : f.is_intermediate ? 'warning' : 'draft'}
@@ -1436,14 +1436,14 @@ export const AdminVideos: React.FC = () => {
                 </div>
               ))}
               {storageInfo.hls_size > 0 && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/5">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-panel-light dark:bg-input-dark border border-slate-200 dark:border-white/5">
                   <span className="material-symbols-outlined text-sm text-primary">video_library</span>
                   <span className="flex-1 text-slate-700 dark:text-slate-300">HLS streams/</span>
                   <span className="text-slate-500">{fmtBytes(storageInfo.hls_size)}</span>
                 </div>
               )}
               {storageInfo.thumb_size > 0 && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-white/5">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-panel-light dark:bg-input-dark border border-slate-200 dark:border-white/5">
                   <span className="material-symbols-outlined text-sm text-slate-500 dark:text-slate-400">image</span>
                   <span className="flex-1 text-slate-700 dark:text-slate-300">thumb.jpg</span>
                   <span className="text-slate-500">{fmtBytes(storageInfo.thumb_size)}</span>
@@ -1467,7 +1467,7 @@ export const AdminVideos: React.FC = () => {
                     <span className="material-symbols-outlined text-sm">cleaning_services</span>
                     {cleaningUp ? 'Cleaning...' : 'Delete Backups'}
                   </button>
-                  <button onClick={() => setShowCleanup(false)} className="px-5 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+                  <button onClick={() => setShowCleanup(false)} className="px-5 py-2 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
                     Cancel
                   </button>
                 </div>
@@ -1540,7 +1540,7 @@ export const AdminVideos: React.FC = () => {
             return (
               <div key={courseId}>
                 {/* Course header with expand/collapse + edit/delete */}
-                <div className="w-full flex items-center gap-1 px-2 py-1.5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-white/5">
+                <div className="w-full flex items-center gap-1 px-2 py-1.5 bg-input-light dark:bg-input-dark/50 border-b border-slate-200 dark:border-white/5">
                   <button
                     onClick={() => toggleCourseCollapse(courseId)}
                     className="flex items-center gap-1.5 flex-1 min-w-0 hover:bg-slate-100 dark:hover:bg-slate-800 rounded px-1 py-0.5 transition-colors"
@@ -1679,7 +1679,7 @@ export const AdminVideos: React.FC = () => {
                 <button onClick={handleCreate} className="px-6 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
                   Create Video
                 </button>
-                <button onClick={() => setShowCreate(false)} className="px-6 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+                <button onClick={() => setShowCreate(false)} className="px-6 py-2 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
                   Cancel
                 </button>
               </div>
@@ -1729,7 +1729,7 @@ export const AdminVideos: React.FC = () => {
                     chapters={chapters}
                     captionsUrl={transcriptData?.segments?.length ? `${API_BASE}/video/videos/${selected.id}/captions.vtt` : undefined}
                     onTimeUpdate={(t, d) => { setPlayerTime(t); setPlayerDuration(d); }}
-                    className="rounded-xl border border-white/10"
+                    className="rounded-xl border border-slate-200 dark:border-white/10"
                   />
                   <div className="flex items-center justify-between mt-2 px-1">
                     <span className="font-mono text-[10px] text-slate-500">0:00</span>
@@ -1821,7 +1821,7 @@ export const AdminVideos: React.FC = () => {
                 const hasFailed = STAGES.some(k => autoStatus.jobs?.[k]?.status === 'failed');
                 if (!hasAny) return null;
                 return (
-                  <div className="mt-3 p-3 rounded-lg bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-white/10">
+                  <div className="mt-3 p-3 rounded-lg bg-panel-light dark:bg-panel-dark/50 border border-slate-200 dark:border-white/10">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-xs text-primary">auto_awesome</span>
@@ -1904,7 +1904,7 @@ export const AdminVideos: React.FC = () => {
                     Cancel Job
                   </button>
                 ) : (
-                  <button onClick={handleTranscode} className="flex items-center gap-1.5 px-3 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-lg transition-colors border border-slate-300 dark:border-white/10">
+                  <button onClick={handleTranscode} className="flex items-center gap-1.5 px-3 py-2 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-lg transition-colors border border-slate-300 dark:border-white/10">
                     <span className="material-symbols-outlined text-sm">refresh</span>
                     Transcode
                   </button>
@@ -2007,7 +2007,7 @@ export const AdminVideos: React.FC = () => {
                 {/* Timeline with chapter markers */}
                 {selected.hls_path && playerDuration > 0 && (
                   <div className="px-1">
-                    <div className="relative w-full h-8 bg-slate-200 dark:bg-slate-800/50 rounded-lg border border-slate-300 dark:border-white/5 overflow-hidden">
+                    <div className="relative w-full h-8 bg-muted-light dark:bg-muted-dark/50 rounded-lg border border-slate-300 dark:border-white/5 overflow-hidden">
                       {/* Playhead position */}
                       {playerDuration > 0 && (
                         <div
@@ -2027,7 +2027,7 @@ export const AdminVideos: React.FC = () => {
                             title={`${ch.title} (${formatDuration(ch.start_time)})`}
                           >
                             <div className="w-1 h-full bg-amber-400/80 group-hover/marker:bg-amber-300" />
-                            <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 bg-slate-900 border border-white/20 rounded text-[9px] text-white whitespace-nowrap opacity-0 group-hover/marker:opacity-100 transition-opacity pointer-events-none z-20">
+                            <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 bg-card-light dark:bg-card-dark border border-slate-200 dark:border-white/20 rounded text-[9px] text-white whitespace-nowrap opacity-0 group-hover/marker:opacity-100 transition-opacity pointer-events-none z-20">
                               {ch.title}
                             </div>
                           </button>
@@ -2069,7 +2069,7 @@ export const AdminVideos: React.FC = () => {
                   </h4>
                   <div className="space-y-2">
                     {chapters.map((ch) => (
-                      <div key={ch.id} className="rounded-lg bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-white/5 group/ch">
+                      <div key={ch.id} className="rounded-lg bg-input-light dark:bg-input-dark/30 border border-slate-200 dark:border-white/5 group/ch">
                         {editingChapterId === ch.id ? (
                           <div className="flex items-end gap-3 p-3">
                             <div className="flex-1">
@@ -2077,7 +2077,7 @@ export const AdminVideos: React.FC = () => {
                               <input
                                 value={editChapterForm.title}
                                 onChange={(e) => setEditChapterForm((f) => ({ ...f, title: e.target.value }))}
-                                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                                className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                                 autoFocus
                               />
                             </div>
@@ -2087,7 +2087,7 @@ export const AdminVideos: React.FC = () => {
                                 type="number"
                                 value={editChapterForm.start_time}
                                 onChange={(e) => setEditChapterForm((f) => ({ ...f, start_time: parseInt(e.target.value) || 0 }))}
-                                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none"
+                                className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                               />
                             </div>
                             <button
@@ -2163,7 +2163,7 @@ export const AdminVideos: React.FC = () => {
               <div className="space-y-4">
                 {/* Auto-processing status */}
                 {autoStatus && (
-                  <div className="rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-white/5 divide-y divide-slate-200 dark:divide-white/5">
+                  <div className="rounded-lg bg-input-light dark:bg-input-dark/40 border border-slate-200 dark:border-white/5 divide-y divide-slate-200 dark:divide-white/5">
                     {/* Header row */}
                     <div className="flex items-center justify-between px-3 py-2">
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Auto-Processing</p>
@@ -2302,7 +2302,7 @@ export const AdminVideos: React.FC = () => {
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
                           Partial transcript — {transcriptProgress.segments.length} segments so far
                         </p>
-                        <div className="rounded-lg bg-slate-900 border border-white/10 max-h-48 overflow-y-auto divide-y divide-white/5">
+                        <div className="rounded-lg bg-input-light dark:bg-input-dark border border-slate-200 dark:border-white/10 max-h-48 overflow-y-auto divide-y divide-white/5">
                           {transcriptProgress.segments.map((seg: any, i: number) => (
                             <div key={i} className="flex gap-3 px-3 py-1.5 text-xs">
                               <span className="font-mono text-primary shrink-0 w-[90px]">
@@ -2343,7 +2343,7 @@ export const AdminVideos: React.FC = () => {
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                           Timestamped Transcript ({transcriptData.segments.length} segments)
                         </label>
-                        <div className="rounded-lg bg-slate-900 border border-white/10 max-h-96 overflow-y-auto divide-y divide-white/5">
+                        <div className="rounded-lg bg-input-light dark:bg-input-dark border border-slate-200 dark:border-white/10 max-h-96 overflow-y-auto divide-y divide-white/5">
                           {transcriptData.segments.map((seg: any, i: number) => (
                             <div key={i} className="flex gap-3 px-3 py-1.5 hover:bg-white/3 text-xs">
                               <span className="font-mono text-primary shrink-0 w-[90px]">
@@ -2363,7 +2363,7 @@ export const AdminVideos: React.FC = () => {
                           value={transcriptData.full_text || ''}
                           onChange={(e) => setTranscriptData((d: any) => ({ ...d, full_text: e.target.value }))}
                           rows={14}
-                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none resize-none font-mono leading-relaxed"
+                          className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none font-mono leading-relaxed"
                           placeholder="Transcript text..."
                         />
                       </div>
@@ -2398,7 +2398,7 @@ export const AdminVideos: React.FC = () => {
                   {['360p', '720p', '1080p'].map((q) => {
                     const setting = qualitySettings.find((s) => s.quality === q) || { quality: q, enabled: true, crf: 23 };
                     return (
-                      <div key={q} className="flex items-center gap-4 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-white/5">
+                      <div key={q} className="flex items-center gap-4 p-3 rounded-lg bg-input-light dark:bg-input-dark/30 border border-slate-200 dark:border-white/5">
                         <label className="flex items-center gap-2 cursor-pointer min-w-[80px]">
                           <input
                             type="checkbox"
@@ -2410,7 +2410,7 @@ export const AdminVideos: React.FC = () => {
                                 return [...prev, { quality: q, enabled: e.target.checked, crf: 23 }];
                               });
                             }}
-                            className="rounded bg-white dark:bg-slate-900 border-slate-300 dark:border-white/20 text-primary focus:ring-primary"
+                            className="rounded bg-input-light dark:bg-input-dark border-slate-300 dark:border-white/20 text-primary focus:ring-primary"
                           />
                           <span className="text-sm font-bold text-slate-900 dark:text-white">{q}</span>
                         </label>
@@ -2429,7 +2429,7 @@ export const AdminVideos: React.FC = () => {
                                 return [...prev, { quality: q, enabled: true, crf }];
                               });
                             }}
-                            className="w-16 px-2 py-1 rounded bg-slate-900 border border-white/10 text-white text-sm text-center focus:border-primary outline-none"
+                            className="w-16 px-2 py-1 rounded bg-input-light dark:bg-input-dark border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm text-center focus:border-primary outline-none"
                           />
                         </div>
                       </div>
@@ -2447,7 +2447,7 @@ export const AdminVideos: React.FC = () => {
                 <p className="text-sm text-slate-500 dark:text-slate-400">Seed notes are visible to all users as pre-populated key takeaways.</p>
                 <div className="space-y-2">
                   {seedNotes.map((n) => (
-                    <div key={n.id} className="flex items-start gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-white/5">
+                    <div key={n.id} className="flex items-start gap-3 p-3 rounded-lg bg-input-light dark:bg-input-dark/30 border border-slate-200 dark:border-white/5">
                       <span className="font-mono text-xs text-primary min-w-[50px] pt-0.5">{formatDuration(n.timestamp_s)}</span>
                       <p className="text-sm text-slate-900 dark:text-white flex-1">{n.content}</p>
                       <button onClick={() => handleDeleteSeedNote(n.id)} className="text-red-400/50 hover:text-red-400 transition-colors">
@@ -2484,7 +2484,7 @@ export const AdminVideos: React.FC = () => {
                     className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
                       trimMode === 'trim'
                         ? 'bg-primary text-white'
-                        : 'bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10'
+                        : 'bg-panel-light dark:bg-panel-dark/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10'
                     }`}
                   >
                     <span className="material-symbols-outlined text-sm">crop</span>
@@ -2495,7 +2495,7 @@ export const AdminVideos: React.FC = () => {
                     className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
                       trimMode === 'cut'
                         ? 'bg-red-500 text-white'
-                        : 'bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10'
+                        : 'bg-panel-light dark:bg-panel-dark/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10'
                     }`}
                   >
                     <span className="material-symbols-outlined text-sm">content_cut</span>
@@ -2506,7 +2506,7 @@ export const AdminVideos: React.FC = () => {
                     className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
                       trimMode === 'speed'
                         ? 'bg-orange-500 text-white'
-                        : 'bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10'
+                        : 'bg-panel-light dark:bg-panel-dark/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10'
                     }`}
                   >
                     <span className="material-symbols-outlined text-sm">fast_forward</span>
@@ -2532,7 +2532,7 @@ export const AdminVideos: React.FC = () => {
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                           speedFactor === f
                             ? 'bg-orange-500 text-white'
-                            : 'bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10'
+                            : 'bg-panel-light dark:bg-panel-dark/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10'
                         }`}
                       >
                         {f}x
@@ -2546,7 +2546,7 @@ export const AdminVideos: React.FC = () => {
                   <div className="px-1">
                     <div
                       ref={timelineRef}
-                      className={`relative w-full h-10 bg-slate-200 dark:bg-slate-800/50 rounded-lg border border-slate-300 dark:border-white/5 overflow-hidden ${dragging ? 'cursor-grabbing' : 'cursor-default'}`}
+                      className={`relative w-full h-10 bg-muted-light dark:bg-muted-dark/50 rounded-lg border border-slate-300 dark:border-white/5 overflow-hidden ${dragging ? 'cursor-grabbing' : 'cursor-default'}`}
                       onMouseMove={handleTimelineDrag}
                       onMouseUp={() => setDragging(null)}
                       onMouseLeave={() => setDragging(null)}
@@ -2634,7 +2634,7 @@ export const AdminVideos: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-white/5 text-center">
+                  <div className="p-4 rounded-xl bg-input-light dark:bg-input-dark/30 border border-slate-200 dark:border-white/5 text-center">
                     <p className="text-slate-500 text-sm">Upload a video first to use the trim tool.</p>
                   </div>
                 )}
@@ -2687,7 +2687,7 @@ export const AdminVideos: React.FC = () => {
                 </div>
 
                 {/* Summary & Execute */}
-                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-white/5">
+                <div className="flex items-center justify-between p-4 rounded-xl bg-input-light dark:bg-input-dark/30 border border-slate-200 dark:border-white/5">
                   <div className="text-sm text-slate-700 dark:text-slate-300">
                     {trimEnd > trimStart ? (
                       trimMode === 'trim' ? (
@@ -2756,7 +2756,7 @@ export const AdminVideos: React.FC = () => {
                     bannerConfig.status === 'ready' ? 'bg-green-500/10 border-green-500/30 text-green-400' :
                     bannerConfig.status === 'generating' ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' :
                     bannerConfig.status === 'error' ? 'bg-red-500/10 border-red-500/30 text-red-400' :
-                    'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-white/5 text-slate-500 dark:text-slate-400'
+                    'bg-input-light dark:bg-input-dark/30 border-slate-200 dark:border-white/5 text-slate-500 dark:text-slate-400'
                   }`}>
                     <span className="material-symbols-outlined text-base">
                       {bannerConfig.status === 'ready' ? 'check_circle' :
@@ -2785,7 +2785,7 @@ export const AdminVideos: React.FC = () => {
                       className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
                         bannerForm.variant === v.key
                           ? 'bg-primary text-white'
-                          : 'bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10'
+                          : 'bg-panel-light dark:bg-panel-dark/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10'
                       }`}
                     >
                       {v.key}: {v.label}
@@ -2798,7 +2798,7 @@ export const AdminVideos: React.FC = () => {
                   {/* Left: Live Preview */}
                   <div className="flex-1 min-w-0">
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Live Preview</label>
-                    <div className="rounded-xl overflow-hidden border border-white/10 bg-slate-900">
+                    <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 bg-card-light dark:bg-card-dark">
                       <iframe
                         srcDoc={bannerPreviewHtml}
                         className="w-full aspect-video border-0"
@@ -2815,37 +2815,37 @@ export const AdminVideos: React.FC = () => {
                       <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Company Logo</label>
                         <input value={bannerForm.company_logo} onChange={(e) => setBannerForm((f) => ({ ...f, company_logo: e.target.value }))}
-                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-input-light dark:bg-input-dark border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                       </div>
                       <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Series Tag</label>
                         <input value={bannerForm.series_tag} onChange={(e) => setBannerForm((f) => ({ ...f, series_tag: e.target.value }))}
-                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-input-light dark:bg-input-dark border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                       </div>
                       <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Brand Title</label>
                         <input value={bannerForm.brand_title} onChange={(e) => setBannerForm((f) => ({ ...f, brand_title: e.target.value }))}
                           placeholder="e.g. AI Ignite"
-                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-input-light dark:bg-input-dark border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                       </div>
                       <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Topic (Main Title)</label>
                         <input value={bannerForm.topic} onChange={(e) => setBannerForm((f) => ({ ...f, topic: e.target.value }))}
                           placeholder="e.g. Intro to AI Agents"
-                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-input-light dark:bg-input-dark border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                       </div>
                       <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Subtopic</label>
                         <input value={bannerForm.subtopic} onChange={(e) => setBannerForm((f) => ({ ...f, subtopic: e.target.value }))}
                           placeholder="e.g. Environment Setup & First Run"
-                          className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-input-light dark:bg-input-dark border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                       </div>
                       <div className="flex gap-2">
                         <div className="flex-1 min-w-0">
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Episode</label>
                           <div className="flex gap-1">
                             <input value={bannerForm.episode} onChange={(e) => setBannerForm((f) => ({ ...f, episode: e.target.value }))}
-                              className="min-w-0 flex-1 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                              className="min-w-0 flex-1 px-2.5 py-1.5 rounded-lg bg-input-light dark:bg-input-dark border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                             <button
                               onClick={() => {
                                 if (!selected?.course_id) return;
@@ -2865,7 +2865,7 @@ export const AdminVideos: React.FC = () => {
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Duration</label>
                           <div className="flex gap-1">
                             <input value={bannerForm.duration} onChange={(e) => setBannerForm((f) => ({ ...f, duration: e.target.value }))}
-                              className="min-w-0 flex-1 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                              className="min-w-0 flex-1 px-2.5 py-1.5 rounded-lg bg-input-light dark:bg-input-dark border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                             <button
                               onClick={() => {
                                 const dur = playerDuration > 0 ? playerDuration : (selected?.duration_s || 0);
@@ -2896,13 +2896,13 @@ export const AdminVideos: React.FC = () => {
                         <div className="flex-1">
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Presenter</label>
                           <input value={bannerForm.presenter} onChange={(e) => setBannerForm((f) => ({ ...f, presenter: e.target.value, presenter_initial: e.target.value.charAt(0).toUpperCase() || '' }))}
-                            className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none" />
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-input-light dark:bg-input-dark border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                         </div>
                         <div className="w-16 shrink-0">
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Initial</label>
                           <input value={bannerForm.presenter_initial} onChange={(e) => setBannerForm((f) => ({ ...f, presenter_initial: e.target.value }))}
                             maxLength={2}
-                            className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-white text-sm focus:border-primary outline-none text-center" />
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-input-light dark:bg-input-dark border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none text-center" />
                         </div>
                       </div>
                     </div>
@@ -2997,7 +2997,7 @@ export const AdminVideos: React.FC = () => {
                         ? `${(att.file_size / 1048576).toFixed(1)} MB`
                         : `${(att.file_size / 1024).toFixed(0)} KB`;
                       return (
-                        <div key={att.id} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/30 rounded-lg border border-slate-200 dark:border-white/5 group">
+                        <div key={att.id} className="flex items-center gap-3 p-3 bg-input-light dark:bg-input-dark/30 rounded-lg border border-slate-200 dark:border-white/5 group">
                           <span className="material-symbols-outlined text-xl text-primary">{icon}</span>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-slate-900 dark:text-white truncate">{att.display_name || att.filename}</p>
@@ -3064,7 +3064,7 @@ export const AdminVideos: React.FC = () => {
 
                 {/* Preview & Send */}
                 {emailPreview && (
-                  <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-800/30 rounded-lg border border-slate-200 dark:border-white/5">
+                  <div className="space-y-3 p-4 bg-input-light dark:bg-input-dark/30 rounded-lg border border-slate-200 dark:border-white/5">
                     {/* Action buttons toolbar */}
                     <div className="flex items-center gap-2 mb-2">
                       <button
@@ -3136,7 +3136,7 @@ export const AdminVideos: React.FC = () => {
                     <div>
                       <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Preview</label>
                       <div
-                        className="bg-white dark:bg-slate-900 rounded-lg p-4 text-slate-900 dark:text-white text-sm max-h-64 overflow-y-auto border border-white/10"
+                        className="bg-input-light dark:bg-input-dark rounded-lg p-4 text-slate-900 dark:text-white text-sm max-h-64 overflow-y-auto border border-slate-200 dark:border-white/10"
                         dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(emailPreview.html_content) }}
                       />
                     </div>
@@ -3190,7 +3190,7 @@ export const AdminVideos: React.FC = () => {
 
                       {/* Saved addresses quick-select */}
                       {emailShowSaved && emailSavedAddresses.length > 0 && (
-                        <div className="p-3 bg-slate-900/60 rounded-lg border border-white/5 space-y-1.5 max-h-40 overflow-y-auto">
+                        <div className="p-3 bg-panel-light dark:bg-panel-dark border border-slate-100 dark:border-white/5 space-y-1.5 max-h-40 overflow-y-auto">
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Saved</span>
                             <button

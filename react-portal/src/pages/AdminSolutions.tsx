@@ -394,7 +394,7 @@ export const AdminSolutions: React.FC = () => {
                   <tr key={card.id} className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-lg bg-slate-800 border border-white/10 flex items-center justify-center ${card.icon_color}`}>
+                        <div className={`w-8 h-8 rounded-lg bg-panel-light dark:bg-panel-dark border border-slate-200 dark:border-white/10 flex items-center justify-center ${card.icon_color}`}>
                           <span className="material-symbols-outlined text-base">{card.icon}</span>
                         </div>
                         <div>
@@ -533,7 +533,7 @@ export const AdminSolutions: React.FC = () => {
               <select
                 value={landingConfig.video_id || ''}
                 onChange={(e) => setLandingConfig(c => ({ ...c, video_id: e.target.value || null }))}
-                className="w-full px-4 py-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white focus:border-primary outline-none"
+                className="w-full px-4 py-3 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white focus:border-primary outline-none"
               >
                 <option value="">— Placeholder IDE Animation —</option>
                 {videos.map(v => <option key={v.id} value={v.id}>{v.title}</option>)}
@@ -557,7 +557,7 @@ export const AdminSolutions: React.FC = () => {
                       nh[i].title = e.target.value;
                       return { ...c, highlights: nh };
                     })}
-                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+                    className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                   />
                   <textarea
                     value={h.description}
@@ -567,7 +567,7 @@ export const AdminSolutions: React.FC = () => {
                       nh[i].description = e.target.value;
                       return { ...c, highlights: nh };
                     })}
-                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
+                    className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
                     rows={2}
                   />
                 </div>
@@ -601,19 +601,19 @@ export const AdminSolutions: React.FC = () => {
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Title</label>
                 <input value={cardForm.title} onChange={(e) => setCardForm((f) => ({ ...f, title: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Subtitle</label>
                   <input value={cardForm.subtitle} onChange={(e) => setCardForm((f) => ({ ...f, subtitle: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                    className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Category</label>
                   <select value={cardForm.category} onChange={(e) => setCardForm((f) => ({ ...f, category: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none">
+                    className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none">
                     <option value="SW">SW — Software</option>
                     <option value="HW">HW — Hardware</option>
                     <option value="none">Other</option>
@@ -622,14 +622,14 @@ export const AdminSolutions: React.FC = () => {
                 <div>
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Sort Order</label>
                   <input type="number" value={cardForm.sort_order} onChange={(e) => setCardForm((f) => ({ ...f, sort_order: parseInt(e.target.value) || 0 }))}
-                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                    className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Description</label>
                 <textarea value={cardForm.description} onChange={(e) => setCardForm((f) => ({ ...f, description: e.target.value }))}
-                  rows={2} className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none" />
+                  rows={2} className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none" />
               </div>
 
               <div>
@@ -645,7 +645,7 @@ export const AdminSolutions: React.FC = () => {
                   </button>
                 </div>
                 <textarea value={cardForm.long_description} onChange={(e) => setCardForm((f) => ({ ...f, long_description: e.target.value }))}
-                  rows={8} className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none font-mono" />
+                  rows={8} className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none font-mono" />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -657,7 +657,7 @@ export const AdminSolutions: React.FC = () => {
                         key={icon}
                         onClick={() => setCardForm((f) => ({ ...f, icon }))}
                         className={`w-8 h-8 rounded flex items-center justify-center transition-all ${
-                          cardForm.icon === icon ? 'bg-primary/20 border border-primary/50 ring-1 ring-primary/30' : 'bg-slate-800 border border-white/5 hover:border-white/20'
+                          cardForm.icon === icon ? 'bg-primary/20 border border-primary/50 ring-1 ring-primary/30' : 'bg-panel-light dark:bg-panel-dark border border-slate-100 dark:border-white/5 hover:border-primary/30 dark:hover:border-white/20'
                         }`}
                       >
                         <span className={`material-symbols-outlined text-sm ${cardForm.icon === icon ? 'text-primary' : 'text-slate-400'}`}>{icon}</span>
@@ -668,7 +668,7 @@ export const AdminSolutions: React.FC = () => {
                 <div>
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Icon Color</label>
                   <select value={cardForm.icon_color} onChange={(e) => setCardForm((f) => ({ ...f, icon_color: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none">
+                    className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none">
                     {COLOR_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                   </select>
                 </div>
@@ -679,13 +679,13 @@ export const AdminSolutions: React.FC = () => {
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Badge</label>
                   <input value={cardForm.badge} onChange={(e) => setCardForm((f) => ({ ...f, badge: e.target.value }))}
                     placeholder="e.g. New, Beta"
-                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                    className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Link URL <span className="text-slate-600 normal-case font-normal">(detail page)</span></label>
                   <input value={cardForm.link_url} onChange={(e) => setCardForm((f) => ({ ...f, link_url: e.target.value }))}
                     placeholder="/marketplace"
-                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                    className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                 </div>
               </div>
 
@@ -695,14 +695,14 @@ export const AdminSolutions: React.FC = () => {
                 </label>
                 <input value={cardForm.launch_url} onChange={(e) => setCardForm((f) => ({ ...f, launch_url: e.target.value }))}
                   placeholder="https://tool.company.internal"
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <div className="flex gap-3 pt-4 border-t border-slate-200 dark:border-white/10">
                 <button onClick={handleSaveCard} className="flex-1 px-6 py-2.5 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
                   {creatingCard ? 'Create Card' : 'Save Changes'}
                 </button>
-                <button onClick={closeCardForm} className="px-6 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+                <button onClick={closeCardForm} className="px-6 py-2.5 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
                   Cancel
                 </button>
               </div>
@@ -729,26 +729,26 @@ export const AdminSolutions: React.FC = () => {
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Title</label>
                 <input value={newsForm.title} onChange={(e) => setNewsForm((f) => ({ ...f, title: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Summary</label>
                 <textarea value={newsForm.summary} onChange={(e) => setNewsForm((f) => ({ ...f, summary: e.target.value }))}
-                  rows={2} className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none" />
+                  rows={2} className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none" />
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Content (Markdown)</label>
                 <textarea value={newsForm.content} onChange={(e) => setNewsForm((f) => ({ ...f, content: e.target.value }))}
-                  rows={8} className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none font-mono" />
+                  rows={8} className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none font-mono" />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Source</label>
                   <select value={newsForm.source} onChange={(e) => setNewsForm((f) => ({ ...f, source: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none">
+                    className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none">
                     <option value="manual">Manual</option>
                     <option value="rss">RSS</option>
                     <option value="release">Release</option>
@@ -759,7 +759,7 @@ export const AdminSolutions: React.FC = () => {
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Badge</label>
                   <input value={newsForm.badge} onChange={(e) => setNewsForm((f) => ({ ...f, badge: e.target.value }))}
                     placeholder="e.g. New Release"
-                    className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                    className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                 </div>
               </div>
 
@@ -767,14 +767,14 @@ export const AdminSolutions: React.FC = () => {
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Source URL</label>
                 <input value={newsForm.source_url} onChange={(e) => setNewsForm((f) => ({ ...f, source_url: e.target.value }))}
                   placeholder="https://..."
-                  className="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <div className="flex gap-3 pt-4 border-t border-slate-200 dark:border-white/10">
                 <button onClick={handleSaveNews} className="flex-1 px-6 py-2.5 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
                   {creatingNews ? 'Create News' : 'Save Changes'}
                 </button>
-                <button onClick={closeNewsForm} className="px-6 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+                <button onClick={closeNewsForm} className="px-6 py-2.5 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
                   Cancel
                 </button>
               </div>

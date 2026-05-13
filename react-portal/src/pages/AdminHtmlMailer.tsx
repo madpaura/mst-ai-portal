@@ -342,7 +342,7 @@ export const AdminHtmlMailer: React.FC = () => {
               value={subject}
               onChange={e => setSubject(e.target.value)}
               placeholder="Email subject line"
-              className="w-full mt-2 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full mt-2 px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
           </div>
 
@@ -374,7 +374,7 @@ export const AdminHtmlMailer: React.FC = () => {
             </div>
 
             {showSaved && savedEmails.length > 0 && (
-              <div className="mb-3 p-3 bg-slate-100 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+              <div className="mb-3 p-3 bg-panel-light dark:bg-panel-dark/50 rounded-lg border border-slate-200 dark:border-slate-700">
                 <p className="text-xs text-slate-500 mb-2">Click to toggle into To or BCC field:</p>
                 <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto">
                   {savedEmails.map(email => {
@@ -400,7 +400,7 @@ export const AdminHtmlMailer: React.FC = () => {
                         >
                           BCC
                         </button>
-                        <span className="text-xs px-2 py-0.5 rounded-r border-y border-r border-slate-600 bg-slate-800 text-slate-300 max-w-[160px] truncate">{email}</span>
+                        <span className="text-xs px-2 py-0.5 rounded-r border-y border-r border-slate-200 dark:border-slate-600 bg-panel-light dark:bg-panel-dark text-slate-600 dark:text-slate-300 max-w-[160px] truncate">{email}</span>
                         <button
                           onClick={() => removeSavedEmail(email)}
                           className="ml-0.5 text-slate-500 hover:text-red-400 transition-colors"
@@ -426,7 +426,7 @@ export const AdminHtmlMailer: React.FC = () => {
                   onFocus={() => setActiveEmailField('to')}
                   placeholder="one@example.com&#10;two@example.com"
                   rows={3}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none font-mono"
+                  className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none font-mono"
                 />
               </div>
               <div>
@@ -439,7 +439,7 @@ export const AdminHtmlMailer: React.FC = () => {
                   onFocus={() => setActiveEmailField('bcc')}
                   placeholder="one@example.com&#10;two@example.com"
                   rows={3}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none font-mono"
+                  className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none font-mono"
                 />
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   {parseEmails(bccEmails).length + parseEmails(toEmails).length} total recipient(s)
