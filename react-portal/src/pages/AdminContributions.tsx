@@ -74,10 +74,27 @@ export const AdminContributions: React.FC = () => {
   const [newUser, setNewUser] = useState<NewUserForm>(BLANK_USER);
   const [creatingUser, setCreatingUser] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  // Guide video config
+  const [guideSlug, setGuideSlug] = useState('');
+  const [guideSlugInput, setGuideSlugInput] = useState('');
+  const [savingGuide, setSavingGuide] = useState(false);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
+  };
+
+  const handleSaveGuideSlug = async () => {
+    setSavingGuide(true);
+    try {
+      await api.put('/settings/admin/contribute_guide_video_slug', { value: guideSlugInput.trim() });
+      setGuideSlug(guideSlugInput.trim());
+      showMsg('success', 'Guide video slug saved');
+    } catch (err: any) {
+      showMsg('error', err.message);
+    } finally {
+      setSavingGuide(false);
+    }
   };
 
   const fetchUsers = useCallback(async () => {
@@ -177,7 +194,12 @@ export const AdminContributions: React.FC = () => {
     } catch { /* ignore */ }
   }, []);
 
-  useEffect(() => { fetchRequests(); fetchUsers(); fetchGuestInterests(); }, [fetchRequests, fetchUsers, fetchGuestInterests]);
+  useEffect(() => {
+    fetchRequests(); fetchUsers(); fetchGuestInterests();
+    api.get<string>('/settings/contribute_guide_video_slug')
+      .then(v => { if (v) { setGuideSlug(v as any); setGuideSlugInput(v as any); } })
+      .catch(() => {});
+  }, [fetchRequests, fetchUsers, fetchGuestInterests]);
 
   const handleGuestAction = async (id: number, status: 'contacted' | 'dismissed') => {
     setGuestProcessing(id);
@@ -239,6 +261,47 @@ export const AdminContributions: React.FC = () => {
           <span className="material-symbols-outlined text-sm">person_add</span>
           Add User
         </button>
+      </div>
+
+      {/* Guide Video Config */}
+      <div className="mb-6 p-5 rounded-xl border border-slate-200 dark:border-white/10 bg-card-light dark:bg-card-dark">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="material-symbols-outlined text-primary text-base">smart_display</span>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white">Contribute Guide Video</h2>
+          <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">— shown to users on the Contribute page</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <input
+            value={guideSlugInput}
+            onChange={e => setGuideSlugInput(e.target.value)}
+            placeholder="video-slug-here"
+            className="flex-1 px-3 py-2 text-sm rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white placeholder-slate-400 focus:border-primary outline-none font-mono"
+          />
+          <button
+            onClick={handleSaveGuideSlug}
+            disabled={savingGuide}
+            className="flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-sm font-bold rounded-lg transition-colors disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-sm">save</span>
+            {savingGuide ? 'Saving…' : 'Save'}
+          </button>
+          {guideSlug && (
+            <a
+              href={`/ignite/${guideSlug}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 px-3 py-2 text-xs text-slate-500 hover:text-primary border border-slate-200 dark:border-white/10 rounded-lg transition-colors"
+            >
+              <span className="material-symbols-outlined text-sm">open_in_new</span>
+              Preview
+            </a>
+          )}
+        </div>
+        {guideSlug && (
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+            Currently set to: <span className="font-mono text-primary">{guideSlug}</span>
+          </p>
+        )}
       </div>
 
       {/* Create User Form */}

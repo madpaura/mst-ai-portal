@@ -19,14 +19,18 @@ export const ContributeRequest: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [existingRequest, setExistingRequest] = useState<ContributeRequestData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [guideSlug, setGuideSlug] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
     if (!user) { navigate('/ignite'); return; }
-    api.get<ContributeRequestData | null>('/auth/contribute-request')
-      .then(setExistingRequest)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.get<ContributeRequestData | null>('/auth/contribute-request').catch(() => null),
+      api.get<string>('/settings/contribute_guide_video_slug').catch(() => null),
+    ]).then(([req, slug]) => {
+      setExistingRequest(req);
+      if (slug && typeof slug === 'string') setGuideSlug(slug);
+    }).finally(() => setLoading(false));
   }, [authLoading, user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -80,6 +84,23 @@ export const ContributeRequest: React.FC = () => {
             <p className="text-sm text-slate-500 mt-1">Apply to become a content creator on the portal</p>
           </div>
         </div>
+
+        {/* Guide video banner */}
+        {guideSlug && (
+          <Link
+            to={`/ignite/${guideSlug}`}
+            className="flex items-center gap-4 p-4 mb-8 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors group"
+          >
+            <div className="w-12 h-12 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <span className="material-symbols-outlined text-primary text-2xl">smart_display</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">Watch: How to Contribute</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Learn how to create videos, articles, and marketplace items on the portal</p>
+            </div>
+            <span className="material-symbols-outlined text-primary/50 group-hover:text-primary transition-colors shrink-0">arrow_forward</span>
+          </Link>
+        )}
 
         {/* User level info */}
         <div className="grid grid-cols-3 gap-3 mb-8">
