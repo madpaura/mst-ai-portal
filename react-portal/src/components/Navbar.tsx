@@ -20,8 +20,8 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
 
   const handleAdmin = () => navigate('/admin/videos');
 
-  const isActive = (path: string) => location.pathname === path;
-  const isDiscoverActive = location.pathname.startsWith('/articles') || location.pathname.startsWith('/memes') || location.pathname.startsWith('/news');
+  const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
+  const isDiscoverActive = location.pathname.startsWith('/memes') || location.pathname.startsWith('/news');
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -67,6 +67,12 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
             >
               Marketplace
             </Link>
+            <Link
+              className={`text-sm font-medium transition-colors ${isActive('/articles') ? 'text-primary' : 'text-slate-500 dark:text-slate-400 hover:text-primary'}`}
+              to="/articles"
+            >
+              Articles
+            </Link>
             <div className="relative" ref={discoverRef}>
               <button
                 onClick={() => setDiscoverOpen((o) => !o)}
@@ -77,9 +83,6 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
               </button>
               {discoverOpen && (
                 <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-40 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg py-1 z-50">
-                  <Link to="/articles" onClick={() => setDiscoverOpen(false)} className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:text-primary hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                    <span className="material-symbols-outlined text-[16px]">article</span>Articles
-                  </Link>
                   <Link to="/memes" onClick={() => setDiscoverOpen(false)} className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:text-primary hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
                     <span className="material-symbols-outlined text-[16px]">collections</span>Memes
                   </Link>
