@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import DOMPurify from 'dompurify';
 import { api } from '../api/client';
 import { HlsPlayer, type HlsPlayerHandle } from '../components/HlsPlayer';
+import { useAuth } from '../api/auth';
+import { PublishRequests } from '../components/PublishRequests';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -91,6 +93,9 @@ type Tab = 'metadata' | 'chapters' | 'howto' | 'transcript' | 'quality' | 'seed-
 const DEFAULT_CATEGORIES = ['Code-mate', 'RAG', 'Agents', 'Deep Dive'];
 
 export const AdminVideos: React.FC = () => {
+  const { user, isAdmin } = useAuth();
+  const isContent = !isAdmin && user?.role === 'content';
+  const [showPublishRequests, setShowPublishRequests] = useState(false);
   const [videos, setVideos] = useState<Video[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [selected, setSelected] = useState<Video | null>(null);
@@ -656,6 +661,20 @@ export const AdminVideos: React.FC = () => {
       await api.post(`/admin/videos/${selected.id}/publish`);
       await fetchVideos();
       showMsg('success', 'Video published');
+    } catch (err: any) {
+      showMsg('error', err.message);
+    }
+  };
+
+  const handleRequestPublish = async () => {
+    if (!selected) return;
+    try {
+      await api.post('/admin/publish-requests', {
+        target_type: 'video',
+        target_id: selected.id,
+        target_title: selected.title,
+      });
+      showMsg('success', 'Publish request submitted — reviewers have been notified');
     } catch (err: any) {
       showMsg('error', err.message);
     }
@@ -1487,6 +1506,15 @@ export const AdminVideos: React.FC = () => {
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-slate-900 dark:text-white">Videos</h2>
             <div className="flex items-center gap-1">
+              {isAdmin && (
+                <button
+                  onClick={() => setShowPublishRequests(true)}
+                  className="flex items-center gap-1 text-xs text-amber-500 hover:text-amber-400 transition-colors"
+                  title="Publish requests"
+                >
+                  <span className="material-symbols-outlined text-sm">pending_actions</span>
+                </button>
+              )}
               {(() => {
                 const ids = groupedVideos.map(g => g.course?.id || '__uncategorized__');
                 const allCollapsed = ids.length > 0 && ids.every(id => collapsedCourses.has(id));
@@ -1887,7 +1915,15 @@ export const AdminVideos: React.FC = () => {
                 <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{selected.slug}</p>
               </div>
               <div className="flex items-center gap-2">
-                {selected.is_published ? (
+                {isContent ? (
+                  !selected.is_published && selected.status === 'ready' && (
+                    <button onClick={handleRequestPublish} className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 dark:bg-primary/10 hover:bg-blue-100 dark:hover:bg-primary/20 text-blue-700 dark:text-primary text-xs rounded-lg transition-colors border border-blue-200 dark:border-primary/20">
+                      <span className="material-symbols-outlined text-sm">upload</span>
+                      Request Publish
+                    </button>
+                  )
+                ) : (
+                  selected.is_published ? (
                   <button onClick={handleUnpublish} className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 text-xs rounded-lg transition-colors border border-amber-200 dark:border-amber-500/20">
                     <span className="material-symbols-outlined text-sm">visibility_off</span>
                     Unpublish
@@ -1897,7 +1933,7 @@ export const AdminVideos: React.FC = () => {
                     <span className="material-symbols-outlined text-sm">publish</span>
                     Publish
                   </button>
-                )}
+                ))}
                 {selected.status === 'processing' ? (
                   <button onClick={handleCancelJob} className="flex items-center gap-1.5 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs rounded-lg transition-colors border border-red-500/20">
                     <span className="material-symbols-outlined text-sm">cancel</span>
@@ -3324,6 +3360,14 @@ export const AdminVideos: React.FC = () => {
           </div>
         )}
       </div>
+
+      {showPublishRequests && (
+        <PublishRequests
+          targetType="video"
+          onClose={() => setShowPublishRequests(false)}
+          onApproved={fetchVideos}
+        />
+      )}
     </div>
   );
 };

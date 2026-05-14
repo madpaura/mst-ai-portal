@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../api/auth';
 import { AdminArtifacts, GithubConfigPanel } from './AdminArtifacts';
+import { PublishRequests } from '../components/PublishRequests';
 
 // ── Component catalog types ────────────────────────────────────────────────────
 
@@ -124,6 +125,7 @@ export const AdminMarketplace: React.FC = () => {
   const isContent = !isAdmin && !!user;
 
   const [activeTab, setActiveTab] = useState<Tab>(isContent ? 'contribute' : 'overview');
+  const [showPublishRequests, setShowPublishRequests] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // ── Overview ──
@@ -652,6 +654,14 @@ export const AdminMarketplace: React.FC = () => {
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{components.length} component(s) in catalog</p>
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowPublishRequests(true)}
+                  className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/20 text-sm font-medium rounded-lg transition-colors"
+                  title="Publish requests"
+                >
+                  <span className="material-symbols-outlined text-sm">pending_actions</span>
+                  Requests
+                </button>
                 {!deleteAllConfirm ? (
                   <button
                     onClick={() => setDeleteAllConfirm(true)}
@@ -765,7 +775,10 @@ export const AdminMarketplace: React.FC = () => {
 
         {/* ── Contribute ── */}
         {activeTab === 'contribute' && (
-          <AdminArtifacts embedded={true} />
+          <div>
+            <AdminArtifacts embedded={true} />
+            {isContent && <MarketplacePublishRequest onSuccess={msg => setMessage({ type: 'success', text: msg })} />}
+          </div>
         )}
 
         {/* ── Sync Sources ── */}
@@ -1175,6 +1188,79 @@ export const AdminMarketplace: React.FC = () => {
           </div>
         </div>
       )}
+
+      {showPublishRequests && (
+        <PublishRequests
+          targetType="marketplace"
+          onClose={() => setShowPublishRequests(false)}
+        />
+      )}
+    </div>
+  );
+};
+
+const MarketplacePublishRequest: React.FC<{ onSuccess: (msg: string) => void }> = ({ onSuccess }) => {
+  const [title, setTitle] = useState('');
+  const [note, setNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const handleSubmit = async () => {
+    if (!title.trim()) { setErr('Component name is required'); return; }
+    setSubmitting(true);
+    setErr(null);
+    try {
+      await api.post('/admin/publish-requests', {
+        target_type: 'marketplace',
+        target_id: '00000000-0000-0000-0000-000000000000',
+        target_title: title.trim(),
+        note: note.trim() || undefined,
+      });
+      onSuccess('Publish request submitted — reviewers have been notified');
+      setTitle('');
+      setNote('');
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="p-6 lg:p-8 max-w-2xl mx-auto">
+      <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/10 p-6">
+        <h2 className="text-base font-bold text-slate-900 dark:text-white mb-1">Request Marketplace Publish</h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Ask an admin to publish your component to the marketplace catalog.</p>
+        {err && <p className="text-xs text-red-400 mb-3">{err}</p>}
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Component Name *</label>
+            <input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="My Awesome Agent"
+              className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Note (optional)</label>
+            <input
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="Any details for the reviewer…"
+              className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+            />
+          </div>
+          <button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-sm font-bold rounded-lg transition-colors disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-sm">upload</span>
+            {submitting ? 'Submitting…' : 'Request Publish'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

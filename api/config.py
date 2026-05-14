@@ -75,6 +75,7 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM_EMAIL: str = "noreply@mst-ai-portal.local"
     SMTP_FROM_NAME: str = "MST AI Portal"
+    PORTAL_BASE_URL: str = "http://localhost:3000"
 
     # CORS — CORS_ORIGINS defaults to wildcard (safe with Bearer tokens, no cookies)
     # Set CORS_ALLOW_ORIGIN_REGEX for fine-grained control (e.g. restrict to your domain)

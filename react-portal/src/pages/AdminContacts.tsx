@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
+import { PublishAuthority } from '../components/PublishAuthority';
 
 interface ContactEntry {
   id: string;
@@ -214,6 +215,8 @@ export const AdminContacts: React.FC = () => {
           </div>
         )}
 
+        <PublishAuthority />
+
         {/* Contact list */}
         {loading ? (
           <div className="text-center py-16 text-slate-400">Loading…</div>
@@ -224,7 +227,7 @@ export const AdminContacts: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-6">
-            {divisions.map(division => (
+          {divisions.map(division => (
               <div key={division} className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
                 <div className="px-5 py-3 bg-panel-light dark:bg-panel-dark/60 border-b border-slate-200 dark:border-white/10">
                   <span className="text-xs font-bold uppercase tracking-widest text-slate-400">{division}</span>
