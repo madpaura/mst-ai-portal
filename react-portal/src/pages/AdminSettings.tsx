@@ -583,11 +583,11 @@ export const AdminSettings: React.FC = () => {
           </div>
         </div>
         {cacheStats && (
-          <div className="mt-4 pt-4 border-t border-white/5">
+          <div className="mt-4 pt-4 border-t border-slate-200 dark:border-white/5">
             {cacheStats.enabled === false ? (
               <p className="text-sm text-slate-500">Redis is disabled. Set <code className="text-xs bg-panel-light dark:bg-panel-dark px-1 rounded">REDIS_ENABLED=true</code> to enable caching.</p>
             ) : !cacheStats.connected ? (
-              <p className="text-sm text-amber-400">Redis enabled but not reachable. Check <code className="text-xs bg-panel-light dark:bg-panel-dark px-1 rounded">REDIS_URL</code> and ensure the redis container is running.</p>
+              <p className="text-sm text-amber-500">{cacheStats.error ? `Error: ${cacheStats.error}` : 'Redis enabled but not reachable. Check REDIS_URL and ensure the redis container is running.'}</p>
             ) : (
               <div className="space-y-3">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -597,9 +597,9 @@ export const AdminSettings: React.FC = () => {
                     { label: 'Cache Hits', value: (cacheStats.keyspace_hits ?? 0).toLocaleString() },
                     { label: 'Cache Misses', value: (cacheStats.keyspace_misses ?? 0).toLocaleString() },
                   ].map(({ label, value }) => (
-                    <div key={label} className="bg-slate-100/50 dark:bg-slate-900/50 rounded-lg p-3">
+                    <div key={label} className="bg-panel-light dark:bg-slate-900/50 rounded-lg p-3">
                       <p className="text-xs text-slate-500 dark:text-slate-400">{label}</p>
-                      <p className="text-sm font-bold text-white mt-0.5">{value ?? '—'}</p>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">{value ?? '—'}</p>
                     </div>
                   ))}
                 </div>
@@ -608,10 +608,10 @@ export const AdminSettings: React.FC = () => {
                     <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Namespace Versions</p>
                     <div className="flex flex-wrap gap-2">
                       {Object.entries(cacheStats.namespace_versions as Record<string, number>).map(([ns, ver]) => (
-                        <div key={ns} className="flex items-center gap-1.5 bg-slate-100/50 dark:bg-slate-900/50 rounded-lg px-3 py-1.5">
-                          <span className="text-xs text-slate-500 dark:text-slate-400">{ns}</span>
+                        <div key={ns} className="flex items-center gap-1.5 bg-panel-light dark:bg-slate-900/50 rounded-lg px-3 py-1.5 border border-slate-200 dark:border-white/5">
+                          <span className="text-xs text-slate-600 dark:text-slate-400">{ns}</span>
                           <span className="text-xs font-mono text-primary">v{ver}</span>
-                          <button onClick={() => handleCacheFlush(ns)} disabled={cacheFlushing} className="ml-1 text-slate-500 hover:text-red-400 transition-colors" title={`Flush ${ns}`}>
+                          <button onClick={() => handleCacheFlush(ns)} disabled={cacheFlushing} className="ml-1 text-slate-400 hover:text-red-400 transition-colors" title={`Flush ${ns}`}>
                             <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>close</span>
                           </button>
                         </div>
