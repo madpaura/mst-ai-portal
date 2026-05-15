@@ -194,7 +194,7 @@ export const AdminMemes: React.FC = () => {
       if (!imageFiles.length) return;
 
       const newItems: PendingUpload[] = imageFiles.map((file) => ({
-        uid: crypto.randomUUID(),
+        uid: (crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`),
         file,
         objectUrl: URL.createObjectURL(file),
         imageUrl: null,
