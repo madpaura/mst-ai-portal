@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { api } from '../api/client';
+import { api, toApiError } from '../api/client';
 import { PublishAuthority } from '../components/PublishAuthority';
 
 interface ContactEntry {
@@ -34,8 +34,8 @@ export const AdminContacts: React.FC = () => {
     try {
       const data = await api.get<ContactEntry[]>('/admin/contacts');
       setContacts(data);
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setLoading(false);
     }
@@ -70,8 +70,8 @@ export const AdminContacts: React.FC = () => {
       }
       setShowForm(false);
       await fetchContacts();
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setSaving(false);
     }
@@ -81,8 +81,8 @@ export const AdminContacts: React.FC = () => {
     try {
       await api.put(`/admin/contacts/${c.id}`, { is_active: !c.is_active });
       setContacts(prev => prev.map(x => x.id === c.id ? { ...x, is_active: !x.is_active } : x));
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -92,8 +92,8 @@ export const AdminContacts: React.FC = () => {
       await api.delete(`/admin/contacts/${c.id}`);
       showMsg('success', 'Deleted');
       setContacts(prev => prev.filter(x => x.id !== c.id));
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 

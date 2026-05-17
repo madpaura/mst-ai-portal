@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../api/auth';
+import { toApiError } from '../api/client';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 const AUTH_MODE = import.meta.env.VITE_AUTH_MODE || 'open';
@@ -54,8 +55,8 @@ export const Login: React.FC = () => {
     try {
       const user = await login(username, password);
       navigate(user.role === 'admin' || user.role === 'content' ? '/admin/videos' : '/');
-    } catch (err: any) {
-      setError(err.message || 'Login failed');
+    } catch (err: unknown) {
+      setError(toApiError(err) || 'Login failed');
     } finally {
       setLoading(false);
     }

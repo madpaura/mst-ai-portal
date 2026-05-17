@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { api } from '../api/client';
+import { api, toApiError } from '../api/client';
 
 interface SolutionCard {
   id: string;
@@ -132,8 +132,8 @@ export const AdminSolutions: React.FC = () => {
       const result = await api.post<{ content: string }>('/admin/articles/beautify', { content });
       setter(result.content);
       showMsg('success', 'Content beautified with AI');
-    } catch (err: any) {
-      showMsg('error', 'Beautify failed: ' + err.message);
+    } catch (err: unknown) {
+      showMsg('error', 'Beautify failed: ' + toApiError(err));
     } finally {
       setBeautifying(null);
     }
@@ -143,8 +143,8 @@ export const AdminSolutions: React.FC = () => {
     try {
       const data = await api.get<SolutionCard[]>('/admin/solutions/solution-cards');
       setCards(data);
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   }, []);
 
@@ -152,8 +152,8 @@ export const AdminSolutions: React.FC = () => {
     try {
       const data = await api.get<NewsItem[]>('/admin/solutions/news');
       setNews(data);
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   }, []);
 
@@ -171,7 +171,7 @@ export const AdminSolutions: React.FC = () => {
           { title: 'Real-time validation', description: 'Instant syntax checks and logical verification against existing design constraints.' },
         ],
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.warn('Failed to load setting', err);
     }
   }, []);
@@ -230,8 +230,8 @@ export const AdminSolutions: React.FC = () => {
       }
       closeCardForm();
       await fetchCards();
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -241,8 +241,8 @@ export const AdminSolutions: React.FC = () => {
       await api.delete(`/admin/solutions/solution-cards/${card.id}`);
       await fetchCards();
       showMsg('success', 'Solution card deleted');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -289,8 +289,8 @@ export const AdminSolutions: React.FC = () => {
       }
       closeNewsForm();
       await fetchNews();
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -300,8 +300,8 @@ export const AdminSolutions: React.FC = () => {
       await api.delete(`/admin/solutions/news/${item.id}`);
       await fetchNews();
       showMsg('success', 'News item deleted');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -310,8 +310,8 @@ export const AdminSolutions: React.FC = () => {
     try {
       await api.put('/settings/admin/landing_page', { value: landingConfig });
       showMsg('success', 'Landing page settings saved');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setSavingLanding(false);
     }

@@ -1,6 +1,7 @@
 import os
 import re
 import uuid
+import bleach
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 
 from articles.schemas import (
@@ -14,6 +15,8 @@ from database import get_db
 import cache
 
 router = APIRouter()
+
+from articles.router import _sanitize  # shared sanitizer
 
 _MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024  # 20 MB
 _ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx"}
@@ -98,7 +101,7 @@ async def admin_create_article(req: ArticleCreate, admin: dict = Depends(require
         INSERT INTO articles (title, slug, summary, content, category, author_id, author_name)
         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *
         """,
-        req.title, slug, req.summary, req.content, req.category,
+        req.title, slug, req.summary, _sanitize(req.content), req.category,
         admin["id"], admin.get("display_name", "Admin"),
     )
     await cache.bump_version(cache.NS_ARTICLES)
@@ -154,7 +157,7 @@ async def admin_update_article(
     if req.summary is not None:
         updates["summary"] = req.summary
     if req.content is not None:
-        updates["content"] = req.content
+        updates["content"] = _sanitize(req.content)
     if req.category is not None:
         updates["category"] = req.category
     updates = {k: v for k, v in updates.items() if k in _ARTICLE_UPDATABLE_FIELDS}

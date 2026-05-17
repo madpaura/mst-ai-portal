@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { api } from '../api/client';
+import { api, toApiError } from '../api/client';
 
 interface PublishRequest {
   id: string;
@@ -56,8 +56,8 @@ export const PublishRequests: React.FC<Props> = ({ targetType, onClose, onApprov
       showMsg('success', 'Approved and published');
       onApproved?.();
       load();
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setActing(null);
     }
@@ -69,8 +69,8 @@ export const PublishRequests: React.FC<Props> = ({ targetType, onClose, onApprov
       await api.post(`/admin/publish-requests/${id}/reject`, { note: reviewNote[id] || null });
       showMsg('success', 'Request rejected');
       load();
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setActing(null);
     }

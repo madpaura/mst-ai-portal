@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { api } from '../api/client';
+import { api, toApiError } from '../api/client';
 import { useTheme } from '../context/theme';
 import type { PortalTheme } from '../context/theme';
 
@@ -59,8 +59,8 @@ export const AdminSettings: React.FC = () => {
       await api.put('/settings/admin/portal_theme', { value: theme });
       applyPortalTheme(theme);
       showMsg('success', `Theme set to "${theme}"`);
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setThemeSaving(false);
     }
@@ -132,8 +132,8 @@ export const AdminSettings: React.FC = () => {
       await api.put('/settings/admin/ollama_config', { value: { base_url: ollamaUrl.trim(), model: ollamaModel } });
       setOllamaSaved({ url: ollamaUrl.trim(), model: ollamaModel });
       showMsg('success', 'Ollama configuration saved');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setOllamaSaving(false);
     }
@@ -154,8 +154,8 @@ export const AdminSettings: React.FC = () => {
           setOllamaModel(res.models[0] || '');
         }
       }
-    } catch (err: any) {
-      setOllamaTestResult({ ok: false, error: err.message });
+    } catch (err: unknown) {
+      setOllamaTestResult({ ok: false, error: toApiError(err) });
     } finally {
       setOllamaTesting(false);
     }
@@ -167,8 +167,8 @@ export const AdminSettings: React.FC = () => {
       await api.put('/settings/admin/contact_email', { value: contactEmail });
       setContactEmailSaved(contactEmail);
       showMsg('success', 'Contact email saved');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setContactEmailSaving(false);
     }
@@ -185,8 +185,8 @@ export const AdminSettings: React.FC = () => {
         showMsg('success', 'All caches flushed');
       }
       await fetchCacheStats();
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally { setCacheFlushing(false); }
   };
 
@@ -198,8 +198,8 @@ export const AdminSettings: React.FC = () => {
       await api.put('/settings/admin/transcript_config', { value: payload });
       showMsg('success', 'Transcript service settings saved');
       setTranscriptForm(f => ({ ...f, api_key: '' }));
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setTranscriptSaving(false);
     }
@@ -215,8 +215,8 @@ export const AdminSettings: React.FC = () => {
         api_key: transcriptForm.api_key,
       });
       setTranscriptTestResult(res);
-    } catch (err: any) {
-      setTranscriptTestResult({ ok: false, detail: err.message });
+    } catch (err: unknown) {
+      setTranscriptTestResult({ ok: false, detail: toApiError(err) });
     } finally {
       setTranscriptTesting(false);
     }
@@ -742,8 +742,8 @@ export const AdminSettings: React.FC = () => {
                         smtp_port: parseInt(smtpForm.smtp_port) || 587,
                       });
                       setSmtpProbeResult(res);
-                    } catch (err: any) {
-                      showMsg('error', `Probe failed: ${err.message}`);
+                    } catch (err: unknown) {
+                      showMsg('error', `Probe failed: ${toApiError(err)}`);
                     } finally { setSmtpProbing(false); }
                   }}
                   disabled={smtpProbing}
@@ -768,8 +768,8 @@ export const AdminSettings: React.FC = () => {
                         test_recipient: smtpForm.test_recipient,
                       });
                       setSmtpTestResult(res);
-                    } catch (err: any) {
-                      setSmtpTestResult({ success: false, message: err.message });
+                    } catch (err: unknown) {
+                      setSmtpTestResult({ success: false, message: toApiError(err) });
                     } finally { setSmtpTesting(false); }
                   }}
                   disabled={smtpTesting}
@@ -794,8 +794,8 @@ export const AdminSettings: React.FC = () => {
                       showMsg('success', 'SMTP settings saved');
                       await fetchSmtpSettings();
                       setShowSmtpModal(false);
-                    } catch (err: any) {
-                      showMsg('error', err.message);
+                    } catch (err: unknown) {
+                      showMsg('error', toApiError(err));
                     } finally { setSmtpSaving(false); }
                   }}
                   disabled={smtpSaving}

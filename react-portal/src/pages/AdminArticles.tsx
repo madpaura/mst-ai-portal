@@ -5,7 +5,7 @@ import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
 import 'highlight.js/styles/github-dark.css';
 import '../styles/howto-markdown.css';
-import { api } from '../api/client';
+import { api, toApiError } from '../api/client';
 
 interface Attachment {
   id: string;
@@ -111,7 +111,7 @@ export const AdminArticles: React.FC = () => {
       setCreateForm({ title: '', category: 'General' });
       selectArticle(article);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Create failed');
+      alert(err instanceof Error ? toApiError(err) : 'Create failed');
     }
   };
 
@@ -123,7 +123,7 @@ export const AdminArticles: React.FC = () => {
       setSelected((prev) => prev ? { ...prev, ...updated } : updated);
       setArticles((prev) => prev.map((a) => a.id === updated.id ? { ...a, ...updated } : a));
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Save failed');
+      alert(err instanceof Error ? toApiError(err) : 'Save failed');
     }
     setSaving(false);
   };
@@ -149,7 +149,7 @@ export const AdminArticles: React.FC = () => {
       const updated = await api.get<Article>(`/admin/articles/${selected.id}`);
       setSelected(updated);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Publish failed');
+      alert(err instanceof Error ? toApiError(err) : 'Publish failed');
     }
   };
 
@@ -163,7 +163,7 @@ export const AdminArticles: React.FC = () => {
       });
       setEditForm((f) => ({ ...f, content: res.content }));
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Beautify failed — is the LLM service running?');
+      alert(err instanceof Error ? toApiError(err) : 'Beautify failed — is the LLM service running?');
     }
     setBeautifying(false);
   };
@@ -191,7 +191,7 @@ export const AdminArticles: React.FC = () => {
         prev ? { ...prev, attachments: [...(prev.attachments || []), attachment] } : prev
       );
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Upload failed');
+      alert(err instanceof Error ? toApiError(err) : 'Upload failed');
     }
     setUploading(false);
     e.target.value = '';
@@ -205,7 +205,7 @@ export const AdminArticles: React.FC = () => {
         prev ? { ...prev, attachments: (prev.attachments || []).filter((a) => a.id !== attachmentId) } : prev
       );
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Delete failed');
+      alert(err instanceof Error ? toApiError(err) : 'Delete failed');
     }
   };
 

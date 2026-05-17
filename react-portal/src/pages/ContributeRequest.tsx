@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api } from '../api/client';
+import { api, toApiError } from '../api/client';
 import { useAuth } from '../api/auth';
 
 interface ContributeRequestData {
@@ -45,8 +45,8 @@ export const ContributeRequest: React.FC = () => {
       const req = await api.post<ContributeRequestData>('/auth/contribute-request', { reason: reason.trim() });
       setExistingRequest(req);
       setReason('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to submit request');
+    } catch (err: unknown) {
+      setError(toApiError(err) || 'Failed to submit request');
     } finally {
       setSubmitting(false);
     }

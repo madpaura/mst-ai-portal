@@ -8,7 +8,7 @@ import 'highlight.js/styles/github-dark.css';
 import '../styles/howto-markdown.css';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
-import { api } from '../api/client';
+import { api, toApiError } from '../api/client';
 
 interface SolutionCard {
   id: string;
@@ -37,7 +37,7 @@ export const SolutionDetail: React.FC = () => {
     if (!cardId) return;
     api.get<SolutionCard>(`/api/solutions/cards/${cardId}`)
       .then(setCard)
-      .catch((err) => setError(err.message))
+      .catch((err) => setError(toApiError(err)))
       .finally(() => setLoading(false));
   }, [cardId]);
 

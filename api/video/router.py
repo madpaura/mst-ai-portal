@@ -1,9 +1,9 @@
 import json
 import os
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Path
 from fastapi.responses import PlainTextResponse
-from typing import Optional
+from typing import Annotated, Optional
 from pydantic import BaseModel
 
 from config import settings
@@ -18,6 +18,9 @@ import cache
 
 router = APIRouter()
 
+_UUID_PATTERN = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+UUIDPath = Annotated[str, Path(pattern=_UUID_PATTERN)]
+
 
 def _secs_to_vtt(s: float) -> str:
     h = int(s // 3600)
@@ -27,7 +30,7 @@ def _secs_to_vtt(s: float) -> str:
 
 
 @router.get("/videos/{video_id}/captions.vtt", response_class=PlainTextResponse)
-async def get_captions_vtt(video_id: str):
+async def get_captions_vtt(video_id: UUIDPath):
     """Return WebVTT captions generated from the stored transcript segments."""
     path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "transcript.json")
     if not os.path.isfile(path):
@@ -367,7 +370,7 @@ async def create_note(slug: str, req: NoteCreate, user: dict = Depends(get_curre
 
 
 @router.put("/notes/{note_id}", response_model=NoteResponse)
-async def update_note(note_id: str, req: NoteUpdate, user: dict = Depends(get_current_user)):
+async def update_note(note_id: UUIDPath, req: NoteUpdate, user: dict = Depends(get_current_user)):
     db = await get_db()
     note = await db.fetchrow(
         "SELECT * FROM user_notes WHERE id = $1 AND user_id = $2", note_id, user["id"]
@@ -389,7 +392,7 @@ async def update_note(note_id: str, req: NoteUpdate, user: dict = Depends(get_cu
 
 
 @router.delete("/notes/{note_id}")
-async def delete_note(note_id: str, user: dict = Depends(get_current_user)):
+async def delete_note(note_id: UUIDPath, user: dict = Depends(get_current_user)):
     db = await get_db()
     result = await db.execute(
         "DELETE FROM user_notes WHERE id = $1 AND user_id = $2", note_id, user["id"]

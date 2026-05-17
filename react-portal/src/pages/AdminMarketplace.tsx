@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { api } from '../api/client';
+import { api, toApiError } from '../api/client';
 import { useAuth } from '../api/auth';
 import { AdminArtifacts, GithubConfigPanel } from './AdminArtifacts';
 import { PublishRequests } from '../components/PublishRequests';
@@ -184,8 +184,8 @@ export const AdminMarketplace: React.FC = () => {
     try {
       const data = await api.get<ForgeComponent[]>('/admin/forge/components');
       setComponents(data);
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setCompLoading(false);
     }
@@ -195,8 +195,8 @@ export const AdminMarketplace: React.FC = () => {
     try {
       const data = await api.get<ForgeSetting[]>('/admin/forge/settings');
       setSources(data);
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setSourcesLoading(false);
     }
@@ -242,8 +242,8 @@ export const AdminMarketplace: React.FC = () => {
       await api.put('/settings/admin/marketplace_status', { value: marketplaceForm });
       setMarketplaceStatus(marketplaceForm);
       showMsg('success', 'Marketplace status saved');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setMarketplaceSaving(false);
     }
@@ -258,8 +258,8 @@ export const AdminMarketplace: React.FC = () => {
       const result = await api.post<{ content: string }>('/admin/articles/beautify', { content: compForm.howto_guide });
       setCompForm(f => ({ ...f, howto_guide: result.content }));
       showMsg('success', 'Content beautified');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setBeautifying(false);
     }
@@ -303,8 +303,8 @@ export const AdminMarketplace: React.FC = () => {
       }
       closeCompForm();
       await fetchComponents();
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -316,8 +316,8 @@ export const AdminMarketplace: React.FC = () => {
         await api.post(`/admin/forge/components/${comp.id}/activate`);
       }
       await fetchComponents();
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -327,8 +327,8 @@ export const AdminMarketplace: React.FC = () => {
       await api.delete(`/admin/forge/components/${comp.id}`);
       await fetchComponents();
       showMsg('success', 'Component deleted');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -338,8 +338,8 @@ export const AdminMarketplace: React.FC = () => {
       setDeleteAllConfirm(false);
       await fetchComponents();
       showMsg('success', 'All components deleted');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -348,8 +348,8 @@ export const AdminMarketplace: React.FC = () => {
     try {
       await api.put('/settings/admin/marketplace_contributing_video', { value: contributingVideoSlug.trim() || null });
       showMsg('success', 'Contributing guide video saved');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setSavingGuide(false);
     }
@@ -389,8 +389,8 @@ export const AdminMarketplace: React.FC = () => {
       }
       closeSourceForm();
       await fetchSources();
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -400,8 +400,8 @@ export const AdminMarketplace: React.FC = () => {
       await api.delete(`/admin/forge/settings/${s.id}`);
       await fetchSources();
       showMsg('success', 'Source deleted');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -427,8 +427,8 @@ export const AdminMarketplace: React.FC = () => {
           if (runningJob) setExpandedJobId(runningJob.id);
         } catch { }
       }, 2000);
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
       setSyncing(v => ({ ...v, [sourceId]: false }));
     }
   };
@@ -439,8 +439,8 @@ export const AdminMarketplace: React.FC = () => {
     try {
       const res = await api.post<{ git: any; llm: any }>(`/admin/forge/settings/${sourceId}/verify`);
       setVerifyResults(v => ({ ...v, [sourceId]: res }));
-    } catch (err: any) {
-      const detail = err.message || 'Unknown error';
+    } catch (err: unknown) {
+      const detail = toApiError(err) || 'Unknown error';
       setVerifyResults(v => ({
         ...v,
         [sourceId]: {
@@ -457,8 +457,8 @@ export const AdminMarketplace: React.FC = () => {
     try {
       const res = await api.post<{ message: string }>('/admin/forge/sync-all');
       showMsg('success', res.message);
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 

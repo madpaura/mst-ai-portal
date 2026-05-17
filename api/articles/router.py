@@ -1,4 +1,5 @@
 import re
+import bleach
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional
 
@@ -13,6 +14,24 @@ import cache
 from config import settings
 
 router = APIRouter()
+
+# HTML tags and attributes allowed in article content (markdown-rendered HTML)
+_ALLOWED_TAGS = list(bleach.sanitizer.ALLOWED_TAGS) + [
+    "h1", "h2", "h3", "h4", "h5", "h6",
+    "p", "br", "hr", "pre", "code", "blockquote",
+    "table", "thead", "tbody", "tr", "th", "td",
+    "img", "del", "ins", "sup", "sub",
+]
+_ALLOWED_ATTRS = {
+    **bleach.sanitizer.ALLOWED_ATTRIBUTES,
+    "a": ["href", "title", "rel"],
+    "img": ["src", "alt", "title", "width", "height"],
+    "th": ["align"], "td": ["align"],
+}
+
+
+def _sanitize(content: str) -> str:
+    return bleach.clean(content, tags=_ALLOWED_TAGS, attributes=_ALLOWED_ATTRS, strip=True)
 
 
 def _attachment_url(article_id: str, stored_name: str) -> str:
@@ -132,7 +151,7 @@ async def create_article(req: ArticleCreate, user: dict = Depends(get_current_us
         INSERT INTO articles (title, slug, summary, content, category, author_id, author_name, is_published, published_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, true, now()) RETURNING *
         """,
-        req.title, slug, req.summary, req.content, req.category,
+        req.title, slug, req.summary, _sanitize(req.content), req.category,
         user["id"], user.get("display_name", user.get("username", "User")),
     )
     await cache.bump_version(cache.NS_ARTICLES)
@@ -172,7 +191,7 @@ async def update_my_article(
     if req.summary is not None:
         updates["summary"] = req.summary
     if req.content is not None:
-        updates["content"] = req.content
+        updates["content"] = _sanitize(req.content)
     if req.category is not None:
         updates["category"] = req.category
 
