@@ -7,8 +7,12 @@ Run standalone: python -m worker.transcoder
 import asyncio
 import os
 import shutil
+import signal
 import subprocess
 import sys
+import threading
+import time
+from typing import Optional
 
 import asyncpg
 from loguru import logger as log
@@ -17,6 +21,23 @@ from loguru import logger as log
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import settings
 from worker.gpu_detect import get_encode_args, get_hwaccel_args, get_gpu_info
+
+# ── Graceful shutdown state ───────────────────────────────────────────────────
+_shutdown = threading.Event()
+_active_proc: Optional[subprocess.Popen] = None
+_current_job_id: Optional[int] = None
+
+
+def _handle_shutdown(signum, frame):
+    log.info(f"Signal {signum} received — initiating graceful shutdown")
+    _shutdown.set()
+    if _active_proc and _active_proc.poll() is None:
+        log.info("Terminating active FFmpeg process")
+        _active_proc.terminate()
+
+
+signal.signal(signal.SIGTERM, _handle_shutdown)
+signal.signal(signal.SIGINT, _handle_shutdown)
 
 
 QUALITY_PROFILES = {
@@ -61,6 +82,7 @@ async def get_quality_settings(pool: asyncpg.Pool, video_id):
 
 def run_ffmpeg(input_path: str, output_dir: str, quality: str, crf: int) -> bool:
     """Run FFmpeg to transcode a single quality tier. Uses GPU (NVENC) if available."""
+    global _active_proc
     profile = QUALITY_PROFILES[quality]
     hls_dir = os.path.join(output_dir, quality)
     os.makedirs(hls_dir, exist_ok=True)
@@ -80,11 +102,25 @@ def run_ffmpeg(input_path: str, output_dir: str, quality: str, crf: int) -> bool
 
     backend = "GPU" if gpu["gpu_available"] else "CPU"
     log.info(f"Transcoding {quality} (CRF={crf}) [{backend}]")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        log.error(f"FFmpeg error {quality}: {result.stderr[-500:]}")
+    start = time.time()
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    _active_proc = proc
+    try:
+        _, stderr = proc.communicate(timeout=settings.FFMPEG_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+        elapsed = time.time() - start
+        log.error(f"FFmpeg timed out after {elapsed:.0f}s for quality={quality}")
         return False
-    log.info(f"Transcoding {quality} done [{backend}]")
+    finally:
+        _active_proc = None
+
+    elapsed = time.time() - start
+    if proc.returncode != 0:
+        log.error(f"FFmpeg error {quality} ({elapsed:.0f}s): {stderr.decode(errors='replace')[-500:]}")
+        return False
+    log.info(f"Transcoding {quality} done in {elapsed:.0f}s [{backend}]")
     return True
 
 
@@ -95,7 +131,10 @@ def generate_thumbnail(input_path: str, output_path: str, timestamp: int = 30):
         "-ss", str(timestamp), "-vframes", "1", "-q:v", "2",
         output_path,
     ]
-    subprocess.run(cmd, capture_output=True)
+    try:
+        subprocess.run(cmd, capture_output=True, timeout=120)
+    except subprocess.TimeoutExpired:
+        log.warning(f"Thumbnail generation timed out for {input_path}")
 
 
 def generate_master_manifest(hls_dir: str, qualities: list[dict]):
@@ -123,7 +162,11 @@ def get_duration(input_path: str) -> int | None:
         "ffprobe", "-v", "error", "-show_entries", "format=duration",
         "-of", "default=noprint_wrappers=1:nokey=1", input_path,
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        log.warning(f"ffprobe timed out for {input_path}")
+        return None
     if result.returncode == 0 and result.stdout.strip():
         try:
             return int(float(result.stdout.strip()))
@@ -254,9 +297,11 @@ async def process_job(pool: asyncpg.Pool, job):
 
 async def run_worker():
     """Main worker loop — polls for jobs."""
+    global _current_job_id
     log.info("Starting transcode worker...")
     log.info(f"Video storage: {settings.VIDEO_STORAGE_PATH}")
     log.info(f"Poll interval: {settings.TRANSCODE_POLL_INTERVAL}s")
+    log.info(f"FFmpeg timeout: {settings.FFMPEG_TIMEOUT}s")
 
     # Probe GPU at startup
     gpu = get_gpu_info()
@@ -269,21 +314,46 @@ async def run_worker():
 
     pool = await asyncpg.create_pool(settings.DATABASE_URL, min_size=1, max_size=3)
 
-    while True:
+    # Reclaim jobs stuck in 'processing' from a previous crashed/killed worker
+    reclaimed = await pool.fetchval(
+        "UPDATE transcode_jobs SET status = 'pending', attempts = GREATEST(attempts - 1, 0) "
+        "WHERE status = 'processing' RETURNING count(*)"
+    )
+    if reclaimed:
+        log.warning(f"Reclaimed {reclaimed} stuck job(s) from previous worker instance")
+
+    while not _shutdown.is_set():
         try:
             job = await claim_job(pool)
             if job:
+                _current_job_id = job["id"]
                 await process_job(pool, job)
+                _current_job_id = None
             else:
-                await asyncio.sleep(settings.TRANSCODE_POLL_INTERVAL)
-        except KeyboardInterrupt:
-            break
+                # Sleep in short increments so SIGTERM is noticed quickly
+                for _ in range(settings.TRANSCODE_POLL_INTERVAL):
+                    if _shutdown.is_set():
+                        break
+                    await asyncio.sleep(1)
         except Exception as e:
-            log.error(f"Error: {e}")
+            log.error(f"Worker error: {e}")
+            _current_job_id = None
             await asyncio.sleep(settings.TRANSCODE_POLL_INTERVAL)
 
+    # Mark the in-flight job as cancelled so it can be retried next startup
+    if _current_job_id is not None:
+        try:
+            await pool.execute(
+                "UPDATE transcode_jobs SET status = 'cancelled', error = 'Worker shutdown during processing' "
+                "WHERE id = $1 AND status = 'processing'",
+                _current_job_id,
+            )
+            log.info(f"Marked job #{_current_job_id} as cancelled due to shutdown")
+        except Exception as e:
+            log.error(f"Failed to mark job as cancelled: {e}")
+
     await pool.close()
-    log.info("Shutdown")
+    log.info("Shutdown complete")
 
 
 if __name__ == "__main__":

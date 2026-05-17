@@ -21,28 +21,31 @@ export const Login: React.FC = () => {
   useEffect(() => {
     if (!isSamlMode || forceLocal) return;
     const samlCode = searchParams.get('saml_code');
-    if (samlCode) {
-      // Callback path — exchange code for JWT
-      setLoading(true);
-      fetch(`${API_BASE}/saml/callback?saml_code=${encodeURIComponent(samlCode)}`)
-        .then((res) => {
-          if (!res.ok) throw new Error('SAML code exchange failed');
-          return res.json();
-        })
-        .then(async (data) => {
-          await loginWithSamlToken(data.access_token);
-          navigate('/admin/videos', { replace: true });
-        })
-        .catch((err) => {
-          setError(err.message || 'SSO login failed');
-          setLoading(false);
-        });
-    } else {
-      // No callback code — redirect immediately to IdP
+    if (!samlCode) {
       const next = encodeURIComponent(window.location.origin + '/login');
       window.location.href = `${API_BASE}/saml/login?next=${next}`;
+      return;
     }
-  }, [isSamlMode]);
+    // Callback path — exchange code for JWT
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/saml/callback?saml_code=${encodeURIComponent(samlCode)}`);
+        if (!res.ok) throw new Error('SAML code exchange failed');
+        const data = await res.json();
+        if (cancelled) return;
+        await loginWithSamlToken(data.access_token);
+        if (!cancelled) navigate('/admin/videos', { replace: true });
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setError((err as Error).message || 'SSO login failed');
+          setLoading(false);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isSamlMode, forceLocal, searchParams, loginWithSamlToken, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

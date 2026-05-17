@@ -12,8 +12,13 @@ from starlette.responses import Response
 from contextlib import asynccontextmanager
 from loguru import logger as log
 
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.errors import RateLimitExceeded
+
 from config import settings
 from database import init_db, close_db, get_db
+from limiter import limiter
 
 # ── Structured logging setup ──────────────────────────────────────────────────
 # In production (ENV != development) emit JSON lines so log aggregators
@@ -109,6 +114,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # Trust X-Forwarded-For / X-Real-IP from nginx so request.client.host
 # returns the real browser IP, not the proxy IP.

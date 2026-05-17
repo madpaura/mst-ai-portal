@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     FFMPEG_PATH: str = "ffmpeg"
     FFMPEG_HWACCEL: str = "auto"  # "auto" = detect GPU, "none" = force CPU
     TRANSCODE_POLL_INTERVAL: int = 5  # seconds
+    FFMPEG_TIMEOUT: int = 3600  # max seconds per FFmpeg job before declaring timeout
 
     # LLM / Ollama
     # Use localhost by default for local runs; Docker compose overrides this to host.docker.internal.

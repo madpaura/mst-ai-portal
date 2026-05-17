@@ -1,5 +1,6 @@
 import smtplib
 import json
+import time
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional
@@ -7,6 +8,43 @@ from loguru import logger as log
 from config import settings
 from database import get_db
 from email_utils.template import generate_editorial_email
+
+# SMTP errors that indicate a transient failure worth retrying.
+# SMTPException inherits from OSError in Python 3, so we list specific
+# transient subclasses rather than broad OSError to avoid catching permanent
+# failures like SMTPRecipientsRefused or SMTPSenderRefused.
+_TRANSIENT_SMTP_ERRORS = (
+    smtplib.SMTPServerDisconnected,
+    smtplib.SMTPConnectError,
+    smtplib.SMTPHeloError,
+    ConnectionError,
+    TimeoutError,
+)
+
+_EMAIL_MAX_ATTEMPTS = 3
+
+
+def _send_smtp(cfg: dict, msg, recipients: list) -> None:
+    """Send via SMTP with retry on transient errors. Raises on final failure."""
+    last_exc: Exception = RuntimeError("No attempt made")
+    for attempt in range(1, _EMAIL_MAX_ATTEMPTS + 1):
+        try:
+            server = _make_smtp_connection(cfg)
+            server.sendmail(cfg["from_email"], recipients, msg.as_string())
+            server.quit()
+            return
+        except _TRANSIENT_SMTP_ERRORS as e:
+            last_exc = e
+            if attempt < _EMAIL_MAX_ATTEMPTS:
+                backoff = 2 ** attempt
+                log.warning(f"SMTP transient error (attempt {attempt}/{_EMAIL_MAX_ATTEMPTS}), "
+                             f"retrying in {backoff}s: {e}")
+                time.sleep(backoff)
+            else:
+                log.error(f"SMTP send failed after {_EMAIL_MAX_ATTEMPTS} attempts: {e}")
+        except Exception as e:
+            raise  # non-transient — don't retry
+    raise last_exc
 
 
 async def _get_smtp_cfg() -> dict:
@@ -53,7 +91,7 @@ async def send_email(
     html_content: str,
     plain_text: Optional[str] = None,
 ) -> bool:
-    """Send email to a single recipient."""
+    """Send email to a single recipient (with retry on transient SMTP errors)."""
     try:
         cfg = await _get_smtp_cfg()
         msg = MIMEMultipart("alternative")
@@ -63,10 +101,7 @@ async def send_email(
         if plain_text:
             msg.attach(MIMEText(plain_text, "plain"))
         msg.attach(MIMEText(html_content, "html"))
-
-        server = _make_smtp_connection(cfg)
-        server.sendmail(cfg["from_email"], [to_email], msg.as_string())
-        server.quit()
+        _send_smtp(cfg, msg, [to_email])
         return True
     except Exception as e:
         log.error(f"Email send failed: {e}")
@@ -109,9 +144,7 @@ async def send_email_multi(
             msg.attach(MIMEText(plain_text, "plain"))
         msg.attach(MIMEText(html_content, "html"))
 
-        server = _make_smtp_connection(cfg)
-        server.sendmail(cfg["from_email"], all_recipients, msg.as_string())
-        server.quit()
+        _send_smtp(cfg, msg, all_recipients)
         return True
     except Exception as e:
         log.error(f"send_email_multi failed: {e}")

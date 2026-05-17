@@ -1097,7 +1097,7 @@ export const AdminVideos: React.FC = () => {
       scaleWrap();
       window.addEventListener('resize',scaleWrap);
 
-      const P = ${JSON.stringify(bannerForm)};
+      const P = ${JSON.stringify(bannerForm).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026')};
       const V = P.variant;
       const bWords = (P.brand_title || 'AI Ignite').trim().split(' ');
       const b1 = bWords[0] || '';
@@ -1884,8 +1884,8 @@ export const AdminVideos: React.FC = () => {
                 <div className="mt-3 border-t border-slate-200 dark:border-white/5 pt-3">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Operations</p>
                   <div className="space-y-1 max-h-28 overflow-y-auto">
-                    {[...opsLog].reverse().map((entry, i) => (
-                      <div key={i} className="flex items-center gap-2 text-[10px]">
+                    {[...opsLog].reverse().map((entry) => (
+                      <div key={`${entry.ts}-${entry.op}`} className="flex items-center gap-2 text-[10px]">
                         <span className={`px-1.5 py-0.5 rounded font-bold uppercase ${
                           entry.op === 'transcode' ? 'bg-green-500/15 text-green-400' :
                           entry.op === 'banner' ? 'bg-purple-500/15 text-purple-400' :

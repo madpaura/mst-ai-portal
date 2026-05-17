@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
+import DOMPurify from 'dompurify';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 
@@ -266,7 +267,7 @@ const ResultCard: React.FC<{ item: SearchResult }> = ({ item }) => {
         {item.highlight ? (
           <p
             className="text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 [&_mark]:bg-primary/20 [&_mark]:text-primary [&_mark]:rounded-sm [&_mark]:px-0.5"
-            dangerouslySetInnerHTML={{ __html: item.highlight }}
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.highlight, { ALLOWED_TAGS: ['mark'] }) }}
           />
         ) : item.description ? (
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">{item.description}</p>

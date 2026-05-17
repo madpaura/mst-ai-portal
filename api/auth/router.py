@@ -8,6 +8,7 @@ from auth.dependencies import get_current_user, require_admin
 from auth.audit import audit
 from database import get_db
 from config import settings
+from limiter import limiter
 
 _COOKIE_NAME = "mst_token"
 _COOKIE_MAX_AGE = int(settings.JWT_EXPIRE_HOURS * 3600)
@@ -34,7 +35,8 @@ router = APIRouter()
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(req: LoginRequest, response: Response):
+@limiter.limit("5/minute")
+async def login(request: Request, req: LoginRequest, response: Response):
     db = await get_db()
     user = await db.fetchrow("SELECT * FROM users WHERE username = $1", req.username)
     if not user:
@@ -254,6 +256,7 @@ async def create_user(request: Request, body: AdminCreateUser, admin: dict = Dep
     import asyncpg
     if body.role not in ("user", "content", "admin"):
         raise HTTPException(status_code=400, detail="Role must be user, content, or admin")
+    _validate_password_strength(body.password)
     db = await get_db()
     existing = await db.fetchrow(
         "SELECT id FROM users WHERE username = $1 OR (email = $2 AND $2 IS NOT NULL)",
@@ -309,17 +312,20 @@ class ResetPasswordRequest(BaseModel):
 
 def _validate_password_strength(password: str) -> None:
     errors = []
-    if len(password) < 6:
-        errors.append("at least 6 characters")
-    if not any(c.isalpha() for c in password):
-        errors.append("at least one letter")
-    if not any(c.isdigit() for c in password):
-        errors.append("at least one number")
+    if len(password) < 12:
+        errors.append("at least 12 characters")
+    has_upper = any(c.isupper() for c in password)
+    has_lower = any(c.islower() for c in password)
+    has_digit = any(c.isdigit() for c in password)
+    has_symbol = any(not c.isalnum() for c in password)
+    if sum([has_upper, has_lower, has_digit, has_symbol]) < 3:
+        errors.append("at least 3 of: uppercase letter, lowercase letter, digit, symbol")
     if errors:
         raise HTTPException(status_code=400, detail=f"Password must contain: {', '.join(errors)}")
 
 
 @router.put("/admin/users/{user_id}/password")
+@limiter.limit("10/minute")
 async def reset_user_password(request: Request, user_id: str, body: ResetPasswordRequest, admin: dict = Depends(require_admin)):
     from auth.service import hash_password, verify_password
     db = await get_db()

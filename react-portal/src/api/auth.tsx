@@ -56,17 +56,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [fetchUser]);
 
   const login = async (username: string, password: string): Promise<User> => {
-    const res = await api.post<{ access_token: string }>('/auth/login', { username, password });
-    setToken(res.access_token);
-    await fetchUser();
+    await api.post('/auth/login', { username, password });
     const u = await api.get<User>('/auth/me');
+    setToken('');
+    setUser(u);
     return u;
   };
 
-  const loginWithSamlToken = async (token: string) => {
+  const loginWithSamlToken = useCallback(async (token: string) => {
     setToken(token);
     await fetchUser();
-  };
+  }, [fetchUser]);
 
   const logout = () => {
     api.post('/auth/logout').catch(() => {});  // clears httpOnly cookie server-side
