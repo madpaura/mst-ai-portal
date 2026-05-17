@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, type DragEvent } from 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import JSZip from 'jszip';
-import { api } from '../api/client';
+import { api, toApiError } from '../api/client';
 import { useAuth } from '../api/auth';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -806,8 +806,8 @@ const FilesEditor: React.FC<{
     try {
       const result = await readFilesFromDrop(Array.from(e.dataTransfer.files));
       processDropResult(result);
-    } catch (err: any) {
-      setDropMsg(`Error reading files: ${err?.message || 'unknown'}`);
+    } catch (err: unknown) {
+      setDropMsg(`Error reading files: ${toApiError(err) || 'unknown'}`);
     } finally { setProcessing(false); }
   };
 
@@ -819,8 +819,8 @@ const FilesEditor: React.FC<{
     try {
       const result = await readFilesFromDrop(fileList);
       processDropResult(result);
-    } catch (err: any) {
-      setDropMsg(`Error: ${err?.message || 'unknown'}`);
+    } catch (err: unknown) {
+      setDropMsg(`Error: ${toApiError(err) || 'unknown'}`);
     } finally {
       setProcessing(false);
       if (fileInputRef.current) fileInputRef.current.value = '';

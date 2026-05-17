@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from '../components/Navbar';
 import { useAuth } from '../api/auth';
-import { api } from '../api/client';
+import { api, toApiError } from '../api/client';
 
 interface ContactEntry {
   id: string;
@@ -99,8 +99,8 @@ export const Contact: React.FC = () => {
         contact_ids: Array.from(selectedIds),
       });
       setSent(true);
-    } catch (err: any) {
-      setError(err.message || 'Failed to send message');
+    } catch (err: unknown) {
+      setError(toApiError(err) || 'Failed to send message');
     } finally {
       setSending(false);
     }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../api/client';
+import { api, toApiError } from '../api/client';
 
 export const PublishAuthority: React.FC = () => {
   const [emails, setEmails] = useState<string[]>([]);
@@ -37,8 +37,8 @@ export const PublishAuthority: React.FC = () => {
     try {
       await api.put('/admin/publish-authority', { emails });
       showMsg('success', 'Publish authority saved');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setSaving(false);
     }

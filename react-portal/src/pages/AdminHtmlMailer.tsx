@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { api } from '../api/client';
+import { api, toApiError } from '../api/client';
 
 const SAVED_MAILER_EMAILS_KEY = 'mst_mailer_saved_emails';
 
@@ -132,8 +132,8 @@ export const AdminHtmlMailer: React.FC = () => {
       setFontsInlined(true);
       const kb = (new Blob([processed]).size / 1024).toFixed(1);
       showMsg('success', `Fonts inlined — HTML is now ${kb} KB (self-contained)`);
-    } catch (err: any) {
-      showMsg('error', `Font inlining failed: ${err.message}`);
+    } catch (err: unknown) {
+      showMsg('error', `Font inlining failed: ${toApiError(err)}`);
     } finally {
       setInlining(false);
       setInlineProgress('');
@@ -205,8 +205,8 @@ export const AdminHtmlMailer: React.FC = () => {
       } else {
         showMsg('error', result.message);
       }
-    } catch (err: any) {
-      showMsg('error', err.message || 'Send failed');
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err) || 'Send failed');
     } finally {
       setSending(false);
     }
@@ -231,8 +231,8 @@ export const AdminHtmlMailer: React.FC = () => {
       a.download = subject.replace(/[^a-z0-9]/gi, '_').slice(0, 60) + '.eml';
       a.click();
       URL.revokeObjectURL(url);
-    } catch (err: any) {
-      showMsg('error', err.message || 'Download failed');
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err) || 'Download failed');
     } finally {
       setDownloading(false);
     }

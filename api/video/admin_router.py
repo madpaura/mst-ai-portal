@@ -393,6 +393,33 @@ async def _run_ffmpeg_async(*args: str) -> tuple[int, str]:
     return proc.returncode, (stderr_bytes or b"").decode(errors="replace")
 
 
+async def _run_probe_async(*args: str) -> tuple[int, str]:
+    """Run ffprobe capturing stdout (JSON). Returns (returncode, stdout)."""
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    stdout_bytes, _ = await proc.communicate()
+    return proc.returncode, (stdout_bytes or b"").decode(errors="replace")
+
+
+async def _run_remotion_async(*args: str, cwd: str | None = None) -> tuple[int, str, str]:
+    """Run a command (e.g. npx remotion) capturing both streams. Returns (rc, stdout, stderr)."""
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=cwd,
+    )
+    stdout_bytes, stderr_bytes = await proc.communicate()
+    return (
+        proc.returncode,
+        (stdout_bytes or b"").decode(errors="replace"),
+        (stderr_bytes or b"").decode(errors="replace"),
+    )
+
+
 async def _probe_duration_async(path: str) -> int | None:
     """Return video duration in seconds via ffprobe (non-blocking)."""
     ffprobe = settings.FFMPEG_PATH.replace("ffmpeg", "ffprobe")
@@ -685,11 +712,11 @@ async def _speed_section_task(
             settings.FFMPEG_PATH.replace("ffmpeg", "ffprobe"),
             "-v", "quiet", "-print_format", "json", "-show_streams", source_path,
         ]
-        probe_r = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30)
+        probe_rc, probe_out = await _run_probe_async(*probe_cmd)
         has_audio = False
-        if probe_r.returncode == 0:
+        if probe_rc == 0:
             try:
-                streams = json.loads(probe_r.stdout).get("streams", [])
+                streams = json.loads(probe_out).get("streams", [])
                 has_audio = any(s.get("codec_type") == "audio" for s in streams)
             except Exception:
                 pass
@@ -710,9 +737,9 @@ async def _speed_section_task(
                 part_before,
             ]
             log.info(f"Speed-section {video_id}: extracting before 0s-{start}s")
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-            if r.returncode != 0:
-                raise RuntimeError(f"Before-segment failed: {r.stderr[-800:]}")
+            rc, stderr = await _run_ffmpeg_async(*cmd)
+            if rc != 0:
+                raise RuntimeError(f"Before-segment failed: {stderr[-800:]}")
             parts.append(part_before)
 
         # --- Part 2 (middle): extract + apply speed in one pass via filter_complex ---
@@ -741,9 +768,9 @@ async def _speed_section_task(
                 part_mid_fast,
             ]
         log.info(f"Speed-section {video_id}: extracting+speeding middle {start}s-{end}s at {factor}x")
-        r = subprocess.run(speed_cmd, capture_output=True, text=True, timeout=600)
-        if r.returncode != 0:
-            raise RuntimeError(f"Speed filter failed: {r.stderr[-800:]}")
+        rc, stderr = await _run_ffmpeg_async(*speed_cmd)
+        if rc != 0:
+            raise RuntimeError(f"Speed filter failed: {stderr[-800:]}")
         parts.append(part_mid_fast)
 
         # --- Part 3: after segment (end → EOF) ---
@@ -757,10 +784,10 @@ async def _speed_section_task(
         ]
         # note: no -t here — read to EOF
         log.info(f"Speed-section {video_id}: extracting after {end}s-EOF")
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        rc, stderr = await _run_ffmpeg_async(*cmd)
         # Non-zero exit is OK here if the file is simply empty (end == video duration)
-        if r.returncode != 0 and "Output file is empty" not in r.stderr:
-            raise RuntimeError(f"After-segment failed: {r.stderr[-800:]}")
+        if rc != 0 and "Output file is empty" not in stderr:
+            raise RuntimeError(f"After-segment failed: {stderr[-800:]}")
         if os.path.exists(part_after) and os.path.getsize(part_after) > 0:
             parts.append(part_after)
 
@@ -778,9 +805,9 @@ async def _speed_section_task(
                 spd_output,
             ]
             log.info(f"Speed-section {video_id}: concatenating {len(parts)} segments")
-            r = subprocess.run(concat_cmd, capture_output=True, text=True, timeout=600)
-            if r.returncode != 0:
-                raise RuntimeError(f"Concat failed: {r.stderr[-500:]}")
+            rc, stderr = await _run_ffmpeg_async(*concat_cmd)
+            if rc != 0:
+                raise RuntimeError(f"Concat failed: {stderr[-500:]}")
 
         if not os.path.exists(spd_output) or os.path.getsize(spd_output) == 0:
             raise RuntimeError("Speed-section output file is empty or missing")
@@ -796,11 +823,11 @@ async def _speed_section_task(
             settings.FFMPEG_PATH.replace("ffmpeg", "ffprobe"),
             "-v", "quiet", "-print_format", "json", "-show_format", raw_path,
         ]
-        probe_r2 = subprocess.run(probe_cmd2, capture_output=True, text=True, timeout=30)
+        probe_rc2, probe_out2 = await _run_probe_async(*probe_cmd2)
         new_duration = None
-        if probe_r2.returncode == 0:
+        if probe_rc2 == 0:
             try:
-                new_duration = int(float(json.loads(probe_r2.stdout).get("format", {}).get("duration", 0)))
+                new_duration = int(float(json.loads(probe_out2).get("format", {}).get("duration", 0)))
             except Exception:
                 pass
 
@@ -1219,13 +1246,13 @@ async def _generate_banner_video(video_id: str, db_url: str):
         ]
         log.info(f"Banner: rendering for video {video_id}")
         log.debug(f"Banner cmd: {' '.join(render_cmd)}")
-        result = subprocess.run(render_cmd, cwd=remotion_dir, capture_output=True, text=True, timeout=180)
+        r_rc, r_stdout, r_stderr = await _run_remotion_async(*render_cmd, cwd=remotion_dir)
 
-        log.debug(f"Banner Remotion stdout: {result.stdout[-500:]}")
-        log.debug(f"Banner Remotion stderr: {result.stderr[-500:]}")
+        log.debug(f"Banner Remotion stdout: {r_stdout[-500:]}")
+        log.debug(f"Banner Remotion stderr: {r_stderr[-500:]}")
 
-        if result.returncode != 0:
-            error = f"Remotion render failed: {result.stderr[-500:]}"
+        if r_rc != 0:
+            error = f"Remotion render failed: {r_stderr[-500:]}"
             log.error(f"Banner render error: {error}")
             await pool.execute(
                 "UPDATE video_banners SET status='error', error=$1 WHERE video_id=$2",
@@ -1257,13 +1284,13 @@ async def _generate_banner_video(video_id: str, db_url: str):
                 "-show_streams",
                 source_path,
             ]
-            probe_result = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30)
+            probe_rc, probe_out = await _run_probe_async(*probe_cmd)
             orig_w, orig_h, orig_fps = 1920, 1080, 30
             has_audio = False
             audio_sample_rate = 44100
-            if probe_result.returncode == 0:
+            if probe_rc == 0:
                 try:
-                    probe_data = json.loads(probe_result.stdout)
+                    probe_data = json.loads(probe_out)
                     for stream in probe_data.get("streams", []):
                         if stream.get("codec_type") == "video":
                             orig_w = int(stream.get("width", 1920))
@@ -1313,11 +1340,11 @@ async def _generate_banner_video(video_id: str, db_url: str):
             reencode_cmd.append(banner_reenc)
 
             log.info(f"Banner: re-encoding to {target_w}x{target_h}")
-            reenc_result = subprocess.run(reencode_cmd, capture_output=True, text=True, timeout=60)
-            if reenc_result.returncode != 0:
-                err_msg = reenc_result.stderr[-500:]
+            reenc_rc, reenc_stderr = await _run_ffmpeg_async(*reencode_cmd)
+            if reenc_rc != 0:
+                err_msg = reenc_stderr[-500:]
                 log.error(f"Banner re-encode failed: {err_msg}")
-                await db.execute(
+                await pool.execute(
                     "UPDATE video_banners SET status='error', error=$1 WHERE video_id=$2",
                     f"Banner re-encode failed: {err_msg[-200:]}", video_id,
                 )
@@ -1325,7 +1352,7 @@ async def _generate_banner_video(video_id: str, db_url: str):
 
             if not os.path.exists(banner_reenc) or os.path.getsize(banner_reenc) == 0:
                 log.error("Banner re-encode produced empty file")
-                await db.execute(
+                await pool.execute(
                     "UPDATE video_banners SET status='error', error='Banner re-encode produced empty file' WHERE video_id=$1",
                     video_id,
                 )
@@ -1349,12 +1376,12 @@ async def _generate_banner_video(video_id: str, db_url: str):
             orig_reencode_cmd.append(orig_reenc)
 
             log.info("Banner: re-encoding original for concat compatibility")
-            orig_reenc_result = subprocess.run(orig_reencode_cmd, capture_output=True, text=True, timeout=600)
+            orig_rc, orig_stderr = await _run_ffmpeg_async(*orig_reencode_cmd)
 
-            if orig_reenc_result.returncode != 0 or not os.path.exists(orig_reenc) or os.path.getsize(orig_reenc) == 0:
-                err_msg = orig_reenc_result.stderr[-500:] if orig_reenc_result.returncode != 0 else "empty output"
+            if orig_rc != 0 or not os.path.exists(orig_reenc) or os.path.getsize(orig_reenc) == 0:
+                err_msg = orig_stderr[-500:] if orig_rc != 0 else "empty output"
                 log.error(f"Banner original re-encode failed: {err_msg}")
-                await db.execute(
+                await pool.execute(
                     "UPDATE video_banners SET status='error', error=$1 WHERE video_id=$2",
                     f"Original re-encode failed: {str(err_msg)[-200:]}", video_id,
                 )
@@ -1376,9 +1403,9 @@ async def _generate_banner_video(video_id: str, db_url: str):
                 combined_path,
             ]
             log.info("Banner: concatenating banner + video")
-            concat_result = subprocess.run(concat_cmd, capture_output=True, text=True, timeout=300)
+            concat_rc, concat_stderr = await _run_ffmpeg_async(*concat_cmd)
 
-            if concat_result.returncode != 0:
+            if concat_rc != 0:
                 log.warning("Banner: copy-concat failed, trying re-encode concat")
                 # Fallback: re-encode concat
                 fallback_cmd = [
@@ -1393,9 +1420,9 @@ async def _generate_banner_video(video_id: str, db_url: str):
                 else:
                     fallback_cmd += ["-an"]
                 fallback_cmd.append(combined_path)
-                concat_result = subprocess.run(fallback_cmd, capture_output=True, text=True, timeout=600)
+                concat_rc, concat_stderr = await _run_ffmpeg_async(*fallback_cmd)
 
-            if concat_result.returncode == 0 and os.path.exists(combined_path):
+            if concat_rc == 0 and os.path.exists(combined_path):
                 # Backup original (only first time)
                 if not os.path.exists(backup_path):
                     shutil.copy2(raw_path, backup_path)
@@ -1414,7 +1441,7 @@ async def _generate_banner_video(video_id: str, db_url: str):
                 _write_ops_log(raw_dir_banner, "banner")
                 log.info(f"Banner prepended for {video_id}")
             else:
-                error = f"FFmpeg concat failed: {concat_result.stderr[-300:]}"
+                error = f"FFmpeg concat failed: {concat_stderr[-300:]}"
                 log.error(f"Banner concat error: {error}")
                 await pool.execute(
                     "UPDATE video_banners SET status='error', error=$1 WHERE video_id=$2",

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import DOMPurify from 'dompurify';
-import { api } from '../api/client';
+import { api, toApiError } from '../api/client';
 import { HlsPlayer, type HlsPlayerHandle } from '../components/HlsPlayer';
 import { useAuth } from '../api/auth';
 import { PublishRequests } from '../components/PublishRequests';
@@ -257,8 +257,8 @@ export const AdminVideos: React.FC = () => {
       const result = await api.post<{ content: string }>('/admin/articles/beautify', { content });
       setter(result.content);
       showMsg('success', 'Content beautified with AI');
-    } catch (err: any) {
-      showMsg('error', 'Beautify failed: ' + err.message);
+    } catch (err: unknown) {
+      showMsg('error', 'Beautify failed: ' + toApiError(err));
     } finally {
       setBeautifying(null);
     }
@@ -269,8 +269,8 @@ export const AdminVideos: React.FC = () => {
       const data = await api.get<Video[]>('/admin/videos');
       setVideos(data);
       setSelected(prev => prev ? (data.find(v => v.id === prev.id) ?? prev) : null);
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setLoading(false);
     }
@@ -417,8 +417,8 @@ export const AdminVideos: React.FC = () => {
       await fetchVideos();
       selectVideo(v);
       showMsg('success', 'Video created');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -435,8 +435,8 @@ export const AdminVideos: React.FC = () => {
       setCourseForm({ title: '', slug: '', description: '' });
       await fetchCourses();
       showMsg('success', 'Course created');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -459,8 +459,8 @@ export const AdminVideos: React.FC = () => {
       setEditingCourse(null);
       await fetchCourses();
       showMsg('success', 'Course updated');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -489,8 +489,8 @@ export const AdminVideos: React.FC = () => {
       await fetchCourses();
       await fetchVideos();
       showMsg('success', 'Course deleted');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -532,8 +532,8 @@ export const AdminVideos: React.FC = () => {
       });
       await fetchVideos();
       showMsg('success', 'Metadata updated');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -554,8 +554,8 @@ export const AdminVideos: React.FC = () => {
       } else {
         showMsg('success', 'Video uploaded successfully');
       }
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setUploading(false);
     }
@@ -648,8 +648,8 @@ export const AdminVideos: React.FC = () => {
     try {
       await api.put(`/admin/videos/${selected.id}/transcript`, transcriptData);
       showMsg('success', 'Transcript saved');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setTranscriptSaving(false);
     }
@@ -661,8 +661,8 @@ export const AdminVideos: React.FC = () => {
       await api.post(`/admin/videos/${selected.id}/publish`);
       await fetchVideos();
       showMsg('success', 'Video published');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -675,8 +675,8 @@ export const AdminVideos: React.FC = () => {
         target_title: selected.title,
       });
       showMsg('success', 'Publish request submitted — reviewers have been notified');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -686,8 +686,8 @@ export const AdminVideos: React.FC = () => {
       await api.post(`/admin/videos/${selected.id}/unpublish`);
       await fetchVideos();
       showMsg('success', 'Video unpublished');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -698,8 +698,8 @@ export const AdminVideos: React.FC = () => {
       setSelected(null);
       await fetchVideos();
       showMsg('success', 'Video permanently deleted');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -710,8 +710,8 @@ export const AdminVideos: React.FC = () => {
       await fetchVideos();
       markEdited(selected.id);
       showMsg('success', 'Transcode queued');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -730,8 +730,8 @@ export const AdminVideos: React.FC = () => {
       await fetchVideos();
       markEdited(selected.id);
       showMsg('success', `Trim started: ${trimStart}s — ${trimEnd}s. Transcode when ready.`);
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setTrimming(false);
     }
@@ -752,8 +752,8 @@ export const AdminVideos: React.FC = () => {
       await fetchVideos();
       markEdited(selected.id);
       showMsg('success', `Cut started: removing ${trimStart}s — ${trimEnd}s. Transcode when ready.`);
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setTrimming(false);
     }
@@ -775,8 +775,8 @@ export const AdminVideos: React.FC = () => {
       await fetchVideos();
       markEdited(selected.id);
       showMsg('success', `Speed-up started: ${trimStart}s — ${trimEnd}s at ${speedFactor}x. Transcode when ready.`);
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setTrimming(false);
     }
@@ -806,8 +806,8 @@ export const AdminVideos: React.FC = () => {
       const chaps = await api.get<Chapter[]>(`/admin/videos/${selected.id}/chapters`);
       setChapters(chaps);
       showMsg('success', 'Chapter added');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -823,8 +823,8 @@ export const AdminVideos: React.FC = () => {
       setChapters((prev) => prev.map((c) => c.id === editingChapterId ? { ...c, ...editChapterForm } : c));
       setEditingChapterId(null);
       showMsg('success', 'Chapter updated');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -833,8 +833,8 @@ export const AdminVideos: React.FC = () => {
       await api.delete(`/admin/chapters/${chapterId}`);
       setChapters((prev) => prev.filter((c) => c.id !== chapterId));
       showMsg('success', 'Chapter deleted');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -846,8 +846,8 @@ export const AdminVideos: React.FC = () => {
         content: howtoContent,
       });
       showMsg('success', 'How-to guide saved');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -856,8 +856,8 @@ export const AdminVideos: React.FC = () => {
     try {
       await api.put(`/admin/videos/${selected.id}/quality`, { qualities: qualitySettings });
       showMsg('success', 'Quality settings saved');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -869,8 +869,8 @@ export const AdminVideos: React.FC = () => {
       const notes = await api.get<SeedNote[]>(`/admin/videos/${selected.id}/seed-notes`);
       setSeedNotes(notes);
       showMsg('success', 'Seed note added');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -879,8 +879,8 @@ export const AdminVideos: React.FC = () => {
       await api.delete(`/admin/seed-notes/${noteId}`);
       setSeedNotes((prev) => prev.filter((n) => n.id !== noteId));
       showMsg('success', 'Seed note deleted');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -892,8 +892,8 @@ export const AdminVideos: React.FC = () => {
       const result = await api.put<BannerConfig>(`/admin/videos/${selected.id}/banner`, bannerForm);
       setBannerConfig(result);
       showMsg('success', 'Banner config saved');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -927,8 +927,8 @@ export const AdminVideos: React.FC = () => {
           }
         } catch { /* ignore */ }
       }, 3000);
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -978,8 +978,8 @@ export const AdminVideos: React.FC = () => {
       await api.post(`/admin/videos/${selected.id}/cancel-job`);
       await fetchVideos();
       showMsg('success', 'Job cancelled');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -989,8 +989,8 @@ export const AdminVideos: React.FC = () => {
       const info = await api.get<{ files: any[]; hls_size: number; thumb_size: number }>(`/admin/videos/${selected.id}/storage-info`);
       setStorageInfo(info);
       setShowCleanup(true);
-    } catch (err: any) {
-      showMsg('error', 'Failed to load storage info: ' + err.message);
+    } catch (err: unknown) {
+      showMsg('error', 'Failed to load storage info: ' + toApiError(err));
     }
   };
 
@@ -1003,8 +1003,8 @@ export const AdminVideos: React.FC = () => {
       showMsg('success', `Cleaned up ${result.deleted.length} file(s), freed ${mb} MB`);
       setShowCleanup(false);
       setStorageInfo(null);
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setCleaningUp(false);
     }
@@ -3005,7 +3005,7 @@ export const AdminVideos: React.FC = () => {
                           const att = await api.upload<Attachment>(`/admin/videos/${selected.id}/attachments`, file);
                           setAttachments((prev) => [...prev, att]);
                         } catch (err: unknown) {
-                          alert(err instanceof Error ? err.message : 'Upload failed');
+                          alert(err instanceof Error ? toApiError(err) : 'Upload failed');
                         }
                         setAttachUploading(false);
                         e.target.value = '';
@@ -3084,8 +3084,8 @@ export const AdminVideos: React.FC = () => {
                         setEmailPreview(preview);
                         setEmailSubject(preview.subject);
                         showMsg('success', 'Email preview generated!');
-                      } catch (err: any) {
-                        showMsg('error', err.message);
+                      } catch (err: unknown) {
+                        showMsg('error', toApiError(err));
                       } finally {
                         setEmailGenerating(false);
                       }
@@ -3149,8 +3149,8 @@ export const AdminVideos: React.FC = () => {
                             document.body.removeChild(a);
                             URL.revokeObjectURL(url);
                             showMsg('success', 'Downloaded .eml — open with Outlook, Thunderbird, or drag into Gmail');
-                          } catch (err: any) {
-                            showMsg('error', err.message);
+                          } catch (err: unknown) {
+                            showMsg('error', toApiError(err));
                           }
                         }}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-medium rounded-lg transition-colors border border-blue-500/20"
@@ -3329,8 +3329,8 @@ export const AdminVideos: React.FC = () => {
                           setEmailPreview(null);
                           setEmailSubject('');
                           setEmailCustomContent('');
-                        } catch (err: any) {
-                          showMsg('error', err.message);
+                        } catch (err: unknown) {
+                          showMsg('error', toApiError(err));
                         } finally {
                           setEmailSending(false);
                           setEmailSendingProgress('');

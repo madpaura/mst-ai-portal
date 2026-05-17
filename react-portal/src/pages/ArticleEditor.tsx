@@ -8,7 +8,7 @@ import 'highlight.js/styles/github-dark.css';
 import '../styles/howto-markdown.css';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
-import { api } from '../api/client';
+import { api, toApiError } from '../api/client';
 
 interface Article {
   id: string;
@@ -70,7 +70,7 @@ export const ArticleEditor: React.FC = () => {
       }
       navigate('/articles');
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Save failed');
+      alert(err instanceof Error ? toApiError(err) : 'Save failed');
     }
     setSaving(false);
   };
@@ -85,7 +85,7 @@ export const ArticleEditor: React.FC = () => {
       });
       setForm((f) => ({ ...f, content: res.content }));
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Beautify failed — is the LLM service running?');
+      alert(err instanceof Error ? toApiError(err) : 'Beautify failed — is the LLM service running?');
     }
     setBeautifying(false);
   };

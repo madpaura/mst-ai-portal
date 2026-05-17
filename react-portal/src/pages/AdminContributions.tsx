@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { api } from '../api/client';
+import { api, toApiError } from '../api/client';
 import { useAuth } from '../api/auth';
 
 interface GuestInterest {
@@ -90,8 +90,8 @@ export const AdminContributions: React.FC = () => {
       await api.put('/settings/admin/contribute_guide_video_slug', { value: guideSlugInput.trim() });
       setGuideSlug(guideSlugInput.trim());
       showMsg('success', 'Guide video slug saved');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setSavingGuide(false);
     }
@@ -120,8 +120,8 @@ export const AdminContributions: React.FC = () => {
       setNewUser(BLANK_USER);
       setShowCreateForm(false);
       fetchUsers();
-    } catch (err: any) {
-      showMsg('error', err.message || 'Failed to create user');
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err) || 'Failed to create user');
     } finally {
       setCreatingUser(false);
     }
@@ -134,8 +134,8 @@ export const AdminContributions: React.FC = () => {
       await api.delete(`/auth/admin/users/${u.id}`);
       showMsg('success', `User "${u.username}" deleted`);
       fetchUsers();
-    } catch (err: any) {
-      showMsg('error', err.message || 'Failed to delete user');
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err) || 'Failed to delete user');
     } finally {
       setDeletingId(null);
     }
@@ -155,8 +155,8 @@ export const AdminContributions: React.FC = () => {
       setResetTarget(null);
       setResetPassword('');
       setCurrentPassword('');
-    } catch (err: any) {
-      showMsg('error', err.message || 'Failed to reset password');
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err) || 'Failed to reset password');
     } finally {
       setResetting(false);
     }
@@ -169,8 +169,8 @@ export const AdminContributions: React.FC = () => {
       await api.put(`/auth/admin/users/${u.id}/role?role=${newRole}`, {});
       setUsers(prev => prev.map(x => x.id === u.id ? { ...x, role: newRole } : x));
       showMsg('success', `${u.display_name} is now ${newRole}`);
-    } catch (err: any) {
-      showMsg('error', err.message || 'Failed to change role');
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err) || 'Failed to change role');
     } finally {
       setChangingRoleId(null);
     }
@@ -180,8 +180,8 @@ export const AdminContributions: React.FC = () => {
     try {
       const data = await api.get<ContributeRequest[]>('/auth/admin/contribute-requests');
       setRequests(data);
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setLoading(false);
     }
@@ -207,8 +207,8 @@ export const AdminContributions: React.FC = () => {
       await api.put(`/auth/admin/guest-interests/${id}`, { status, admin_note: guestNotes[id] || null });
       showMsg('success', `Marked as ${status}`);
       fetchGuestInterests();
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setGuestProcessing(null);
     }
@@ -223,8 +223,8 @@ export const AdminContributions: React.FC = () => {
       });
       showMsg('success', `Request ${status}`);
       await fetchRequests();
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setProcessing(null);
     }

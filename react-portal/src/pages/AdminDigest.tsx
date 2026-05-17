@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import DOMPurify from 'dompurify';
-import { api } from '../api/client';
+import { api, toApiError } from '../api/client';
 
 interface Announcement {
   id: string;
@@ -141,8 +141,8 @@ export const AdminDigest: React.FC = () => {
     try {
       const data = await api.get<Announcement[]>('/admin/announcements');
       setAnnouncements(data);
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setLoadingAnn(false);
     }
@@ -173,8 +173,8 @@ export const AdminDigest: React.FC = () => {
       }
       setShowAnnForm(false);
       await fetchAnnouncements();
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setSavingAnn(false);
     }
@@ -184,8 +184,8 @@ export const AdminDigest: React.FC = () => {
     try {
       await api.put(`/admin/announcements/${ann.id}`, { ...ann, is_active: !ann.is_active });
       setAnnouncements(prev => prev.map(a => a.id === ann.id ? { ...a, is_active: !a.is_active } : a));
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -195,8 +195,8 @@ export const AdminDigest: React.FC = () => {
       await api.delete(`/admin/announcements/${ann.id}`);
       showMsg('success', 'Announcement deleted');
       setAnnouncements(prev => prev.filter(a => a.id !== ann.id));
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -214,8 +214,8 @@ export const AdminDigest: React.FC = () => {
       });
       setPreviewWithSubject(data);
       showMsg('success', 'Digest preview generated!');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setGenerating(false);
       setGeneratingStep('');
@@ -247,8 +247,8 @@ export const AdminDigest: React.FC = () => {
       setDigestDays(data.days_covered);
       setCustomContent(data.custom_content || '');
       showMsg('success', `Loaded issue #${data.issue_number}`);
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setLoadingIssueId(null);
     }
@@ -273,8 +273,8 @@ export const AdminDigest: React.FC = () => {
       });
       setPreviewWithSubject(newPreview);
       showMsg('success', 'Regenerated digest with same settings');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
       setLoadingIssueId(null);
     } finally {
       setGenerating(false);
@@ -298,8 +298,8 @@ export const AdminDigest: React.FC = () => {
       });
       showMsg('success', `Issue #${preview.issue_number} saved`);
       await loadDigestIssues();
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setSaving(false);
     }
@@ -341,8 +341,8 @@ export const AdminDigest: React.FC = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       showMsg('success', 'Downloaded .eml — open with Outlook, Thunderbird, or drag into Gmail');
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
@@ -382,8 +382,8 @@ export const AdminDigest: React.FC = () => {
       setEditedSubject('');
       setCustomContent('');
       await loadDigestIssues();
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setSending(false);
     }
@@ -394,8 +394,8 @@ export const AdminDigest: React.FC = () => {
     try {
       const issues = await api.get<DigestIssue[]>('/admin/digest-issues');
       setDigestIssues(issues);
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     } finally {
       setLoadingIssues(false);
     }
@@ -407,8 +407,8 @@ export const AdminDigest: React.FC = () => {
       await api.delete(`/admin/digest-issues/${issueId}`);
       showMsg('success', 'Digest issue deleted');
       await loadDigestIssues();
-    } catch (err: any) {
-      showMsg('error', err.message);
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
     }
   };
 
