@@ -315,10 +315,11 @@ async def run_worker():
     pool = await asyncpg.create_pool(settings.DATABASE_URL, min_size=1, max_size=3)
 
     # Reclaim jobs stuck in 'processing' from a previous crashed/killed worker
-    reclaimed = await pool.fetchval(
+    result = await pool.execute(
         "UPDATE transcode_jobs SET status = 'pending', attempts = GREATEST(attempts - 1, 0) "
-        "WHERE status = 'processing' RETURNING count(*)"
+        "WHERE status = 'processing'"
     )
+    reclaimed = int(result.split()[-1]) if result else 0
     if reclaimed:
         log.warning(f"Reclaimed {reclaimed} stuck job(s) from previous worker instance")
 

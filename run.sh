@@ -138,12 +138,15 @@ start_backend() {
     fi
     
     source venv/bin/activate
-    
+
+    # Sync packages in case requirements.txt changed since last init
+    pip install -r requirements.txt -q
+
     if check_backend; then
         print_status "Backend is already running on port 8000"
         return
     fi
-    
+
     # Wait for port 8000 to be fully released before binding
     for i in $(seq 1 10); do
         if ! lsof -i :8000 -t >/dev/null 2>&1; then
