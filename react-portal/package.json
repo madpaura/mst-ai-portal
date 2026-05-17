@@ -23,7 +23,7 @@
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.13.1",
-    "react-virtualized-auto-sizer": "^1.0.24",
+    "react-virtualized-auto-sizer": "^2.0.3",
     "react-window": "^1.8.9",
     "recharts": "^3.8.0",
     "rehype-highlight": "^7.0.2",
