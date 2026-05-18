@@ -6,6 +6,7 @@ const AUTH_MODE = import.meta.env.VITE_AUTH_MODE || 'open';
 import { AuthProvider, useAuth } from './api/auth';
 import { ThemeProvider } from './context/theme';
 import { AdminLayout } from './components/AdminLayout';
+import { AssistantWidget } from './components/AssistantWidget';
 
 const Solutions        = React.lazy(() => import('./pages/Solutions').then(m => ({ default: m.Solutions })));
 const Marketplace      = React.lazy(() => import('./pages/Marketplace').then(m => ({ default: m.Marketplace })));
@@ -98,6 +99,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </Suspense>
+        <AssistantWidget />
         </SamlGuard>
       </AuthProvider>
     </BrowserRouter>
