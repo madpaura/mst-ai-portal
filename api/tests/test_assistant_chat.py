@@ -26,32 +26,32 @@ class TestChatSseGenerator:
     """_generate() produces correctly-formatted SSE event strings."""
 
     def test_emits_token_then_done(self):
-        """Happy path: tokens from LLM become token events, stream ends with done."""
+        """Happy path: LLM text response is fake-streamed as token events."""
         from assistant.router import _generate
+        from assistant.llm import LLMResponse
 
-        async def mock_stream(*_args, **_kwargs):
-            yield "Hello "
-            yield "world"
+        async def mock_llm(*_args, **_kwargs):
+            return LLMResponse(text="Hello world", tool_calls=[])
 
-        with patch("assistant.router.stream_llm_response", mock_stream):
-            chunks = _run(_collect(_generate([], object(), {})))
+        with patch("assistant.router.call_llm_with_tools", mock_llm):
+            chunks = _run(_collect(_generate([], {}, {})))
 
         events = [_parse_sse(c) for c in chunks]
-        assert [e["type"] for e in events] == ["token", "token", "done"]
-        assert events[0]["content"] == "Hello "
-        assert events[1]["content"] == "world"
+        token_events = [e for e in events if e["type"] == "token"]
+        assert len(token_events) > 0
+        assert events[-1]["type"] == "done"
+        full = "".join(e["content"] for e in token_events)
+        assert "Hello" in full
 
-    # Cycle 2 test lives here — added after cycle 1 is green
     def test_emits_error_on_llm_exception(self):
         """When LLM raises, _generate emits a single error event."""
         from assistant.router import _generate
 
-        async def mock_stream_fail(*_args, **_kwargs):
+        async def mock_llm_fail(*_args, **_kwargs):
             raise RuntimeError("LLM not available")
-            yield  # make it an async generator
 
-        with patch("assistant.router.stream_llm_response", mock_stream_fail):
-            chunks = _run(_collect(_generate([], object(), {})))
+        with patch("assistant.router.call_llm_with_tools", mock_llm_fail):
+            chunks = _run(_collect(_generate([], {}, {})))
 
         events = [_parse_sse(c) for c in chunks]
         assert len(events) == 1

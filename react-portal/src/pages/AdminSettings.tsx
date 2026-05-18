@@ -48,6 +48,10 @@ export const AdminSettings: React.FC = () => {
   const { portalTheme, applyPortalTheme } = useTheme();
   const [themeSaving, setThemeSaving] = useState(false);
 
+  // Assistant system prompt
+  const [assistantPrompt, setAssistantPrompt] = useState('');
+  const [assistantPromptSaving, setAssistantPromptSaving] = useState(false);
+
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
@@ -118,13 +122,21 @@ export const AdminSettings: React.FC = () => {
     } catch { }
   }, []);
 
+  const fetchAssistantConfig = useCallback(async () => {
+    try {
+      const data = await api.get<{ system_prompt: string }>('/admin/assistant-config');
+      setAssistantPrompt(data?.system_prompt || '');
+    } catch { }
+  }, []);
+
   useEffect(() => {
     fetchSmtpSettings();
     fetchTranscriptConfig();
     fetchContactEmail();
     fetchCacheStats();
     fetchOllamaConfig();
-  }, [fetchSmtpSettings, fetchTranscriptConfig, fetchContactEmail, fetchCacheStats, fetchOllamaConfig]);
+    fetchAssistantConfig();
+  }, [fetchSmtpSettings, fetchTranscriptConfig, fetchContactEmail, fetchCacheStats, fetchOllamaConfig, fetchAssistantConfig]);
 
   const handleOllamaSave = async () => {
     setOllamaSaving(true);
@@ -812,6 +824,76 @@ export const AdminSettings: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ── AI Assistant ──────────────────────────────────────────── */}
+      <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-100 dark:border-white/5 p-6 mb-8">
+        <div className="flex items-center gap-3 mb-5">
+          <span className="material-symbols-outlined text-primary">smart_toy</span>
+          <div>
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">AI Assistant</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">System prompt for the floating chat widget — overrides the built-in default</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {/* Default prompt hint */}
+          <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-primary/5 border border-primary/20">
+            <span className="material-symbols-outlined text-primary text-sm mt-0.5">info</span>
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              Default: <span className="font-mono text-slate-500 dark:text-slate-400">You are a helpful AI assistant for the MST AI Portal. You help users find content, check statuses, and learn. Be concise and direct.</span>
+            </p>
+          </div>
+
+          {/* System prompt textarea */}
+          <div>
+            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+              Custom System Prompt
+            </label>
+            <textarea
+              value={assistantPrompt}
+              onChange={e => setAssistantPrompt(e.target.value)}
+              rows={6}
+              placeholder={"You are a helpful AI assistant for the MST AI Portal.\nYou help users find content, check statuses, and learn.\nBe concise and direct.\nIf asked how to install something, give the install command and a link."}
+              className="w-full px-3 py-2.5 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm font-mono placeholder-slate-400 focus:border-primary outline-none resize-y leading-relaxed"
+            />
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 text-right">
+              {assistantPrompt.length > 0 ? `${assistantPrompt.length} chars` : 'Leave blank to use the default prompt'}
+            </p>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-between pt-1">
+            <button
+              onClick={() => setAssistantPrompt('')}
+              disabled={assistantPrompt.length === 0}
+              className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 disabled:opacity-30 transition-colors underline underline-offset-2"
+            >
+              Reset to default
+            </button>
+            <button
+              onClick={async () => {
+                setAssistantPromptSaving(true);
+                try {
+                  await api.put('/admin/assistant-config', { system_prompt: assistantPrompt });
+                  showMsg('success', 'Assistant system prompt saved');
+                } catch (err: unknown) {
+                  showMsg('error', toApiError(err));
+                } finally {
+                  setAssistantPromptSaving(false);
+                }
+              }}
+              disabled={assistantPromptSaving}
+              className="flex items-center gap-2 px-5 py-2 bg-primary hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-bold rounded-lg transition-colors"
+            >
+              <span className={`material-symbols-outlined text-sm ${assistantPromptSaving ? 'animate-spin' : ''}`}>
+                {assistantPromptSaving ? 'progress_activity' : 'save'}
+              </span>
+              {assistantPromptSaving ? 'Saving…' : 'Save Prompt'}
+            </button>
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 };
