@@ -66,6 +66,8 @@ from memes.admin_router import router as memes_admin_router
 from search.router import router as search_router
 from artifacts.admin_router import router as artifacts_admin_router
 from publish.router import router as publish_router
+from assistant.router import router as assistant_router
+from assistant.admin_router import router as assistant_admin_router
 
 
 @asynccontextmanager
@@ -179,6 +181,8 @@ app.include_router(memes_admin_router, prefix="/admin", tags=["admin-memes"])
 app.include_router(search_router, prefix="/search", tags=["search"])
 app.include_router(artifacts_admin_router, prefix="/admin", tags=["admin-artifacts-hub"])
 app.include_router(publish_router, prefix="/admin", tags=["admin-publish"])
+app.include_router(assistant_router, prefix="/assistant", tags=["assistant"])
+app.include_router(assistant_admin_router, prefix="/admin", tags=["admin-assistant"])
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
