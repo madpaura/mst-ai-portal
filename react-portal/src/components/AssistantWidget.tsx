@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../api/auth';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -52,13 +54,40 @@ export const AssistantWidget: React.FC<AssistantWidgetProps> = ({ videoSlug }) =
     video_slug: videoSlug,
   };
 
+  const compact = useCallback(async (msgs: Message[]): Promise<Message[]> => {
+    try {
+      const resp = await fetch(`${API_BASE}/assistant/compact`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          messages: msgs.map(m => ({ role: m.role, content: m.content })),
+        }),
+      });
+      if (!resp.ok) return msgs;
+      const data = await resp.json() as { summary: string };
+      if (!data.summary) return msgs;
+      return [{ role: 'assistant', content: `[Context summary: ${data.summary}]` }];
+    } catch {
+      return msgs;
+    }
+  }, []);
+
   const send = useCallback(async () => {
     const text = input.trim();
     if (!text || streaming) return;
 
     setInput('');
     const userMsg: Message = { role: 'user', content: text };
-    const nextMessages = [...messages, userMsg];
+
+    // Compact if history exceeds 20 messages
+    let history = messages;
+    if (history.length >= 20) {
+      history = await compact(history);
+      setMessages(history);
+    }
+
+    const nextMessages = [...history, userMsg];
     setMessages(nextMessages);
 
     // Placeholder for streaming assistant response
@@ -158,7 +187,7 @@ export const AssistantWidget: React.FC<AssistantWidgetProps> = ({ videoSlug }) =
       setStreaming(false);
       abortRef.current = null;
     }
-  }, [input, messages, streaming, pageContext]);
+  }, [input, messages, streaming, pageContext, compact]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -210,21 +239,69 @@ export const AssistantWidget: React.FC<AssistantWidgetProps> = ({ videoSlug }) =
             )}
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed ${
-                  msg.role === 'user'
-                    ? 'bg-primary text-white'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200'
-                }`}>
-                  {msg.toolHint && (
-                    <p className="text-xs text-slate-400 dark:text-slate-500 mb-1 flex items-center gap-1">
-                      <span className="material-symbols-outlined text-xs animate-spin">progress_activity</span>
-                      {msg.toolHint}
-                    </p>
-                  )}
-                  {msg.content || (msg.streaming && !msg.toolHint ? (
-                    <span className="inline-block w-2 h-4 bg-current opacity-70 animate-pulse rounded-sm" />
-                  ) : null)}
-                </div>
+                {msg.role === 'user' ? (
+                  <div className="max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed bg-primary text-white">
+                    {msg.content}
+                  </div>
+                ) : (
+                  <div className="max-w-[92%] text-sm">
+                    {msg.toolHint && (
+                      <p className="text-xs text-slate-400 dark:text-slate-500 mb-2 flex items-center gap-1">
+                        <span className="material-symbols-outlined text-xs animate-spin">progress_activity</span>
+                        {msg.toolHint}
+                      </p>
+                    )}
+                    {msg.content ? (
+                      <div className="assistant-md rounded-xl px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 leading-relaxed">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            h3: ({ children }) => (
+                              <h3 className="font-semibold text-slate-900 dark:text-white text-sm mt-2 mb-0.5 first:mt-0">{children}</h3>
+                            ),
+                            p: ({ children }) => (
+                              <p className="mb-1.5 last:mb-0">{children}</p>
+                            ),
+                            a: ({ href, children }) => (
+                              <a href={href} target="_blank" rel="noopener noreferrer"
+                                className="text-primary hover:underline font-medium">{children}</a>
+                            ),
+                            ul: ({ children }) => (
+                              <ul className="my-1 space-y-1 pl-3">{children}</ul>
+                            ),
+                            ol: ({ children }) => (
+                              <ol className="my-1 space-y-1 pl-4 list-decimal">{children}</ol>
+                            ),
+                            li: ({ children }) => (
+                              <li className="text-sm leading-relaxed">{children}</li>
+                            ),
+                            strong: ({ children }) => (
+                              <strong className="font-semibold text-slate-900 dark:text-white">{children}</strong>
+                            ),
+                            code: ({ inline, children }: { inline?: boolean; children?: React.ReactNode }) =>
+                              inline ? (
+                                <code className="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 font-mono text-xs">{children}</code>
+                              ) : (
+                                <pre className="mt-1.5 mb-1 p-2.5 rounded-lg bg-slate-200 dark:bg-slate-900 overflow-x-auto">
+                                  <code className="font-mono text-xs text-slate-800 dark:text-slate-200">{children}</code>
+                                </pre>
+                              ),
+                            blockquote: ({ children }) => (
+                              <blockquote className="border-l-2 border-primary/40 pl-2 my-1 text-slate-500 dark:text-slate-400 italic">{children}</blockquote>
+                            ),
+                            hr: () => <hr className="my-2 border-slate-200 dark:border-slate-700" />,
+                          }}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (msg.streaming && !msg.toolHint ? (
+                      <div className="rounded-xl px-3 py-2 bg-slate-100 dark:bg-slate-800">
+                        <span className="inline-block w-2 h-4 bg-slate-400 opacity-70 animate-pulse rounded-sm" />
+                      </div>
+                    ) : null)}
+                  </div>
+                )}
               </div>
             ))}
           </div>

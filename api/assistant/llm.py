@@ -1,10 +1,240 @@
-"""LLM streaming for the assistant — text-only (no tool calling in this slice)."""
+"""LLM client for the assistant — streaming and tool-calling across providers."""
 import json
+import uuid
 import httpx
+from dataclasses import dataclass, field
 from typing import AsyncIterator
 
 from articles.llm import get_llm_settings
 from config import settings
+
+
+# ── Data types ────────────────────────────────────────────────────────────────
+
+@dataclass
+class ToolCall:
+    id: str
+    name: str
+    arguments: dict
+
+
+@dataclass
+class LLMResponse:
+    text: str | None
+    tool_calls: list[ToolCall] = field(default_factory=list)
+
+
+# ── Provider response parsers ─────────────────────────────────────────────────
+
+def parse_ollama_response(response: dict) -> LLMResponse:
+    """Normalise an Ollama /api/chat response into LLMResponse."""
+    msg = response.get("message", {})
+    raw_calls = msg.get("tool_calls") or []
+    tool_calls = []
+    for tc in raw_calls:
+        fn = tc.get("function", {})
+        tool_calls.append(ToolCall(
+            id=str(uuid.uuid4()),
+            name=fn["name"],
+            arguments=fn.get("arguments") or {},
+        ))
+    text = msg.get("content") or None
+    if tool_calls:
+        text = None
+    return LLMResponse(text=text, tool_calls=tool_calls)
+
+
+def parse_openai_response(response: dict) -> LLMResponse:
+    """Normalise an OpenAI /v1/chat/completions response into LLMResponse."""
+    choice = response["choices"][0]
+    msg = choice["message"]
+    raw_calls = msg.get("tool_calls") or []
+    tool_calls = []
+    for tc in raw_calls:
+        args = tc["function"]["arguments"]
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except json.JSONDecodeError:
+                args = {}
+        tool_calls.append(ToolCall(id=tc["id"], name=tc["function"]["name"], arguments=args))
+    text = msg.get("content")
+    if tool_calls:
+        text = None
+    return LLMResponse(text=text, tool_calls=tool_calls)
+
+
+def parse_anthropic_response(response: dict) -> LLMResponse:
+    """Normalise an Anthropic /v1/messages response into LLMResponse."""
+    tool_calls = []
+    text = None
+    for block in response.get("content", []):
+        if block["type"] == "tool_use":
+            tool_calls.append(ToolCall(
+                id=block["id"],
+                name=block["name"],
+                arguments=block.get("input") or {},
+            ))
+        elif block["type"] == "text":
+            text = block["text"]
+    return LLMResponse(text=text, tool_calls=tool_calls)
+
+
+# ── Schema / message converters ───────────────────────────────────────────────
+
+def to_anthropic_tools(tools: list[dict]) -> list[dict]:
+    """Convert OpenAI-format tool schemas to Anthropic format."""
+    result = []
+    for t in tools:
+        fn = t["function"]
+        result.append({
+            "name": fn["name"],
+            "description": fn.get("description", ""),
+            "input_schema": fn.get("parameters", {"type": "object", "properties": {}}),
+        })
+    return result
+
+
+def to_anthropic_messages(messages: list[dict]) -> list[dict]:
+    """Convert internal OpenAI-format messages to Anthropic message format."""
+    result = []
+    i = 0
+    while i < len(messages):
+        msg = messages[i]
+        role = msg["role"]
+
+        if role == "system":
+            i += 1
+            continue
+
+        if role == "tool":
+            # Batch consecutive tool results into one user message
+            blocks = []
+            while i < len(messages) and messages[i]["role"] == "tool":
+                m = messages[i]
+                blocks.append({
+                    "type": "tool_result",
+                    "tool_use_id": m["tool_call_id"],
+                    "content": m["content"],
+                })
+                i += 1
+            result.append({"role": "user", "content": blocks})
+            continue
+
+        if role == "assistant" and msg.get("tool_calls"):
+            content_blocks = []
+            if msg.get("content"):
+                content_blocks.append({"type": "text", "text": msg["content"]})
+            for tc in msg["tool_calls"]:
+                content_blocks.append({
+                    "type": "tool_use",
+                    "id": tc["id"],
+                    "name": tc["function"]["name"],
+                    "input": tc["function"]["arguments"],
+                })
+            result.append({"role": "assistant", "content": content_blocks})
+            i += 1
+            continue
+
+        result.append({"role": role, "content": msg.get("content") or ""})
+        i += 1
+    return result
+
+
+# ── Non-streaming tool call ───────────────────────────────────────────────────
+
+async def call_llm_with_tools(
+    messages: list[dict],
+    tools: list[dict],
+    system_prompt: str,
+) -> LLMResponse:
+    """Non-streaming LLM call with optional tool schemas. Returns LLMResponse."""
+    llm = await get_llm_settings()
+    provider = llm["provider"]
+    model = llm["model"]
+    api_key = llm.get("api_key")
+    ollama_url = llm.get("ollama_url")
+
+    if provider == "ollama":
+        raw = await _call_ollama_with_tools(messages, tools, model, ollama_url, system_prompt)
+        return parse_ollama_response(raw)
+    elif provider == "openai":
+        if not api_key:
+            raise RuntimeError("OpenAI API key not configured in Settings > Marketplace")
+        raw = await _call_openai_with_tools(messages, tools, model, api_key, system_prompt)
+        return parse_openai_response(raw)
+    elif provider == "anthropic":
+        if not api_key:
+            raise RuntimeError("Anthropic API key not configured in Settings > Marketplace")
+        ant_msgs = to_anthropic_messages(messages)
+        ant_tools = to_anthropic_tools(tools) if tools else []
+        raw = await _call_anthropic_with_tools(ant_msgs, ant_tools, model, api_key, system_prompt)
+        return parse_anthropic_response(raw)
+    else:
+        raise RuntimeError(f"Unknown LLM provider: {provider}")
+
+
+async def _call_ollama_with_tools(messages, tools, model, ollama_url, system):
+    url = (ollama_url or settings.OLLAMA_BASE_URL).rstrip("/")
+    chat_messages = [{"role": "system", "content": system}] + messages
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        if not model:
+            tags = await client.get(f"{url}/api/tags")
+            tags.raise_for_status()
+            models = [m["name"] for m in tags.json().get("models", [])]
+            if not models:
+                raise RuntimeError("No Ollama models available.")
+            model = models[0]
+        body: dict = {"model": model, "messages": chat_messages, "stream": False}
+        if tools:
+            body["tools"] = tools
+        resp = await client.post(f"{url}/api/chat", json=body)
+        if resp.status_code == 404:
+            raise RuntimeError(f"Ollama model '{model}' not found.")
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def _call_openai_with_tools(messages, tools, model, api_key, system):
+    chat_messages = [{"role": "system", "content": system}] + messages
+    body: dict = {"model": model or "gpt-4o-mini", "messages": chat_messages, "temperature": 0.7}
+    if tools:
+        body["tools"] = tools
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json=body,
+        )
+        if resp.status_code == 401:
+            raise RuntimeError("OpenAI API key is invalid or expired.")
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def _call_anthropic_with_tools(messages, tools, model, api_key, system):
+    body: dict = {
+        "model": model or "claude-sonnet-4-6",
+        "max_tokens": 4096,
+        "system": system,
+        "messages": messages,
+    }
+    if tools:
+        body["tools"] = tools
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json=body,
+        )
+        if resp.status_code == 401:
+            raise RuntimeError("Anthropic API key is invalid.")
+        resp.raise_for_status()
+        return resp.json()
 
 
 async def stream_llm_response(
@@ -38,17 +268,34 @@ async def stream_llm_response(
         raise RuntimeError(f"Unknown LLM provider: {provider}")
 
 
-def _build_system_prompt(page_context: dict, user: dict) -> str:
-    base = (
-        "You are a helpful AI assistant for the MST AI Portal. "
-        "You help users find content, check statuses, and learn. "
-        "Be concise and direct. "
-        "If asked how to install something, give the install command and a link."
+def _build_system_prompt(page_context: dict, user: dict, custom_system_prompt: str | None = None) -> str:
+    base = custom_system_prompt or (
+        "You are a portal assistant for the MST AI Portal. "
+        "You ONLY answer using data returned by tools. "
+        "You have NO general knowledge and must NOT use it.\n\n"
+        "## Strict rules — follow exactly\n"
+        "1. ALWAYS call a tool first. Never answer without calling a tool.\n"
+        "2. Your response MUST be based solely on what the tool returned. "
+        "Do not add, infer, or guess anything beyond the tool result.\n"
+        "3. If a tool returns no results or `found: false`, reply only: "
+        "\"I couldn't find anything matching that in the portal.\"\n"
+        "4. Never explain how tools work. Never suggest the user run queries themselves. "
+        "Never show JSON. Just call the tool and present the result.\n"
+        "5. Do not use your training data to answer portal questions. "
+        "If no tool covers the question, reply: "
+        "\"I can only answer questions about portal content, videos, articles, solutions, "
+        "marketplace components, and your request statuses.\"\n\n"
+        "## Formatting tool results\n"
+        "Present each result as a card:\n"
+        "### [Title](url)\n"
+        "**Type** · Category — one-line description.\n\n"
+        "For install commands use a fenced bash block.\n"
+        "For status results use a simple list: `- **Field:** value`."
     )
     path = page_context.get("path", "") if isinstance(page_context, dict) else ""
     title = page_context.get("title", "") if isinstance(page_context, dict) else ""
     if title:
-        base += f"\n\nThe user is currently viewing: {title} ({path})"
+        base += f"\n\nCurrent page: **{title}** (`{path}`)"
     return base
 
 
