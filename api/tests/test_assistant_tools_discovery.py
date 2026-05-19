@@ -19,29 +19,34 @@ def _make_db(rows=None, row=None, val=None):
 # ── Tool registry / role gating ───────────────────────────────────────────────
 
 class TestToolRegistry:
-    def test_get_tools_for_user_role_returns_15_schemas(self):
+    def test_get_tools_for_user_role_returns_16_schemas(self):
         from assistant.tools import get_tools_for_role
         tools = get_tools_for_role("user")
-        assert len(tools) == 15
+        assert len(tools) == 16
         names = {t["function"]["name"] for t in tools}
         assert "search_videos" in names
         assert "global_search" in names
+        assert "list_all_videos" in names
         # content-only tools must NOT appear
         assert "get_my_articles" not in names
         assert "get_video_job_status" not in names
+        assert "list_videos_pending_publish" not in names
 
-    def test_get_tools_for_content_role_returns_21_schemas(self):
+    def test_get_tools_for_content_role_returns_23_schemas(self):
         from assistant.tools import get_tools_for_role
         tools = get_tools_for_role("content")
-        assert len(tools) == 21
+        assert len(tools) == 23
         names = {t["function"]["name"] for t in tools}
         assert "get_my_articles" in names
         assert "get_video_job_status" in names
+        assert "list_videos_pending_publish" in names
 
-    def test_get_tools_for_admin_role_returns_21_schemas(self):
+    def test_get_tools_for_admin_role_returns_23_schemas(self):
         from assistant.tools import get_tools_for_role
         tools = get_tools_for_role("admin")
-        assert len(tools) == 21
+        assert len(tools) == 23
+        names = {t["function"]["name"] for t in tools}
+        assert "list_videos_pending_publish" in names
 
     def test_tool_schemas_are_openai_function_format(self):
         from assistant.tools import get_tools_for_role
@@ -189,6 +194,43 @@ class TestGetForgeComponent:
 
 
 # ── global_search ─────────────────────────────────────────────────────────────
+
+class TestListAllVideos:
+    def _row(self, title="Python Basics", slug="python-basics", category="ai"):
+        r = MagicMock()
+        r.__getitem__ = lambda s, k: {
+            "title": title, "slug": slug, "category": category,
+            "description": "A video about " + title,
+            "thumbnail": "/media/thumb.jpg",
+        }[k]
+        return r
+
+    def test_returns_all_published_videos(self):
+        from assistant.tools import list_all_videos
+        rows = [self._row("Python Basics", "python-basics"), self._row("Intro to LLMs", "intro-to-llms", "ml")]
+        db = _make_db(rows=rows)
+        with patch("assistant.tools.get_db", AsyncMock(return_value=db)):
+            result = _run(list_all_videos(user_id="u1", user_role="user"))
+        assert result["found"] is True
+        assert len(result["results"]) == 2
+        slugs = {v["slug"] for v in result["results"]}
+        assert "python-basics" in slugs
+        assert "intro-to-llms" in slugs
+
+    def test_returns_not_found_when_no_videos(self):
+        from assistant.tools import list_all_videos
+        db = _make_db(rows=[])
+        with patch("assistant.tools.get_db", AsyncMock(return_value=db)):
+            result = _run(list_all_videos(user_id="u1", user_role="user"))
+        assert result["found"] is False
+
+    def test_includes_thumbnail_in_results(self):
+        from assistant.tools import list_all_videos
+        db = _make_db(rows=[self._row()])
+        with patch("assistant.tools.get_db", AsyncMock(return_value=db)):
+            result = _run(list_all_videos(user_id="u1", user_role="user"))
+        assert result["results"][0]["thumbnail"] == "/media/thumb.jpg"
+
 
 class TestGlobalSearch:
     def test_returns_mixed_results(self):

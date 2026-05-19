@@ -252,25 +252,46 @@ export const AssistantWidget: React.FC<AssistantWidgetProps> = ({ videoSlug }) =
                       </p>
                     )}
                     {msg.content ? (
-                      <div className="assistant-md rounded-xl px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 leading-relaxed">
+                      <div className="assistant-md space-y-1 text-slate-800 dark:text-slate-200">
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
+                            // Result card title
                             h3: ({ children }) => (
-                              <h3 className="font-semibold text-slate-900 dark:text-white text-sm mt-2 mb-0.5 first:mt-0">{children}</h3>
+                              <h3 className="font-semibold text-slate-900 dark:text-white text-sm mt-3 mb-0.5 first:mt-0">{children}</h3>
                             ),
                             p: ({ children }) => (
-                              <p className="mb-1.5 last:mb-0">{children}</p>
+                              <p className="mb-1 last:mb-0 leading-relaxed">{children}</p>
                             ),
-                            a: ({ href, children }) => (
-                              <a href={href} target="_blank" rel="noopener noreferrer"
-                                className="text-primary hover:underline font-medium">{children}</a>
-                            ),
+                            // Internal links navigate in-app; external open new tab
+                            a: ({ href, children }) => {
+                              const isInternal = href?.startsWith('/');
+                              return isInternal ? (
+                                <a href={href} className="text-primary hover:underline font-medium">{children}</a>
+                              ) : (
+                                <a href={href} target="_blank" rel="noopener noreferrer"
+                                  className="text-primary hover:underline font-medium">{children}</a>
+                              );
+                            },
+                            // Thumbnail images — prepend API_BASE for relative paths
+                            img: ({ src, alt }) => {
+                              if (!src) return null;
+                              const fullSrc = src.startsWith('http') ? src : `${API_BASE}${src}`;
+                              return (
+                                <img
+                                  src={fullSrc}
+                                  alt={alt || ''}
+                                  className="w-full rounded-lg object-cover mt-1 mb-0.5 bg-slate-200 dark:bg-slate-700"
+                                  style={{ maxHeight: '110px' }}
+                                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                />
+                              );
+                            },
                             ul: ({ children }) => (
-                              <ul className="my-1 space-y-1 pl-3">{children}</ul>
+                              <ul className="my-1 space-y-0.5 pl-3">{children}</ul>
                             ),
                             ol: ({ children }) => (
-                              <ol className="my-1 space-y-1 pl-4 list-decimal">{children}</ol>
+                              <ol className="my-1 space-y-0.5 pl-4 list-decimal">{children}</ol>
                             ),
                             li: ({ children }) => (
                               <li className="text-sm leading-relaxed">{children}</li>
@@ -286,9 +307,6 @@ export const AssistantWidget: React.FC<AssistantWidgetProps> = ({ videoSlug }) =
                                   <code className="font-mono text-xs text-slate-800 dark:text-slate-200">{children}</code>
                                 </pre>
                               ),
-                            blockquote: ({ children }) => (
-                              <blockquote className="border-l-2 border-primary/40 pl-2 my-1 text-slate-500 dark:text-slate-400 italic">{children}</blockquote>
-                            ),
                             hr: () => <hr className="my-2 border-slate-200 dark:border-slate-700" />,
                           }}
                         >
