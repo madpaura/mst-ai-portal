@@ -11,12 +11,20 @@ _USER_TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "search_videos",
-            "description": "Search published videos and courses by title, description, or topic",
+            "description": "Search published videos by title, topic, or keyword. Use for specific queries like 'python', 'machine learning', 'claude code'.",
             "parameters": {
                 "type": "object",
-                "properties": {"query": {"type": "string", "description": "Search terms"}},
+                "properties": {"query": {"type": "string", "description": "Search terms — must be a specific topic, not 'all' or 'list'"}},
                 "required": ["query"],
             },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_all_videos",
+            "description": "List all published videos in the portal. Use for 'list all videos', 'show all videos', 'what videos are available', 'browse videos' queries.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     {
@@ -184,8 +192,16 @@ _CONTENT_ONLY_SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "list_videos_pending_publish",
+            "description": "List videos that are NOT yet published and ready to go live — use for 'ready to publish', 'pending publish', 'unpublished videos', 'videos waiting to publish', 'any video in ready state', 'video state ready' queries. Admins see all; content users see their own.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_my_publish_requests",
-            "description": "List all publish requests submitted by the current user — use this for 'ready to publish', 'pending approval', 'approved videos', or 'what's waiting to go live' queries",
+            "description": "List publish approval requests submitted by the current user with their review status",
             "parameters": {"type": "object", "properties": {}},
         },
     },
@@ -259,6 +275,8 @@ TOOL_MESSAGES: dict[str, str] = {
     "get_forge_component": "Getting component details…",
     "get_forge_component_instructions": "Getting install instructions…",
     "global_search": "Searching portal…",
+    "list_all_videos": "Loading all videos…",
+    "list_videos_pending_publish": "Checking unpublished videos…",
     "get_my_articles": "Loading your articles…",
     "get_my_publish_requests": "Checking your publish requests…",
     "get_publish_request_status": "Checking request status…",
@@ -293,12 +311,21 @@ async def dispatch_tool(name: str, arguments: dict, user: dict) -> dict:
 
 # ── User-role tools ───────────────────────────────────────────────────────────
 
+def _strip_md(text: str, max_len: int = 120) -> str:
+    """Strip leading markdown headings and trim to max_len chars."""
+    import re
+    text = re.sub(r'^#+\s+[^\n]*\n*', '', text.strip(), flags=re.MULTILINE)
+    text = re.sub(r'\*+([^*]+)\*+', r'\1', text)
+    return text.strip()[:max_len]
+
+
 @_tool
 async def search_videos(query: str, user_id: str, user_role: str) -> dict:
     db = await get_db()
     rows = await db.fetch(
         """
-        SELECT title, slug, category, COALESCE(description,'') AS description
+        SELECT title, slug, category, COALESCE(description,'') AS description,
+               COALESCE(custom_thumbnail, thumbnail) AS thumbnail
         FROM videos
         WHERE is_published = true AND is_active = true
           AND to_tsvector('english', title || ' ' || COALESCE(description,'') || ' ' || category)
@@ -316,7 +343,35 @@ async def search_videos(query: str, user_id: str, user_role: str) -> dict:
         "found": True,
         "results": [
             {"title": r["title"], "slug": r["slug"], "category": r["category"],
-             "description": (r["description"] or "")[:120], "url": f"/ignite/{r['slug']}"}
+             "description": _strip_md(r["description"] or ""),
+             "thumbnail": r["thumbnail"],
+             "url": f"/ignite/{r['slug']}"}
+            for r in rows
+        ],
+    }
+
+
+@_tool
+async def list_all_videos(user_id: str, user_role: str) -> dict:
+    db = await get_db()
+    rows = await db.fetch(
+        """
+        SELECT title, slug, category, COALESCE(description,'') AS description,
+               COALESCE(custom_thumbnail, thumbnail) AS thumbnail
+        FROM videos
+        WHERE is_published = true AND is_active = true
+        ORDER BY sort_order, title LIMIT 20
+        """
+    )
+    if not rows:
+        return {"found": False, "message": "No published videos found"}
+    return {
+        "found": True,
+        "results": [
+            {"title": r["title"], "slug": r["slug"], "category": r["category"],
+             "description": _strip_md(r["description"] or ""),
+             "thumbnail": r["thumbnail"],
+             "url": f"/ignite/{r['slug']}"}
             for r in rows
         ],
     }
@@ -725,6 +780,45 @@ async def get_my_publish_requests(user_id: str, user_role: str) -> dict:
              "status": r["status"], "note": r["note"],
              "submitted": str(r["created_at"])[:10] if r["created_at"] else None,
              "reviewed": str(r["reviewed_at"])[:10] if r["reviewed_at"] else None}
+            for r in rows
+        ],
+    }
+
+
+@_tool
+async def list_videos_pending_publish(user_id: str, user_role: str) -> dict:
+    db = await get_db()
+    if user_role == "admin":
+        rows = await db.fetch(
+            """
+            SELECT v.title, v.slug, v.category, u.username AS uploaded_by,
+                   COALESCE(v.custom_thumbnail, v.thumbnail) AS thumbnail
+            FROM videos v
+            LEFT JOIN users u ON u.id = v.uploaded_by
+            WHERE v.is_published = false AND v.is_active = true
+            ORDER BY v.created_at DESC LIMIT 20
+            """
+        )
+    else:
+        rows = await db.fetch(
+            """
+            SELECT v.title, v.slug, v.category, u.username AS uploaded_by,
+                   COALESCE(v.custom_thumbnail, v.thumbnail) AS thumbnail
+            FROM videos v
+            LEFT JOIN users u ON u.id = v.uploaded_by
+            WHERE v.is_published = false AND v.is_active = true AND v.uploaded_by = $1
+            ORDER BY v.created_at DESC LIMIT 20
+            """,
+            user_id,
+        )
+    if not rows:
+        return {"found": False, "message": "No unpublished videos found"}
+    return {
+        "found": True,
+        "results": [
+            {"title": r["title"], "slug": r["slug"], "category": r["category"],
+             "uploaded_by": r["uploaded_by"], "thumbnail": r["thumbnail"],
+             "url": f"/ignite/{r['slug']}"}
             for r in rows
         ],
     }

@@ -216,3 +216,46 @@ class TestGetArtifactStatus:
         with patch("assistant.tools.get_db", AsyncMock(return_value=db)):
             result = _run(get_artifact_status("ghost", user_id="u1", user_role="content"))
         assert result["found"] is False
+
+
+# ── list_videos_pending_publish ───────────────────────────────────────────────
+
+class TestListVideosPendingPublish:
+    def _row(self, title="Unpublished Video", video_id="v1"):
+        row = MagicMock()
+        row.__getitem__ = lambda s, k: {
+            "title": title, "slug": title.lower().replace(" ", "-"),
+            "category": "ai", "uploaded_by": "user1", "thumbnail": None,
+        }[k]
+        return row
+
+    def test_content_user_sees_own_unpublished(self):
+        from assistant.tools import list_videos_pending_publish
+        db = _make_db(rows=[self._row()])
+        with patch("assistant.tools.get_db", AsyncMock(return_value=db)):
+            result = _run(list_videos_pending_publish(user_id="u1", user_role="content"))
+        assert result["found"] is True
+        assert len(result["results"]) == 1
+        # query must include user_id scope for content role
+        call_args = db.fetch.call_args
+        assert "u1" in str(call_args)
+
+    def test_admin_sees_all_unpublished(self):
+        from assistant.tools import list_videos_pending_publish
+        db = _make_db(rows=[self._row("Video A"), self._row("Video B", "v2")])
+        with patch("assistant.tools.get_db", AsyncMock(return_value=db)):
+            result = _run(list_videos_pending_publish(user_id="admin1", user_role="admin"))
+        assert result["found"] is True
+        assert len(result["results"]) == 2
+
+    def test_empty_returns_found_false(self):
+        from assistant.tools import list_videos_pending_publish
+        db = _make_db(rows=[])
+        with patch("assistant.tools.get_db", AsyncMock(return_value=db)):
+            result = _run(list_videos_pending_publish(user_id="u1", user_role="content"))
+        assert result["found"] is False
+
+    def test_user_role_cannot_call_list_videos_pending_publish(self):
+        from assistant.tools import get_tools_for_role
+        names = {t["function"]["name"] for t in get_tools_for_role("user")}
+        assert "list_videos_pending_publish" not in names
