@@ -74,6 +74,7 @@ services:
       SAML_DEFAULT_ROLE: ${SAML_DEFAULT_ROLE:-user}
       SAML_STRICT: ${SAML_STRICT:-true}
       SAML_SETTINGS_PATH: ${SAML_SETTINGS_PATH:-/app/saml/settings.json}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
       - "${VIDEO_DATA_VOLUME}:/data/videos"
       - "${MEDIA_DATA_VOLUME}:/data/media"
@@ -105,6 +106,7 @@ services:
       FFMPEG_PATH: ffmpeg
       FFMPEG_HWACCEL: ${FFMPEG_HWACCEL:-auto}
       PYTHONUNBUFFERED: "1"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
       - "${VIDEO_DATA_VOLUME}:/data/videos"
     command: ["python", "worker/transcoder.py"]
@@ -143,6 +145,7 @@ services:
       AUTO_PROCESSOR_CONCURRENCY: ${AUTO_PROCESSOR_CONCURRENCY:-4}
       TRANSCRIPT_MOCK: ${TRANSCRIPT_MOCK:-false}
       PYTHONUNBUFFERED: "1"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
       - "${VIDEO_DATA_VOLUME}:/data/videos"
     command: ["python", "worker/auto_processor.py"]

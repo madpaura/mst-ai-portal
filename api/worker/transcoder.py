@@ -17,6 +17,14 @@ from typing import Optional
 import asyncpg
 from loguru import logger as log
 
+log.remove()
+log.add(
+    sys.stderr,
+    format="<green>{time:HH:mm:ss}</green> | <level>{level:<7}</level> | {message}",
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    colorize=True,
+)
+
 # Allow running as standalone module
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import settings

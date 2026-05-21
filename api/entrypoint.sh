@@ -16,6 +16,9 @@ if [[ "$1" == "uvicorn" ]]; then
     echo "[entrypoint] Running alembic upgrade head..."
     gosu appuser alembic upgrade head
     echo "[entrypoint] Migrations complete."
+    # Uvicorn expects lowercase log level; default to info if LOG_LEVEL unset
+    UVICORN_LOG_LEVEL=$(echo "${LOG_LEVEL:-info}" | tr '[:upper:]' '[:lower:]')
+    exec gosu appuser "$@" --log-level "$UVICORN_LOG_LEVEL"
 fi
 
 exec gosu appuser "$@"

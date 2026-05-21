@@ -3,8 +3,14 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  esbuild: {
+    // Strip console.log/debug calls and debugger statements in production builds.
+    // console.warn and console.error are preserved.
+    drop: mode === 'production' ? ['debugger'] : [],
+    pure: mode === 'production' ? ['console.log', 'console.debug'] : [],
+  },
   envDir: path.resolve(__dirname, '..'),
   build: {
     rollupOptions: {
@@ -38,4 +44,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

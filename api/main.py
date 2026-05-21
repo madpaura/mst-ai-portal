@@ -21,23 +21,24 @@ from database import init_db, close_db, get_db
 from limiter import limiter
 
 # ── Structured logging setup ──────────────────────────────────────────────────
-# In production (ENV != development) emit JSON lines so log aggregators
-# (Loki, CloudWatch, Datadog) can parse fields without regex.
-_LOG_ENV = os.environ.get("ENV", "development").lower()
+# LOG_LEVEL env var controls verbosity (DEBUG/INFO/WARNING/ERROR/CRITICAL).
+# ENV controls format: non-development → JSON for log aggregators; dev → colored.
+_LOG_ENV   = os.environ.get("ENV", "development").lower()
+_LOG_LEVEL = os.environ.get("LOG_LEVEL", "DEBUG" if _LOG_ENV in ("development", "dev", "test") else "INFO").upper()
 
 log.remove()  # remove default stderr handler
 if _LOG_ENV not in ("development", "dev", "test"):
     log.add(
         sys.stdout,
         format="{message}",
-        level="INFO",
+        level=_LOG_LEVEL,
         serialize=True,  # loguru JSON: {"text":"...", "record":{...}}
     )
 else:
     log.add(
         sys.stderr,
         format="<green>{time:HH:mm:ss}</green> | <level>{level:<7}</level> | {message}",
-        level="DEBUG",
+        level=_LOG_LEVEL,
         colorize=True,
     )
 from auth.router import router as auth_router
