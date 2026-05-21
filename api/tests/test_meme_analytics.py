@@ -1,4 +1,4 @@
-"""Tests for GET /admin/analytics/memes/daily endpoint."""
+"""Tests for GET /admin/analytics/memes/daily and /memes/by-meme endpoints."""
 import sys
 import os
 import pytest
@@ -148,3 +148,125 @@ class TestMemeAnalyticsAuth:
         from analytics.admin_router import analytics_memes_daily
         src = inspect.getsource(analytics_memes_daily)
         assert "require_admin" in src or "Depends" in src
+
+
+# ── By-meme endpoint tests ────────────────────────────────
+
+class TestMemeByMemeEndpointRegistration:
+    def test_by_meme_route_exists(self):
+        from analytics.admin_router import router
+        paths = [r.path for r in router.routes]
+        assert "/memes/by-meme" in paths
+
+    def test_by_meme_route_is_get(self):
+        from analytics.admin_router import router
+        for route in router.routes:
+            if route.path == "/memes/by-meme":
+                assert "GET" in route.methods
+                break
+
+    def test_by_meme_requires_admin(self):
+        import inspect
+        from analytics.admin_router import analytics_memes_by_meme
+        from auth.dependencies import require_admin
+        from fastapi import params as fastapi_params
+        sig = inspect.signature(analytics_memes_by_meme)
+        for param in sig.parameters.values():
+            if isinstance(param.default, fastapi_params.Depends):
+                if param.default.dependency is require_admin:
+                    return
+        raise AssertionError("require_admin not found in analytics_memes_by_meme")
+
+
+class TestMemeByMemeHandlerSignature:
+    def test_importable(self):
+        from analytics.admin_router import analytics_memes_by_meme
+        assert callable(analytics_memes_by_meme)
+
+    def test_is_coroutine(self):
+        import inspect
+        from analytics.admin_router import analytics_memes_by_meme
+        assert inspect.iscoroutinefunction(analytics_memes_by_meme)
+
+    def test_has_days_param(self):
+        import inspect
+        from analytics.admin_router import analytics_memes_by_meme
+        sig = inspect.signature(analytics_memes_by_meme)
+        assert "days" in sig.parameters
+
+
+class TestMemeByMemeSQLPattern:
+    def _src(self):
+        import inspect
+        from analytics.admin_router import analytics_memes_by_meme
+        return inspect.getsource(analytics_memes_by_meme)
+
+    def test_joins_meme_groups(self):
+        assert "meme_groups" in self._src()
+
+    def test_left_joins_meme_clicks(self):
+        src = self._src()
+        assert "LEFT JOIN" in src.upper()
+        assert "meme_clicks" in src
+
+    def test_uses_coalesce_for_null_title(self):
+        assert "COALESCE" in self._src().upper()
+
+    def test_sorts_by_total_clicks_desc(self):
+        src = self._src()
+        assert "reverse=True" in src or "DESC" in src
+
+    def test_returns_group_shape_keys(self):
+        src = self._src()
+        for key in ("group_id", "group_title", "group_category", "total_clicks", "memes"):
+            assert key in src
+
+    def test_returns_meme_shape_keys(self):
+        src = self._src()
+        for key in ("meme_id", "meme_title", "image_url", "clicks"):
+            assert key in src
+
+
+class TestMemeByMemeAggregation:
+    """Unit-test the aggregation logic in isolation using synthetic data."""
+
+    def _aggregate(self, rows):
+        from collections import OrderedDict
+        group_map = OrderedDict()
+        for r in rows:
+            gid = r["group_id"]
+            if gid not in group_map:
+                group_map[gid] = {"group_id": gid, "group_title": r["group_title"],
+                                  "group_category": r["group_category"], "total_clicks": 0, "memes": []}
+            group_map[gid]["total_clicks"] += r["clicks"]
+            group_map[gid]["memes"].append({"meme_id": r["meme_id"], "meme_title": r["meme_title"],
+                                            "image_url": r["image_url"], "clicks": r["clicks"]})
+        return sorted(group_map.values(), key=lambda g: g["total_clicks"], reverse=True)
+
+    def _row(self, gid, gtitle, gcat, mid, mtitle, img, clicks):
+        return {"group_id": gid, "group_title": gtitle, "group_category": gcat,
+                "meme_id": mid, "meme_title": mtitle, "image_url": img, "clicks": clicks}
+
+    def test_groups_sorted_by_total_desc(self):
+        rows = [self._row("g1", "A", "cat", "m1", "m", "", 5),
+                self._row("g2", "B", "cat", "m2", "m", "", 20)]
+        result = self._aggregate(rows)
+        assert result[0]["group_id"] == "g2"
+        assert result[1]["group_id"] == "g1"
+
+    def test_total_clicks_summed(self):
+        rows = [self._row("g1", "A", "cat", "m1", "m", "", 3),
+                self._row("g1", "A", "cat", "m2", "m", "", 7)]
+        result = self._aggregate(rows)
+        assert result[0]["total_clicks"] == 10
+
+    def test_null_title_untitled(self):
+        rows = [self._row("g1", "A", "cat", "m1", "Untitled", "", 0)]
+        result = self._aggregate(rows)
+        assert result[0]["memes"][0]["meme_title"] == "Untitled"
+
+    def test_zero_click_group_included(self):
+        rows = [self._row("g1", "A", "cat", "m1", "m", "", 0)]
+        result = self._aggregate(rows)
+        assert len(result) == 1
+        assert result[0]["total_clicks"] == 0

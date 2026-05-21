@@ -306,6 +306,72 @@ async def analytics_memes_daily(
     return [{"day": str(r["day"]), "clicks": r["clicks"]} for r in rows]
 
 
+@router.get("/memes/by-meme")
+async def analytics_memes_by_meme(
+    days: int = Query(30, ge=1, le=365),
+    admin: dict = Depends(require_admin),
+):
+    """Groups with nested memes and click counts, sorted by total_clicks DESC."""
+    from collections import OrderedDict
+    db = await get_db()
+    rows = await db.fetch(
+        """
+        SELECT
+            g.id           AS group_id,
+            g.title        AS group_title,
+            g.category     AS group_category,
+            m.id           AS meme_id,
+            COALESCE(m.title, 'Untitled') AS meme_title,
+            m.image_url,
+            m.sort_order,
+            COUNT(mc.id)   AS clicks
+        FROM meme_groups g
+        JOIN memes m ON m.group_id = g.id
+        LEFT JOIN meme_clicks mc ON mc.meme_id = m.id
+            AND mc.clicked_at >= now() - ($1 || ' days')::interval
+        GROUP BY g.id, g.title, g.category, m.id, m.title, m.image_url, m.sort_order
+        ORDER BY g.id, clicks DESC, m.sort_order ASC
+        """,
+        str(days),
+    )
+
+    group_map: dict = OrderedDict()
+    for r in rows:
+        gid = str(r["group_id"])
+        if gid not in group_map:
+            group_map[gid] = {
+                "group_id": gid,
+                "group_title": r["group_title"],
+                "group_category": r["group_category"],
+                "total_clicks": 0,
+                "memes": [],
+            }
+        clicks = r["clicks"]
+        group_map[gid]["total_clicks"] += clicks
+        group_map[gid]["memes"].append({
+            "meme_id": str(r["meme_id"]),
+            "meme_title": r["meme_title"],
+            "image_url": r["image_url"],
+            "clicks": clicks,
+        })
+
+    empty_groups = await db.fetch(
+        "SELECT g.id, g.title, g.category FROM meme_groups g WHERE NOT EXISTS (SELECT 1 FROM memes m WHERE m.group_id = g.id)",
+    )
+    for eg in empty_groups:
+        gid = str(eg["id"])
+        if gid not in group_map:
+            group_map[gid] = {
+                "group_id": gid,
+                "group_title": eg["title"],
+                "group_category": eg["category"],
+                "total_clicks": 0,
+                "memes": [],
+            }
+
+    return sorted(group_map.values(), key=lambda g: g["total_clicks"], reverse=True)
+
+
 @router.get("/hourly-heatmap")
 async def analytics_hourly_heatmap(
     days: int = Query(14, ge=1, le=90),

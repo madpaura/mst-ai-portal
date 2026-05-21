@@ -85,6 +85,21 @@ interface MemeClickDay {
   clicks: number;
 }
 
+interface MemeBreakdownMeme {
+  meme_id: string;
+  meme_title: string;
+  image_url: string;
+  clicks: number;
+}
+
+interface MemeBreakdownGroup {
+  group_id: string;
+  group_title: string;
+  group_category: string;
+  total_clicks: number;
+  memes: MemeBreakdownMeme[];
+}
+
 // ── Constants ────────────────────────────────────────────
 
 const SECTION_COLORS: Record<string, string> = {
@@ -136,6 +151,7 @@ export const AdminAnalytics: React.FC = () => {
   const [newsMetrics, setNewsMetrics] = useState<{ articles: NewsArticle[]; daily_visits: { day: string; visits: number }[] } | null>(null);
   const [heatmap, setHeatmap] = useState<HeatmapCell[]>([]);
   const [memeClicks, setMemeClicks] = useState<MemeClickDay[]>([]);
+  const [memeBreakdown, setMemeBreakdown] = useState<MemeBreakdownGroup[]>([]);
 
   useEffect(() => {
     setLoading(true);
@@ -150,6 +166,7 @@ export const AdminAnalytics: React.FC = () => {
       api.get(`/admin/analytics/news?days=${days}`).then((d: any) => setNewsMetrics(d)).catch(() => {}),
       api.get<HeatmapCell[]>(`/admin/analytics/hourly-heatmap?days=${Math.min(days, 90)}`).then(setHeatmap).catch(() => {}),
       api.get<MemeClickDay[]>(`/admin/analytics/memes/daily?days=${days}`).then(setMemeClicks).catch(() => {}),
+      api.get<MemeBreakdownGroup[]>(`/admin/analytics/memes/by-meme?days=${days}`).then(setMemeBreakdown).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, [days]);
 
@@ -641,7 +658,50 @@ export const AdminAnalytics: React.FC = () => {
                 </ResponsiveContainer>
               </ChartCard>
 
-              {/* TODO: per-meme breakdown table (out of scope for this slice) */}
+              {/* Group / meme breakdown table */}
+              <ChartCard title="Clicks by Group & Meme" icon="sentiment_very_satisfied">
+                {memeBreakdown.length === 0 ? (
+                  <p className="text-sm text-slate-500 text-center py-8">No meme groups yet</p>
+                ) : (
+                  <div className="space-y-1 max-h-[600px] overflow-y-auto pr-1">
+                    {memeBreakdown.map(group => (
+                      <div key={group.group_id}>
+                        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-slate-100/40 dark:bg-slate-800/50 border border-slate-200 dark:border-white/8 mb-0.5">
+                          <span className="material-symbols-outlined text-pink-400 text-base shrink-0">collections</span>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-bold text-slate-900 dark:text-white">{group.group_title}</span>
+                            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-pink-500/10 text-pink-400 border border-pink-500/20 font-medium uppercase">{group.group_category}</span>
+                          </div>
+                          <span className="text-sm font-bold text-pink-400 tabular-nums">{fmtNum(group.total_clicks)}</span>
+                        </div>
+                        {group.memes.map(meme => (
+                          <div key={meme.meme_id} className="flex items-center gap-3 px-3 py-2 ml-6 rounded-lg border border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/30 hover:border-slate-100 dark:hover:border-white/5 transition-colors">
+                            <div className="w-8 h-8 shrink-0 rounded overflow-hidden bg-slate-200 dark:bg-slate-700">
+                              {meme.image_url ? (
+                                <img
+                                  src={meme.image_url.startsWith('/') ? `${import.meta.env.VITE_API_URL || ''}${meme.image_url}` : meme.image_url}
+                                  alt={meme.meme_title}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <span className="material-symbols-outlined text-xs text-slate-400">image</span>
+                                </div>
+                              )}
+                            </div>
+                            <span className="flex-1 text-sm text-slate-700 dark:text-slate-300 truncate">{meme.meme_title}</span>
+                            <span className="text-sm text-slate-500 dark:text-slate-400 tabular-nums">{meme.clicks}</span>
+                          </div>
+                        ))}
+                        {group.memes.length === 0 && (
+                          <div className="ml-6 px-3 py-1.5 text-xs text-slate-500 italic">No memes in this group</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </ChartCard>
             </div>
           )}
 
