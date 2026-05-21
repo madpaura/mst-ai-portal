@@ -20,6 +20,7 @@ interface ForgeComponent {
   icon_color: string | null;
   version: string;
   install_command: string;
+  manual_install: string | null;
   badge: string | null;
   author: string | null;
   downloads: number;
@@ -78,6 +79,7 @@ export const Marketplace: React.FC = () => {
   const [instructions, setInstructions] = useState<Record<string, string>>({});
   const [downloading, setDownloading] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState(false);
+  const [installTab, setInstallTab] = useState<'skills' | 'manual'>('skills');
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
   const [contributingGuide, setContributingGuide] = useState<ContributingGuide | null>(null);
   const [underConstruction, setUnderConstruction] = useState<{ under_construction: boolean; message: string } | null>(null);
@@ -130,6 +132,7 @@ export const Marketplace: React.FC = () => {
     setSelectedCard(card);
     setDrawerTab('overview');
     setCopied(false);
+    setInstallTab('skills');
     if (card.howto_guide || card.howto_guide_url) {
       // pre-load guide content if it lives inline
       if (card.howto_guide && !instructions[card.slug]) {
@@ -153,7 +156,6 @@ export const Marketplace: React.FC = () => {
   };
 
   const handleSort = () => {};
-  const handleFooterLink = (_label: string) => {};
 
   const filteredCards = components.filter((c) => {
     const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase()) || (c.description || '').toLowerCase().includes(searchQuery.toLowerCase());
@@ -529,19 +531,11 @@ export const Marketplace: React.FC = () => {
         </main>
 
         {/* Footer */}
-        <footer className="bg-slate-100 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-500">
-          <div className="flex items-center gap-6">
-            <span className="flex items-center gap-1">
-              <span className="size-2 rounded-full bg-green-500" />
-              Global Registry Online
-            </span>
-            <span>v1.8.2-stable</span>
-          </div>
-          <div className="flex gap-6">
-            <button onClick={() => handleFooterLink('Documentation')} className="hover:text-primary transition-colors">Documentation</button>
-            <button onClick={() => handleFooterLink('Security Registry')} className="hover:text-primary transition-colors">Security Registry</button>
-            <button onClick={() => handleFooterLink('Developer Portal')} className="hover:text-primary transition-colors">Developer Portal</button>
-          </div>
+        <footer className="bg-slate-100 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-6 py-4 flex items-center text-xs text-slate-500">
+          <span className="flex items-center gap-1">
+            <span className="size-2 rounded-full bg-green-500" />
+            MST Registry Online
+          </span>
         </footer>
       </div>
 
@@ -690,28 +684,53 @@ export const Marketplace: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Install command */}
-                  {selectedCard.install_command && (
-                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-                      <div className="bg-slate-800 dark:bg-slate-900 px-4 py-2.5 flex items-center justify-between border-b border-slate-700">
-                        <span className="text-xs font-mono text-slate-400">
-                          <span className="text-slate-500">$</span> install
-                        </span>
+                  {/* Install tabs */}
+                  {(selectedCard.install_command || selectedCard.manual_install) && (() => {
+                    const hasBoth = !!(selectedCard.install_command && selectedCard.manual_install);
+                    const activeCmd = installTab === 'manual' && selectedCard.manual_install
+                      ? selectedCard.manual_install
+                      : selectedCard.install_command || selectedCard.manual_install || '';
+                    const activeLabel = installTab === 'manual' && selectedCard.manual_install ? 'Manual' : 'skills.sh';
+                    return (
+                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+                        <div className="bg-slate-800 dark:bg-slate-900 px-4 py-2 flex items-center justify-between border-b border-slate-700">
+                          {hasBoth ? (
+                            <div className="flex gap-1">
+                              {(['skills', 'manual'] as const).map(tab => (
+                                <button
+                                  key={tab}
+                                  onClick={() => setInstallTab(tab)}
+                                  className={`px-2.5 py-1 text-[11px] font-mono rounded-md transition-colors ${
+                                    (tab === 'skills' ? installTab !== 'manual' : installTab === 'manual')
+                                      ? 'bg-slate-700 text-emerald-400'
+                                      : 'text-slate-500 hover:text-slate-300'
+                                  }`}
+                                >
+                                  {tab === 'skills' ? 'skills.sh' : 'manual'}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs font-mono text-slate-400">
+                              <span className="text-slate-500">$</span> {activeLabel}
+                            </span>
+                          )}
+                        </div>
+                        <div className="bg-slate-900 px-4 py-3 flex items-start gap-3">
+                          <code className="flex-1 text-xs font-mono text-emerald-400 break-all whitespace-pre-wrap">
+                            {activeCmd}
+                          </code>
+                          <button
+                            onClick={() => handleCopyInstall(activeCmd)}
+                            className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${copied ? 'text-emerald-400 bg-emerald-400/10' : 'text-slate-500 hover:text-white hover:bg-white/10'}`}
+                            title="Copy"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">{copied ? 'check' : 'content_copy'}</span>
+                          </button>
+                        </div>
                       </div>
-                      <div className="bg-slate-900 px-4 py-3 flex items-center gap-3">
-                        <code className="flex-1 text-xs font-mono text-emerald-400 break-all">
-                          {selectedCard.install_command}
-                        </code>
-                        <button
-                          onClick={() => handleCopyInstall(selectedCard.install_command)}
-                          className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${copied ? 'text-emerald-400 bg-emerald-400/10' : 'text-slate-500 hover:text-white hover:bg-white/10'}`}
-                          title="Copy"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">{copied ? 'check' : 'content_copy'}</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Action buttons */}
                   <div className="space-y-2.5">

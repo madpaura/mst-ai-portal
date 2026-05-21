@@ -136,8 +136,12 @@ async def redirect_meme(meme_id: str, request: Request):
     if row is None:
         raise HTTPException(status_code=404, detail="Meme not found")
 
-    # Resolve destination
-    destination = row["link_url"] or "/"
+    # Resolve destination — ensure absolute URL so browsers don't treat it as relative
+    link_url = row["link_url"]
+    if link_url:
+        destination = link_url if link_url.startswith(("http://", "https://", "/")) else f"https://{link_url}"
+    else:
+        destination = "/"
 
     # Extract user_id from JWT cookie if present — any error → None
     user_id: Optional[str] = None

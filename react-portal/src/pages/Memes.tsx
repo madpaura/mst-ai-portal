@@ -5,6 +5,8 @@ import { api } from '../api/client';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 const mediaUrl = (url: string | null | undefined) =>
   url ? (url.startsWith('/') ? `${API_BASE}${url}` : url) : '';
+const absUrl = (url: string) =>
+  url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/') ? url : `https://${url}`;
 
 interface Meme {
   id: string;
@@ -197,7 +199,7 @@ export const Memes: React.FC = () => {
                 <span className="text-slate-400 text-xs">{lightbox.index + 1} / {lightbox.group.memes.length}</span>
                 {currentMeme.link_url && (
                   <a
-                    href={currentMeme.link_url}
+                    href={absUrl(currentMeme.link_url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
@@ -215,7 +217,7 @@ export const Memes: React.FC = () => {
             {/* Image */}
             <div className="relative w-full">
               {currentMeme.link_url ? (
-                <a href={currentMeme.link_url} target="_blank" rel="noopener noreferrer" title="Open link">
+                <a href={absUrl(currentMeme.link_url)} target="_blank" rel="noopener noreferrer" title="Open link">
                   <img
                     src={mediaUrl(currentMeme.image_url)}
                     alt={currentMeme.title || lightbox.group.title}

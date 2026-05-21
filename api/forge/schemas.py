@@ -22,6 +22,7 @@ class ForgeComponentResponse(BaseModel):
     howto_guide: Optional[str] = None
     howto_guide_url: Optional[str] = None
     video_url: Optional[str] = None
+    manual_install: Optional[str] = None
     git_repo_url: Optional[str] = None
     git_ref: Optional[str] = None
     last_synced_at: Optional[datetime] = None
@@ -45,6 +46,7 @@ class ForgeComponentCreate(BaseModel):
     howto_guide: Optional[str] = None
     howto_guide_url: Optional[str] = None
     video_url: Optional[str] = None
+    manual_install: Optional[str] = None
 
 
 class ForgeComponentUpdate(BaseModel):
@@ -61,6 +63,7 @@ class ForgeComponentUpdate(BaseModel):
     howto_guide: Optional[str] = None
     howto_guide_url: Optional[str] = None
     video_url: Optional[str] = None
+    manual_install: Optional[str] = None
 
 
 class ForgeCategoryResponse(BaseModel):

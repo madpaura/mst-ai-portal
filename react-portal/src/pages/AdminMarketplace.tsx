@@ -24,6 +24,7 @@ interface ForgeComponent {
   howto_guide: string | null;
   howto_guide_url: string | null;
   video_url: string | null;
+  manual_install: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -43,13 +44,14 @@ interface ComponentForm {
   howto_guide: string;
   howto_guide_url: string;
   video_url: string;
+  manual_install: string;
 }
 
 const EMPTY_COMPONENT_FORM: ComponentForm = {
   slug: '', name: '', component_type: 'agent', description: '',
   icon: 'smart_toy', icon_color: 'text-primary',
   version: 'v1.0.0', install_command: '', badge: '', author: '', tags: '',
-  howto_guide: '', howto_guide_url: '', video_url: '',
+  howto_guide: '', howto_guide_url: '', video_url: '', manual_install: '',
 };
 
 const ICON_OPTIONS = [
@@ -277,7 +279,7 @@ export const AdminMarketplace: React.FC = () => {
       install_command: comp.install_command, badge: comp.badge || '',
       author: comp.author || '', tags: comp.tags.join(', '),
       howto_guide: comp.howto_guide || '', howto_guide_url: comp.howto_guide_url || '',
-      video_url: comp.video_url || '',
+      video_url: comp.video_url || '', manual_install: comp.manual_install || '',
     });
   };
 
@@ -292,6 +294,7 @@ export const AdminMarketplace: React.FC = () => {
       howto_guide: compForm.howto_guide.trim() || null,
       howto_guide_url: compForm.howto_guide_url.trim() || null,
       video_url: compForm.video_url.trim() || null,
+      manual_install: compForm.manual_install.trim() || null,
     };
     try {
       if (creatingComp) {
@@ -1025,10 +1028,18 @@ export const AdminMarketplace: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Install Command</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Install Command <span className="text-slate-400 normal-case font-normal">(skills.sh tab)</span></label>
                 <input value={compForm.install_command} onChange={e => setCompForm(f => ({ ...f, install_command: e.target.value }))}
                   placeholder="forge install my-agent"
                   className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none font-mono" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Manual Install <span className="text-slate-400 normal-case font-normal">(Manual tab — optional)</span></label>
+                <textarea value={compForm.manual_install} onChange={e => setCompForm(f => ({ ...f, manual_install: e.target.value }))}
+                  rows={3} placeholder={'npm install my-package\n# or\npip install my-package'}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none font-mono" />
+                <p className="text-[10px] text-slate-500 mt-1">Shown as a separate tab. Leave blank to hide the tab.</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

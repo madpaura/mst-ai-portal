@@ -59,6 +59,16 @@ export const AdminMemes: React.FC = () => {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Copy tracking URL
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const copyTrackingUrl = (meme: Meme) => {
+    const url = `${API_BASE}/r/${meme.id}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedId(meme.id);
+      setTimeout(() => setCopiedId(null), 1500);
+    });
+  };
+
   const fetchGroups = async () => {
     try {
       const data = await api.get<MemeGroup[]>('/admin/memes/groups');
@@ -489,6 +499,15 @@ export const AdminMemes: React.FC = () => {
                               title="Edit link URL"
                             >
                               <span className="material-symbols-outlined text-[12px]">edit</span>
+                            </button>
+                            <button
+                              onClick={() => copyTrackingUrl(meme)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 text-slate-400 hover:text-green-400"
+                              title="Copy tracking URL for email"
+                            >
+                              <span className="material-symbols-outlined text-[12px]">
+                                {copiedId === meme.id ? 'check' : 'link'}
+                              </span>
                             </button>
                             {meme.link_url && (
                               <a href={meme.link_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary truncate hover:underline ml-auto" title={meme.link_url}>

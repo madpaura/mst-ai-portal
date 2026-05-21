@@ -17,6 +17,18 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
   const { theme, toggleTheme } = useTheme();
   const [discoverOpen, setDiscoverOpen] = useState(false);
   const discoverRef = useRef<HTMLDivElement>(null);
+  const [logoAnim, setLogoAnim] = useState(false);
+  const [showVmg, setShowVmg] = useState(false);
+
+  const handleLogoClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (logoAnim) return;
+    setLogoAnim(true);
+    setShowVmg(false);
+    setTimeout(() => setShowVmg(true), 400);
+    setTimeout(() => setShowVmg(false), 900);
+    setTimeout(() => setLogoAnim(false), 1100);
+  };
 
   const handleAdmin = () => navigate('/admin/videos');
 
@@ -33,14 +45,29 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  if (variant === 'solutions') {
-    return (
+  return (
+    <>
+      <style>{`
+        @keyframes logoSpin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        @keyframes logoGlow { 0%,100%{filter:none} 50%{filter:drop-shadow(0 0 8px #258CF4) drop-shadow(0 0 18px #258CF466)} }
+        @keyframes vmgPop  { 0%{opacity:0;transform:scale(0.7)} 60%{opacity:1;transform:scale(1.1)} 100%{opacity:1;transform:scale(1)} }
+        .logo-spin { animation: logoSpin 0.5s ease-in-out, logoGlow 0.5s ease-in-out; }
+        .vmg-pop   { animation: vmgPop 0.18s ease forwards; }
+      `}</style>
+      {variant === 'solutions' && (
       <nav className="fixed top-0 w-full z-50 border-b border-slate-200 dark:border-primary/10 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md font-sans">
         <div className="max-w-screen-2xl mx-auto w-full px-6 h-16 flex items-center gap-4">
           <div className="flex items-center gap-3 flex-none">
-            <Link to="/" className="flex items-center gap-2.5">
-              <PortalLogo size={34} />
-              <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">MST AI</span>
+            <Link to="/" className="flex items-center gap-2.5" onClick={handleLogoClick}>
+              <span className={logoAnim ? 'logo-spin' : ''} style={{display:'inline-flex'}}>
+                <PortalLogo size={34} />
+              </span>
+              <span className="text-xl font-bold tracking-tight w-[4rem] inline-block">
+                {showVmg
+                  ? <span className="vmg-pop text-[#258CF4]">VMG</span>
+                  : <span className="text-slate-900 dark:text-slate-100">MST AI</span>
+                }
+              </span>
             </Link>
             {BETA_TAG && (
               <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded bg-amber-400/15 text-amber-500 border border-amber-400/30">
@@ -154,8 +181,7 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
           </div>
         </div>
       </nav>
-    );
-  }
-
-  return null;
+      )}
+    </>
+  );
 };
