@@ -1,11 +1,19 @@
-from fastapi import APIRouter, HTTPException, Query
+import asyncio
+import uuid as _uuid_mod
 from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Query, Request
+from starlette.responses import RedirectResponse
 
 from memes.schemas import MemeGroupResponse, MemeGroupWithMemes, MemeResponse
 from database import get_db
+from auth.service import decode_access_token
 import cache
 
 router = APIRouter()
+redirect_router = APIRouter()
+
+_COOKIE_NAME = "mst_token"
 
 NS = cache.NS_MEMES
 
@@ -88,3 +96,66 @@ async def get_group(slug: str):
     if result is None:
         raise HTTPException(status_code=404, detail="Group not found")
     return result
+
+
+# ── Click-tracking redirect ───────────────────────────────────────────────────
+
+def _client_ip(request: Request) -> Optional[str]:
+    """Return real client IP from proxy headers, falling back to TCP peer."""
+    if ip := request.headers.get("x-real-ip", "").strip():
+        return ip
+    if fwd := request.headers.get("x-forwarded-for", "").strip():
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else None
+
+
+async def _log_click(
+    db,
+    meme_id: str,
+    user_id: Optional[str],
+    ip_address: Optional[str],
+    user_agent: str,
+    referrer: Optional[str],
+) -> None:
+    """Fire-and-forget coroutine — insert one row into meme_clicks."""
+    await db.execute(
+        """INSERT INTO meme_clicks (meme_id, user_id, ip_address, user_agent, referrer)
+           VALUES ($1, $2, $3, $4, $5)""",
+        meme_id, user_id, ip_address, user_agent, referrer,
+    )
+
+
+@redirect_router.get("/r/{meme_id}")
+async def redirect_meme(meme_id: str, request: Request):
+    """
+    Transparent redirect with click tracking for email campaigns.
+    No auth required — works for all visitors including unauthenticated.
+    """
+    db = await get_db()
+    row = await db.fetchrow("SELECT id, link_url FROM memes WHERE id = $1", meme_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Meme not found")
+
+    # Resolve destination
+    destination = row["link_url"] or "/"
+
+    # Extract user_id from JWT cookie if present — any error → None
+    user_id: Optional[str] = None
+    token = request.cookies.get(_COOKIE_NAME)
+    if token:
+        try:
+            payload = decode_access_token(token)
+            if payload:
+                user_id = payload.get("sub")
+        except Exception:
+            pass
+
+    # Collect request metadata
+    ip = _client_ip(request)
+    ua = request.headers.get("user-agent", "")[:500]
+    referrer = request.headers.get("referer", "")[:500] or None
+
+    # Fire-and-forget: do not block the redirect on the DB write
+    asyncio.create_task(_log_click(db, meme_id, user_id, ip, ua, referrer))
+
+    return RedirectResponse(url=destination, status_code=302)
