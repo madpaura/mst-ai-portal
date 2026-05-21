@@ -80,6 +80,11 @@ interface HeatmapCell {
   views: number;
 }
 
+interface MemeClickDay {
+  day: string;
+  clicks: number;
+}
+
 // ── Constants ────────────────────────────────────────────
 
 const SECTION_COLORS: Record<string, string> = {
@@ -119,7 +124,7 @@ const fmtDate = (d: string) => {
 export const AdminAnalytics: React.FC = () => {
   const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState<'overview' | 'traffic' | 'videos' | 'marketplace' | 'news'>('overview');
+  const [activeSection, setActiveSection] = useState<'overview' | 'traffic' | 'videos' | 'marketplace' | 'news' | 'memes'>('overview');
 
   const [overview, setOverview] = useState<Overview | null>(null);
   const [traffic, setTraffic] = useState<TrafficDay[]>([]);
@@ -130,6 +135,7 @@ export const AdminAnalytics: React.FC = () => {
   const [marketplaceMetrics, setMarketplaceMetrics] = useState<{ components: MarketplaceComponent[]; daily_installs: { day: string; installs: number }[] } | null>(null);
   const [newsMetrics, setNewsMetrics] = useState<{ articles: NewsArticle[]; daily_visits: { day: string; visits: number }[] } | null>(null);
   const [heatmap, setHeatmap] = useState<HeatmapCell[]>([]);
+  const [memeClicks, setMemeClicks] = useState<MemeClickDay[]>([]);
 
   useEffect(() => {
     setLoading(true);
@@ -143,6 +149,7 @@ export const AdminAnalytics: React.FC = () => {
       api.get(`/admin/analytics/marketplace?days=${days}`).then((d: any) => setMarketplaceMetrics(d)).catch(() => {}),
       api.get(`/admin/analytics/news?days=${days}`).then((d: any) => setNewsMetrics(d)).catch(() => {}),
       api.get<HeatmapCell[]>(`/admin/analytics/hourly-heatmap?days=${Math.min(days, 90)}`).then(setHeatmap).catch(() => {}),
+      api.get<MemeClickDay[]>(`/admin/analytics/memes/daily?days=${days}`).then(setMemeClicks).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, [days]);
 
@@ -229,6 +236,7 @@ export const AdminAnalytics: React.FC = () => {
     { key: 'videos', label: 'Videos', icon: 'videocam' },
     { key: 'marketplace', label: 'Marketplace', icon: 'storefront' },
     { key: 'news', label: 'News', icon: 'newspaper' },
+    { key: 'memes', label: 'Memes', icon: 'sentiment_very_satisfied' },
   ] as const;
 
   return (
@@ -601,6 +609,39 @@ export const AdminAnalytics: React.FC = () => {
                   {marketplaceMetrics.components.length === 0 && <p className="text-sm text-slate-500 text-center py-8">No components yet</p>}
                 </div>
               </ChartCard>
+            </div>
+          )}
+
+          {/* ─── MEMES ─── */}
+          {(isExporting || activeSection === 'memes') && (
+            <div className="space-y-6 mb-12">
+              {isExporting && <div className="html2pdf__page-break" />}
+              {isExporting && <h2 className="text-2xl font-bold text-white mb-4 border-b border-white/10 pb-2 mt-8">Memes</h2>}
+
+              {/* Summary stat */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <StatCard
+                  icon="sentiment_very_satisfied"
+                  label="Total Clicks"
+                  value={fmtNum(memeClicks.reduce((s, d) => s + d.clicks, 0))}
+                  color="text-pink-400"
+                />
+              </div>
+
+              {/* Daily clicks bar chart */}
+              <ChartCard title="Daily Meme Clicks" icon="bar_chart">
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={memeClicks.map(d => ({ ...d, day: fmtDate(d.day) }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                    <XAxis dataKey="day" stroke="#64748b" fontSize={11} />
+                    <YAxis stroke="#64748b" fontSize={11} />
+                    <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} />
+                    <Bar dataKey="clicks" fill="#ec4899" radius={[4, 4, 0, 0]} name="Clicks" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+
+              {/* TODO: per-meme breakdown table (out of scope for this slice) */}
             </div>
           )}
 
