@@ -283,6 +283,29 @@ async def analytics_news(
     }
 
 
+@router.get("/memes/daily")
+async def analytics_memes_daily(
+    days: int = Query(30, ge=1, le=365),
+    admin: dict = Depends(require_admin),
+):
+    """Daily meme click counts, zero-filled for days with no clicks."""
+    db = await get_db()
+    rows = await db.fetch(
+        """
+        SELECT gs.day::date AS day, COALESCE(COUNT(mc.id), 0) AS clicks
+        FROM generate_series(
+            now() - ($1 || ' days')::interval,
+            now(),
+            '1 day'::interval
+        ) AS gs(day)
+        LEFT JOIN meme_clicks mc ON date_trunc('day', mc.clicked_at) = gs.day::date
+        GROUP BY gs.day ORDER BY gs.day
+        """,
+        str(days),
+    )
+    return [{"day": str(r["day"]), "clicks": r["clicks"]} for r in rows]
+
+
 @router.get("/hourly-heatmap")
 async def analytics_hourly_heatmap(
     days: int = Query(14, ge=1, le=90),
