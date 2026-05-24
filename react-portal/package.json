@@ -20,7 +20,7 @@
     "html2pdf.js": "^0.14.0",
     "jszip": "^3.10.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
+    "react-dom": "^19.2.6",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.13.1",
     "react-virtualized-auto-sizer": "^1.0.24",
