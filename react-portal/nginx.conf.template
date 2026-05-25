@@ -92,6 +92,24 @@ server {
         proxy_pass http://${BACKEND_UPSTREAM}/health;
     }
 
+    # Catch-all backend proxy — lets the frontend set VITE_API_URL=/backend
+    # so the browser always talks same-origin via nginx, regardless of which
+    # port the backend listens on (bridge vs host networking) and without
+    # needing CORS. The trailing slash on proxy_pass strips the /backend
+    # prefix before forwarding (e.g. /backend/forge/components → /forge/components).
+    location /backend/ {
+        proxy_pass http://${BACKEND_UPSTREAM}/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $http_x_real_ip;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        client_max_body_size 5120m;
+        # SSE streaming (assistant chat) — disable buffering and cache, lift timeout
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 120s;
+    }
+
     # Gzip
     gzip on;
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
