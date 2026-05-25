@@ -44,14 +44,20 @@ compose_cmd() {
     fi
 }
 
-# Helper: compose files based on GPU availability
+# Helper: compose files based on GPU availability + host networking toggle
 compose_files() {
     detect_gpu
+    local files
     if [ "$GPU_AVAILABLE" = true ]; then
-        echo "-f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.transcript.yml -f docker-compose.transcript.gpu.yml"
+        files="-f docker-compose.yml -f docker-compose.gpu.yml -f docker-compose.transcript.yml -f docker-compose.transcript.gpu.yml"
     else
-        echo "-f docker-compose.yml -f docker-compose.transcript.yml"
+        files="-f docker-compose.yml -f docker-compose.transcript.yml"
     fi
+    # Host networking override must come LAST so its network_mode/env wins.
+    if [ "$(host_network_enabled)" = "true" ]; then
+        files="$files -f docker-compose.hostnet.yml"
+    fi
+    echo "$files"
 }
 
 ensure_env_var() {
@@ -80,6 +86,17 @@ ensure_runtime_env() {
     ensure_env_var "TRANSCRIPT_PORT" "9100"
     ensure_env_var "TRANSCRIPT_API_KEY" "$(openssl rand -hex 24 2>/dev/null || echo 'change-me-please')"
     ensure_env_var "TRANSCRIPT_MODEL" "large-v3"
+    ensure_env_var "HOST_NETWORK" "false"
+}
+
+# Helper: read HOST_NETWORK from .env (or current env). Returns "true"/"false".
+host_network_enabled() {
+    local val="${HOST_NETWORK:-}"
+    if [ -z "$val" ] && [ -f .env ]; then
+        val=$(grep '^HOST_NETWORK=' .env 2>/dev/null | head -1 | cut -d= -f2 | tr -d '"' | tr -d "'")
+    fi
+    val=$(echo "${val:-false}" | tr '[:upper:]' '[:lower:]')
+    [ "$val" = "true" ] && echo "true" || echo "false"
 }
 
 # ── Prerequisite checks ───────────────────────────────────
@@ -213,6 +230,13 @@ deploy() {
     else
         warn "No GPU — worker will use CPU encoding (libx264)"
         warn "No GPU — transcript service will use CPU (slower transcription)"
+    fi
+
+    if [ "$(host_network_enabled)" = "true" ]; then
+        ok "HOST_NETWORK=true — all services will share the host network namespace"
+        warn "Make sure host ports 5432, 6379, ${BACKEND_PORT:-8000}, ${FRONTEND_PORT:-9810}, ${TRANSCRIPT_PORT:-9100} are free"
+    else
+        ok "Bridge networking (set HOST_NETWORK=true in .env if connectivity issues arise)"
     fi
 
     echo "Building and starting containers..."

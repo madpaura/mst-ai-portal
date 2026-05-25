@@ -1,0 +1,88 @@
+# Host-Network Override
+# ─────────────────────────────────────────────────────────────────────────────
+# Enable when the isolated Docker bridge network causes connectivity issues:
+#   • host.docker.internal not resolving on some Linux hosts
+#   • Corporate firewalls blocking the docker0 interface
+#   • Restricted/overlapping bridge subnets
+#   • LLM / Ollama / on-host services unreachable from containers
+#
+# Enable via .env:   HOST_NETWORK=true   then ./setup.sh deploy
+# Or manually:
+#   docker compose -f docker-compose.yml \
+#                  -f docker-compose.transcript.yml \
+#                  -f docker-compose.hostnet.yml up -d
+#
+# In host mode every container shares the host's network namespace, so:
+#   • Service-name DNS (db, redis, backend, transcript-service) no longer works
+#     → URLs are rewritten to 127.0.0.1 here
+#   • `ports:` mappings are ignored (each container binds directly to the host
+#     port its process listens on)
+#   • `extra_hosts:` is unused (the host IS localhost)
+#
+# Host-port layout in this mode (all on 127.0.0.1):
+#   db                5432
+#   redis             6379
+#   backend           ${BACKEND_PORT:-8000}     (set BACKEND_PORT_INTERNAL if 8000 is taken)
+#   frontend (nginx)  ${FRONTEND_PORT:-9810}
+#   transcript        ${TRANSCRIPT_PORT:-9100}
+#
+# Note: host networking is Linux-only. On Docker Desktop (Mac/Windows) it works
+# starting from 4.34 as a beta feature; the default bridge mode is recommended
+# there.
+
+services:
+  db:
+    network_mode: host
+
+  redis:
+    network_mode: host
+
+  backend:
+    network_mode: host
+    # host.docker.internal is not needed — the host IS localhost
+    extra_hosts: !reset []
+    environment:
+      # Service-name URLs are unconditionally rewritten in host mode; any
+      # leftover "redis://redis:..." or "host.docker.internal" from .env
+      # would not resolve here.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-portal}:${POSTGRES_PASSWORD:-portal123}@127.0.0.1:5432/${POSTGRES_DB:-mst_portal}
+      REDIS_URL: redis://127.0.0.1:6379/0
+      OLLAMA_BASE_URL: http://127.0.0.1:11434
+
+  worker:
+    network_mode: host
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-portal}:${POSTGRES_PASSWORD:-portal123}@127.0.0.1:5432/${POSTGRES_DB:-mst_portal}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-portal} -d ${POSTGRES_DB:-mst_portal} || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  auto-processor:
+    network_mode: host
+    extra_hosts: !reset []
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-portal}:${POSTGRES_PASSWORD:-portal123}@127.0.0.1:5432/${POSTGRES_DB:-mst_portal}
+      OLLAMA_BASE_URL: http://127.0.0.1:11434
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-portal} -d ${POSTGRES_DB:-mst_portal} || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    network_mode: host
+    environment:
+      # nginx binds directly on the host — its template needs to listen on the
+      # user-facing port and proxy to the backend on its real host port.
+      NGINX_LISTEN: ${FRONTEND_PORT:-9810}
+      BACKEND_UPSTREAM: 127.0.0.1:${BACKEND_PORT:-8000}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${FRONTEND_PORT:-9810}/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  transcript-service:
+    network_mode: host
