@@ -90,10 +90,13 @@ ensure_runtime_env() {
 }
 
 # Helper: read HOST_NETWORK from .env (or current env). Returns "true"/"false".
+# Uses tail -1 to match how bash/docker-compose source .env — last duplicate
+# wins. (Users sometimes paste a new HOST_NETWORK=... line without removing
+# the old one; previously head -1 disagreed with compose's effective value.)
 host_network_enabled() {
     local val="${HOST_NETWORK:-}"
     if [ -z "$val" ] && [ -f .env ]; then
-        val=$(grep '^HOST_NETWORK=' .env 2>/dev/null | head -1 | cut -d= -f2 | tr -d '"' | tr -d "'")
+        val=$(grep '^HOST_NETWORK=' .env 2>/dev/null | tail -1 | cut -d= -f2 | tr -d '"' | tr -d "'")
     fi
     val=$(echo "${val:-false}" | tr '[:upper:]' '[:lower:]')
     [ "$val" = "true" ] && echo "true" || echo "false"

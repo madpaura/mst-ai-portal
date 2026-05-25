@@ -41,6 +41,15 @@ services:
     network_mode: host
     # host.docker.internal is not needed — the host IS localhost
     extra_hosts: !reset []
+    # In bridge mode the base file maps host BACKEND_PORT → container 8000.
+    # In host mode there is no port mapping, so uvicorn must bind directly
+    # to BACKEND_PORT (the port the browser-baked VITE_API_URL is pointing at).
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "${BACKEND_PORT:-8000}"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:${BACKEND_PORT:-8000}/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     environment:
       # Service-name URLs are unconditionally rewritten in host mode; any
       # leftover "redis://redis:..." or "host.docker.internal" from .env
@@ -86,3 +95,11 @@ services:
 
   transcript-service:
     network_mode: host
+    # Bind uvicorn directly to TRANSCRIPT_PORT (no port mapping in host mode).
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "${TRANSCRIPT_PORT:-9100}", "--workers", "1"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${TRANSCRIPT_PORT:-9100}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
