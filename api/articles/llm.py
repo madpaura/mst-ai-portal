@@ -1,3 +1,4 @@
+import json
 import httpx
 from fastapi import HTTPException
 from database import get_db
@@ -5,18 +6,37 @@ from config import settings
 
 
 async def get_llm_settings() -> dict:
-    """Read LLM settings from forge_settings table."""
+    """Read LLM settings from forge_settings, falling back to app_settings ollama_config."""
     db = await get_db()
     row = await db.fetchrow(
         "SELECT llm_provider, llm_model, llm_api_key, ollama_url FROM forge_settings WHERE is_active = true LIMIT 1"
     )
+
+    # Portal-wide Ollama URL/model saved by the Settings admin page
+    app_ollama_url = None
+    app_ollama_model = None
+    cfg_row = await db.fetchrow("SELECT value FROM app_settings WHERE key = 'ollama_config'")
+    if cfg_row:
+        try:
+            cfg = json.loads(cfg_row["value"])
+            app_ollama_url = cfg.get("base_url") or None
+            app_ollama_model = cfg.get("model") or None
+        except Exception:
+            pass
+
     if not row:
-        return {"provider": "ollama", "model": "", "api_key": None, "ollama_url": None}
+        return {
+            "provider": "ollama",
+            "model": app_ollama_model or "",
+            "api_key": None,
+            "ollama_url": app_ollama_url,
+        }
     return {
         "provider": row["llm_provider"],
-        "model": row["llm_model"],
+        "model": row["llm_model"] or app_ollama_model or "",
         "api_key": row.get("llm_api_key"),
-        "ollama_url": row.get("ollama_url"),
+        # forge_settings URL takes precedence; fall back to portal-wide setting
+        "ollama_url": row.get("ollama_url") or app_ollama_url,
     }
 
 
