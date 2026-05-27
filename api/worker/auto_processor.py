@@ -131,6 +131,18 @@ async def _call_llm(pool: asyncpg.Pool, prompt: str) -> str:
     model = row["llm_model"]
     api_key = row.get("llm_api_key")
 
+    # Fall back to portal-wide Ollama URL saved by the Settings admin page
+    app_ollama_url = None
+    cfg_row = await pool.fetchrow("SELECT value FROM app_settings WHERE key = 'ollama_config'")
+    if cfg_row:
+        try:
+            cfg = json.loads(cfg_row["value"])
+            app_ollama_url = cfg.get("base_url") or None
+            if not model:
+                model = cfg.get("model") or ""
+        except Exception:
+            pass
+
     async with httpx.AsyncClient(timeout=180.0) as client:
         if provider == "anthropic":
             if not api_key:
@@ -155,7 +167,7 @@ async def _call_llm(pool: asyncpg.Pool, prompt: str) -> str:
             return resp.json()["choices"][0]["message"]["content"]
 
         elif provider == "ollama":
-            ollama_url = (row.get("ollama_url") or settings.OLLAMA_BASE_URL).rstrip("/")
+            ollama_url = (row.get("ollama_url") or app_ollama_url or settings.OLLAMA_BASE_URL).rstrip("/")
             if not model:
                 tags = await client.get(f"{ollama_url}/api/tags")
                 tags.raise_for_status()
