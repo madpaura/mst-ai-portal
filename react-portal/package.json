@@ -10,11 +10,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@types/dompurify": "^3.0.5",
+    "@types/dompurify": "^3.2.0",
     "@types/jszip": "^3.4.0",
     "@types/react-virtualized-auto-sizer": "^1.0.4",
     "@types/react-window": "^1.8.8",
-    "dompurify": "^3.4.1",
+    "dompurify": "^3.4.7",
     "highlight.js": "^11.11.1",
     "hls.js": "^1.6.15",
     "html2pdf.js": "^0.14.0",
