@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@types/dompurify": "^3.0.5",
-    "@types/jszip": "^3.4.0",
+    "@types/jszip": "^3.4.1",
     "@types/react-virtualized-auto-sizer": "^1.0.4",
     "@types/react-window": "^1.8.8",
     "dompurify": "^3.4.1",
