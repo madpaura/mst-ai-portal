@@ -10,7 +10,7 @@ aiofiles==24.1.0
 feedparser==6.0.11
 httpx==0.27.0
 python3-saml==1.16.0
-loguru==0.7.2
+loguru==0.7.3
 alembic==1.18.4
 psycopg2-binary==2.9.12
 redis[hiredis]==5.0.8
