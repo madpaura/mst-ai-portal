@@ -13,6 +13,6 @@ python3-saml==1.16.0
 loguru==0.7.2
 alembic==1.18.4
 psycopg2-binary==2.9.12
-redis[hiredis]==5.0.8
+redis[hiredis]==8.0.0
 slowapi==0.1.9
 bleach==6.2.0
