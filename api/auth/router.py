@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException, Depends, Response, Request
+from fastapi import APIRouter, HTTPException, Depends, Response, Request, BackgroundTasks
 import os
 from typing import Optional
 from pydantic import BaseModel
+from loguru import logger as log
 from auth.schemas import LoginRequest, TokenResponse, UserResponse, UserUpdateRequest
 from auth.service import verify_password, create_access_token
 from auth.dependencies import get_current_user, require_admin
@@ -9,6 +10,7 @@ from auth.audit import audit
 from database import get_db
 from config import settings
 from limiter import limiter
+from email_utils.utils import send_email_multi
 
 _COOKIE_NAME = "mst_token"
 _COOKIE_MAX_AGE = int(settings.JWT_EXPIRE_HOURS * 3600)
@@ -168,6 +170,51 @@ async def get_my_contribute_request(user: dict = Depends(get_current_user)):
     )
 
 
+async def _notify_contribute_decision(to_email: str, display_name: str,
+                                      approved: bool, admin_note: str | None):
+    """Email the requesting user when their contributor request is reviewed."""
+    if not to_email or "@" not in to_email:
+        return
+    status_word = "Approved" if approved else "Declined"
+    status_color = "#22c55e" if approved else "#ef4444"
+    intro = (
+        "You now have content creator access — you can upload videos, create articles, "
+        "and publish to the marketplace."
+        if approved else
+        "Your request to become a content contributor was not approved at this time."
+    )
+    note_html = (
+        f"<p style='color:#94a3b8;font-size:13px;'><b>Admin note:</b> {admin_note}</p>"
+        if admin_note else ""
+    )
+    action_html = (
+        f'<a href="{settings.PORTAL_URL}" style="display:inline-block;background:#258cf4;'
+        f'color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;'
+        f'font-size:14px;margin-top:8px;">Go to Portal →</a>'
+        if approved else ""
+    )
+    html = f"""
+    <div style="font-family:Inter,sans-serif;background:#0a0f14;padding:32px;border-radius:12px;max-width:600px;margin:auto;">
+      <h2 style="color:{status_color};font-size:20px;margin-bottom:4px;">Contributor Request {status_word}</h2>
+      <p style="color:#64748b;font-size:13px;margin-bottom:24px;">Hi {display_name}, your request to become a content contributor has been reviewed.</p>
+      <div style="background:#131a22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px;margin-bottom:20px;">
+        <p style="color:#f1f5f9;font-size:14px;margin:0;">{intro}</p>
+      </div>
+      {note_html}
+      {action_html}
+      <p style="color:#475569;font-size:11px;margin-top:24px;">MST AI Portal · Contributor Requests</p>
+    </div>
+    """
+    try:
+        await send_email_multi(
+            subject=f"Contributor Request {status_word}",
+            html_content=html,
+            to_emails=[to_email],
+        )
+    except Exception as e:
+        log.error(f"Failed to send contributor decision notification: {e}")
+
+
 # ── Admin: Manage Contribute Requests ─────────────────────
 
 @router.get("/admin/contribute-requests", response_model=list[ContributeRequestResponse])
@@ -194,14 +241,23 @@ async def list_contribute_requests(admin: dict = Depends(require_admin)):
 
 @router.put("/admin/contribute-requests/{request_id}", response_model=ContributeRequestResponse)
 async def review_contribute_request(
-    request: Request, request_id: str, req: ReviewContributeRequest, admin: dict = Depends(require_admin)
+    request: Request, request_id: str, req: ReviewContributeRequest,
+    background_tasks: BackgroundTasks, admin: dict = Depends(require_admin)
 ):
     """Approve or reject a contribution request. Approved → sets user role to 'content'."""
     if req.status not in ("approved", "rejected"):
         raise HTTPException(status_code=400, detail="Status must be 'approved' or 'rejected'")
 
     db = await get_db()
-    row = await db.fetchrow("SELECT * FROM contribute_requests WHERE id = $1", request_id)
+    row = await db.fetchrow(
+        """
+        SELECT cr.*, u.email AS user_email, u.display_name AS user_display_name
+        FROM contribute_requests cr
+        JOIN users u ON u.id = cr.user_id
+        WHERE cr.id = $1
+        """,
+        request_id,
+    )
     if not row:
         raise HTTPException(status_code=404, detail="Request not found")
 
@@ -215,6 +271,15 @@ async def review_contribute_request(
             "UPDATE users SET role = 'content' WHERE id = $1 AND role = 'user'",
             row["user_id"],
         )
+
+    # Notify the requesting user of the decision
+    background_tasks.add_task(
+        _notify_contribute_decision,
+        row.get("user_email") or "",
+        row.get("user_display_name") or "there",
+        req.status == "approved",
+        req.admin_note,
+    )
 
     await audit(request, admin, f"contribute_request.{req.status}", "contribute_request", request_id,
                 {"user_id": str(row["user_id"]), "admin_note": req.admin_note})

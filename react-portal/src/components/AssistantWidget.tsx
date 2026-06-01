@@ -27,6 +27,7 @@ export const AssistantWidget: React.FC<AssistantWidgetProps> = ({ videoSlug }) =
   const { user } = useAuth();
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  const [enabled, setEnabled] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
@@ -35,6 +36,23 @@ export const AssistantWidget: React.FC<AssistantWidgetProps> = ({ videoSlug }) =
   const abortRef = useRef<AbortController | null>(null);
 
   const isAdminPage = location.pathname.startsWith('/admin');
+
+  // Check whether an admin has enabled the assistant
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await fetch(`${API_BASE}/assistant/enabled`, { credentials: 'include' });
+        if (!resp.ok) return;
+        const data = await resp.json() as { enabled: boolean };
+        if (!cancelled) setEnabled(data.enabled);
+      } catch {
+        // network error — leave default (enabled) so the widget still works
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
 
   // Scroll to bottom whenever messages change
   useEffect(() => {
@@ -196,8 +214,8 @@ export const AssistantWidget: React.FC<AssistantWidgetProps> = ({ videoSlug }) =
     }
   };
 
-  // Don't render on admin pages or when not logged in
-  if (isAdminPage || !user) return null;
+  // Don't render on admin pages, when not logged in, or when disabled by an admin
+  if (isAdminPage || !user || !enabled) return null;
 
   return (
     <>

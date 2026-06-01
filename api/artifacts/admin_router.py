@@ -19,7 +19,9 @@ from artifacts.github_client import push_artifact, test_connection
 from auth.dependencies import require_admin, require_content, get_current_user
 from database import get_db
 from publish.router import _notify_reviewers
+from email_utils.utils import send_email_multi
 from config import settings
+from loguru import logger as log
 
 router = APIRouter()
 
@@ -459,8 +461,70 @@ async def submit_artifact(
     return {"message": "Submitted for review"}
 
 
+async def _get_submitter_contact(db, submitted_by) -> tuple[str, str]:
+    """Return (email, display_name) for the artifact's submitter."""
+    if not submitted_by:
+        return "", "there"
+    u = await db.fetchrow(
+        "SELECT email, display_name, username FROM users WHERE id = $1", submitted_by
+    )
+    if not u:
+        return "", "there"
+    return (u["email"] or "", u["display_name"] or u["username"] or "there")
+
+
+async def _notify_marketplace_decision(to_email: str, display_name: str,
+                                       item_title: str, item_type: str,
+                                       approved: bool, reason: str | None):
+    """Email the submitter when their marketplace submission is reviewed."""
+    if not to_email or "@" not in to_email:
+        return
+    status_word = "Approved" if approved else "Rejected"
+    status_color = "#22c55e" if approved else "#ef4444"
+    intro = (
+        "Your marketplace submission has been approved and will be published shortly."
+        if approved else
+        "Your marketplace submission was not approved. You can address the feedback and resubmit."
+    )
+    reason_html = (
+        f"<p style='color:#94a3b8;font-size:13px;'><b>Reviewer note:</b> {reason}</p>"
+        if reason else ""
+    )
+    action_html = (
+        f'<a href="{settings.PORTAL_BASE_URL}/marketplace" style="display:inline-block;'
+        f'background:#258cf4;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;'
+        f'font-weight:600;font-size:14px;margin-top:8px;">View Marketplace →</a>'
+    )
+    html = f"""
+    <div style="font-family:Inter,sans-serif;background:#0a0f14;padding:32px;border-radius:12px;max-width:600px;margin:auto;">
+      <h2 style="color:{status_color};font-size:20px;margin-bottom:4px;">Marketplace Submission {status_word}</h2>
+      <p style="color:#64748b;font-size:13px;margin-bottom:24px;">Hi {display_name}, your submission has been reviewed.</p>
+      <div style="background:#131a22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px;margin-bottom:20px;">
+        <p style="color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">{item_type}</p>
+        <p style="color:#f1f5f9;font-size:16px;font-weight:600;margin:0 0 8px;">{item_title}</p>
+        <p style="color:#94a3b8;font-size:13px;margin:0;">{intro}</p>
+      </div>
+      {reason_html}
+      {action_html}
+      <p style="color:#475569;font-size:11px;margin-top:24px;">MST AI Portal · Marketplace</p>
+    </div>
+    """
+    try:
+        await send_email_multi(
+            subject=f"Marketplace Submission {status_word}: {item_title}",
+            html_content=html,
+            to_emails=[to_email],
+        )
+    except Exception as e:
+        log.error(f"Failed to send marketplace decision notification: {e}")
+
+
 @router.post("/artifacts/{artifact_id}/approve")
-async def approve_artifact(artifact_id: str, admin: dict = Depends(require_admin)):
+async def approve_artifact(
+    artifact_id: str,
+    background_tasks: BackgroundTasks,
+    admin: dict = Depends(require_admin),
+):
     db = await get_db()
     row = await db.fetchrow("SELECT * FROM artifact_submissions WHERE id = $1", artifact_id)
     if not row:
@@ -476,6 +540,13 @@ async def approve_artifact(artifact_id: str, admin: dict = Depends(require_admin
         """,
         admin["id"], artifact_id,
     )
+
+    # Notify the submitter that their item was approved
+    email, name = await _get_submitter_contact(db, row.get("submitted_by"))
+    background_tasks.add_task(
+        _notify_marketplace_decision, email, name,
+        row["display_name"], row["artifact_type"], True, None,
+    )
     return {"message": "Approved"}
 
 
@@ -483,6 +554,7 @@ async def approve_artifact(artifact_id: str, admin: dict = Depends(require_admin
 async def reject_artifact(
     artifact_id: str,
     body: dict,
+    background_tasks: BackgroundTasks,
     admin: dict = Depends(require_admin),
 ):
     reason = (body.get("reason") or "").strip()
@@ -500,6 +572,13 @@ async def reject_artifact(
         WHERE id = $3
         """,
         admin["id"], reason or None, artifact_id,
+    )
+
+    # Notify the submitter that their item was rejected
+    email, name = await _get_submitter_contact(db, row.get("submitted_by"))
+    background_tasks.add_task(
+        _notify_marketplace_decision, email, name,
+        row["display_name"], row["artifact_type"], False, reason or None,
     )
     return {"message": "Rejected"}
 

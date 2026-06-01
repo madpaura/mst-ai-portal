@@ -51,6 +51,8 @@ export const AdminSettings: React.FC = () => {
   // Assistant system prompt
   const [assistantPrompt, setAssistantPrompt] = useState('');
   const [assistantPromptSaving, setAssistantPromptSaving] = useState(false);
+  const [assistantEnabled, setAssistantEnabled] = useState(true);
+  const [assistantEnabledSaving, setAssistantEnabledSaving] = useState(false);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
@@ -124,8 +126,9 @@ export const AdminSettings: React.FC = () => {
 
   const fetchAssistantConfig = useCallback(async () => {
     try {
-      const data = await api.get<{ system_prompt: string }>('/admin/assistant-config');
+      const data = await api.get<{ system_prompt: string; enabled?: boolean }>('/admin/assistant-config');
       setAssistantPrompt(data?.system_prompt || '');
+      setAssistantEnabled(data?.enabled !== false);
     } catch { }
   }, []);
 
@@ -829,13 +832,37 @@ export const AdminSettings: React.FC = () => {
       <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-100 dark:border-white/5 p-6 mb-8">
         <div className="flex items-center gap-3 mb-5">
           <span className="material-symbols-outlined text-primary">smart_toy</span>
-          <div>
+          <div className="flex-1">
             <h2 className="text-base font-bold text-slate-900 dark:text-white">AI Assistant</h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">System prompt for the floating chat widget — overrides the built-in default</p>
           </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={assistantEnabled}
+            disabled={assistantEnabledSaving}
+            onClick={async () => {
+              const next = !assistantEnabled;
+              setAssistantEnabled(next);
+              setAssistantEnabledSaving(true);
+              try {
+                await api.put('/admin/assistant-config', { enabled: next });
+                showMsg('success', next ? 'Assistant enabled' : 'Assistant disabled');
+              } catch (err: unknown) {
+                setAssistantEnabled(!next); // revert on failure
+                showMsg('error', toApiError(err));
+              } finally {
+                setAssistantEnabledSaving(false);
+              }
+            }}
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${assistantEnabled ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'}`}
+            title={assistantEnabled ? 'Assistant is enabled — click to disable' : 'Assistant is disabled — click to enable'}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${assistantEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
         </div>
 
-        <div className="space-y-4">
+        <div className={`space-y-4 ${assistantEnabled ? '' : 'opacity-50 pointer-events-none'}`}>
           {/* Default prompt hint */}
           <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-primary/5 border border-primary/20">
             <span className="material-symbols-outlined text-primary text-sm mt-0.5">info</span>
