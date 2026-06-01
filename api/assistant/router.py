@@ -2,7 +2,7 @@
 import json
 from typing import Optional, AsyncIterator
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -44,6 +44,18 @@ async def _get_assistant_system_prompt() -> str:
         return (row["assistant_system_prompt"] or "") if row else ""
     except Exception:
         return ""
+
+
+async def _is_assistant_enabled() -> bool:
+    """Whether the assistant is enabled by an admin. Defaults to True if unset."""
+    try:
+        db = await get_db()
+        row = await db.fetchrow("SELECT assistant_enabled FROM app_settings LIMIT 1")
+        if not row or row["assistant_enabled"] is None:
+            return True
+        return bool(row["assistant_enabled"])
+    except Exception:
+        return True
 
 
 async def _dispatch_tool(name: str, arguments: dict, user: dict) -> dict:
@@ -129,6 +141,12 @@ class CompactRequest(BaseModel):
     messages: list[Message]
 
 
+@router.get("/enabled")
+async def assistant_enabled(user: dict = Depends(get_current_user)):
+    """Public (authenticated) check the widget uses to decide whether to render."""
+    return {"enabled": await _is_assistant_enabled()}
+
+
 @router.post("/compact")
 async def compact(
     req: CompactRequest | None = None,
@@ -136,6 +154,8 @@ async def compact(
     messages: list | None = None,
 ):
     """Summarise a conversation history into a single context string."""
+    if not await _is_assistant_enabled():
+        raise HTTPException(status_code=403, detail="The assistant is currently disabled.")
     msgs = messages if messages is not None else (
         [m.model_dump() for m in req.messages] if req else []
     )
@@ -161,6 +181,8 @@ async def chat(
     req: ChatRequest,
     user: dict = Depends(get_current_user),
 ):
+    if not await _is_assistant_enabled():
+        raise HTTPException(status_code=403, detail="The assistant is currently disabled.")
     try:
         from assistant.tools import get_tools_for_role
         tools = get_tools_for_role(user.get("role", "user"))

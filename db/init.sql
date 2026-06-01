@@ -472,8 +472,10 @@ CREATE INDEX idx_articles_search ON articles USING GIN(
 -- APP SETTINGS (key-value store)
 ---------------------------------------------------
 CREATE TABLE IF NOT EXISTS app_settings (
-    key   TEXT PRIMARY KEY,
-    value TEXT NOT NULL DEFAULT '{}'
+    key                     TEXT PRIMARY KEY,
+    value                   TEXT NOT NULL DEFAULT '{}',
+    assistant_system_prompt TEXT DEFAULT '',
+    assistant_enabled       BOOLEAN DEFAULT TRUE
 );
 
 ---------------------------------------------------
