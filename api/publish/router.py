@@ -57,12 +57,32 @@ async def _get_admin_emails(db) -> list[str]:
     return [r["email"] for r in rows]
 
 
+# Placeholder / non-routable domains used by seeded or test accounts (e.g. the
+# default admin@mst.internal). Sending to these makes the SMTP server refuse the
+# whole message, so we drop them before notifying.
+_UNDELIVERABLE_DOMAINS = (".internal", ".local", ".localhost", "localhost", "example.com", "example.org")
+
+
+def _deliverable(emails: list[str]) -> list[str]:
+    out = []
+    for e in emails:
+        e = (e or "").strip()
+        if not e or "@" not in e:
+            continue
+        domain = e.rsplit("@", 1)[1].lower()
+        if any(domain == d or domain.endswith(d) for d in _UNDELIVERABLE_DOMAINS):
+            continue
+        out.append(e)
+    return out
+
+
 async def _notify_reviewers(db, req_id: str, target_type: str, target_title: str,
                             requester_name: str, note: str | None, portal_url: str):
     authority = await _get_authority_emails(db)
     admins = await _get_admin_emails(db)
-    recipients = list({*authority, *admins})
+    recipients = _deliverable(list({*authority, *admins}))
     if not recipients:
+        log.warning("No deliverable reviewer emails for publish request; notification skipped")
         return
 
     type_label = "Video" if target_type == "video" else "Marketplace Item"
@@ -97,13 +117,12 @@ async def _notify_reviewers(db, req_id: str, target_type: str, target_title: str
 
 async def _notify_requester(requester_email: str, requester_name: str,
                             target_type: str, target_title: str,
-                            approved: bool, note: str | None, portal_url: str):
+                            approved: bool, note: str | None, view_link: str):
     if not requester_email:
         return
     status_word = "Approved" if approved else "Rejected"
     status_color = "#22c55e" if approved else "#ef4444"
     type_label = "video" if target_type == "video" else "marketplace item"
-    view_link = f"{portal_url}/ignite" if target_type == "video" else f"{portal_url}/marketplace"
     note_html = f"<p style='color:#94a3b8;font-size:13px;'><b>Reviewer note:</b> {note}</p>" if note else ""
     action_html = (
         f'<a href="{view_link}" style="display:inline-block;background:#258cf4;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;margin-top:8px;">View on Portal →</a>'
@@ -211,15 +230,19 @@ async def approve_publish_request(
         raise HTTPException(status_code=400, detail="Request already reviewed")
 
     # Publish the actual content
+    view_link = f"{settings.PORTAL_BASE_URL}/ignite"
     if pr["target_type"] == "video":
-        video = await db.fetchrow("SELECT status FROM videos WHERE id=$1", pr["target_id"])
+        video = await db.fetchrow("SELECT status, slug FROM videos WHERE id=$1", pr["target_id"])
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
         if video["status"] != "ready":
             raise HTTPException(status_code=400, detail="Video must be transcoded before publishing")
         await db.execute("UPDATE videos SET is_published=true WHERE id=$1", pr["target_id"])
         await cache.bump_version(cache.NS_VIDEO)
+        # Deep-link straight to the published video so "View on Portal" lands on it
+        view_link = f"{settings.PORTAL_BASE_URL}/ignite/{video['slug']}" if video["slug"] else view_link
     elif pr["target_type"] == "marketplace":
+        view_link = f"{settings.PORTAL_BASE_URL}/marketplace"
         comp = await db.fetchrow("SELECT id FROM forge_components WHERE id=$1", pr["target_id"])
         if not comp:
             raise HTTPException(status_code=404, detail="Marketplace item not found")
@@ -236,7 +259,7 @@ async def approve_publish_request(
         _notify_requester,
         pr["requester_email"], pr["requester_name"],
         pr["target_type"], pr["target_title"],
-        True, body.note, settings.PORTAL_BASE_URL,
+        True, body.note, view_link,
     )
     return {"message": "Approved and published"}
 
@@ -266,7 +289,7 @@ async def reject_publish_request(
         _notify_requester,
         pr["requester_email"], pr["requester_name"],
         pr["target_type"], pr["target_title"],
-        False, body.note, settings.PORTAL_BASE_URL,
+        False, body.note, f"{settings.PORTAL_BASE_URL}/marketplace" if pr["target_type"] == "marketplace" else f"{settings.PORTAL_BASE_URL}/ignite",
     )
     return {"message": "Rejected"}
 
