@@ -76,7 +76,10 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM_EMAIL: str = "noreply@mst-ai-portal.local"
     SMTP_FROM_NAME: str = "MST AI Portal"
-    PORTAL_BASE_URL: str = "http://localhost:3000"
+    # Public base URL for "View on Portal" / review links in publish emails.
+    # Defaults to the same port as PORTAL_URL; docker-compose falls this back to
+    # PORTAL_URL when PORTAL_BASE_URL isn't set explicitly.
+    PORTAL_BASE_URL: str = "http://localhost:9810"
 
     # CORS — CORS_ORIGINS defaults to wildcard (safe with Bearer tokens, no cookies)
     # Set CORS_ALLOW_ORIGIN_REGEX for fine-grained control (e.g. restrict to your domain)

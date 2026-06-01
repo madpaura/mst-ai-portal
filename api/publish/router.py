@@ -82,8 +82,14 @@ async def _notify_reviewers(db, req_id: str, target_type: str, target_title: str
     admins = await _get_admin_emails(db)
     recipients = _deliverable(list({*authority, *admins}))
     if not recipients:
-        log.warning("No deliverable reviewer emails for publish request; notification skipped")
+        log.warning(
+            "Publish-request notification skipped: no deliverable reviewer emails. "
+            "Configure 'Publish Authority' emails in Admin → Settings, or ensure admin "
+            "users have real (non-.internal/.local) email addresses. "
+            f"(authority={len(authority)}, admins={len(admins)})"
+        )
         return
+    log.info(f"Notifying {len(recipients)} reviewer(s) of publish request '{target_title}': {recipients}")
 
     type_label = "Video" if target_type == "video" else "Marketplace Item"
     review_link = f"{portal_url}/admin/videos" if target_type == "video" else f"{portal_url}/admin/marketplace"
@@ -106,11 +112,16 @@ async def _notify_reviewers(db, req_id: str, target_type: str, target_title: str
     </div>
     """
     try:
-        await send_email_multi(
+        sent = await send_email_multi(
             subject=f"Publish Request: {target_title}",
             html_content=html,
             to_emails=recipients,
         )
+        if not sent:
+            log.error(
+                "Publish-request notification was NOT delivered. Check SMTP settings "
+                "in Admin → Settings (server/port/credentials) — see preceding SMTP log lines."
+            )
     except Exception as e:
         log.error(f"Failed to send publish request notification: {e}")
 
