@@ -27,21 +27,15 @@ server {
         proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
     }
 
+    # /admin/* are SPA routes (e.g. /admin/videos, /admin/solutions). They must
+    # fall back to index.html so a browser reload renders the app instead of the
+    # backend's JSON. The admin REST API is reached same-origin via the /backend/
+    # proxy below (VITE_API_URL=/backend) or cross-origin via VITE_API_URL.
+    # NOTE: do NOT add a regex `location ~ ^/admin/...` proxy here — a regex
+    # location outranks this prefix and would hijack SPA reloads, returning raw
+    # JSON on /admin/videos and /admin/solutions.
     location /admin/ {
-        # Routes starting with /admin that hit the API (not the SPA)
-        # SPA admin routes are handled by the / fallback above
-        # API admin routes need proxy
         try_files $uri $uri/ /index.html;
-    }
-
-    # Backend API admin endpoints
-    location ~ ^/admin/(forge|videos|solutions|courses|assistant) {
-        proxy_pass http://${BACKEND_UPSTREAM};
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $http_x_real_ip;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
-        client_max_body_size 5120m;
     }
 
     location /forge/ {

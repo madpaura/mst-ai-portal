@@ -59,6 +59,9 @@ services:
       REMOTION_BANNER_PATH: /remotion-banner
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       PORTAL_URL: ${PORTAL_URL:-http://localhost:9810}
+      # Public portal base used for "View on Portal" links in publish/review
+      # emails. Falls back to PORTAL_URL when not set separately.
+      PORTAL_BASE_URL: ${PORTAL_BASE_URL:-${PORTAL_URL:-http://localhost:9810}}
       CORS_ORIGINS: ${CORS_ORIGINS:-["*"]}
       CORS_ALLOW_ORIGIN_REGEX: ${CORS_ALLOW_ORIGIN_REGEX:-}
       SAML_SP_ENTITY_ID: ${SAML_SP_ENTITY_ID:-}
