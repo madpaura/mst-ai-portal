@@ -80,6 +80,16 @@ use above docker method to verfiy the build failure, if any build failed, fix it
 Use gh cli to talk to github, instead of web interface
 gh cli is already configured in my system
 
+## Git branching & PR workflow
+
+Always follow this strategy unless the user explicitly says otherwise:
+
+- **New feature** — branch off the latest `main`: `git checkout main && git pull && git checkout -b feat/<name>`. When done, open a PR (`gh pr create`); do not merge to `main` directly.
+- **Bug fix** — use a `fix/<issue>` branch (e.g. `fix/142` or `fix/issues-140-141` for multiple). Multiple related issues can share one branch. When done, open a PR.
+- **Small feature, "work on main"** — only when the user explicitly says to work on main: pull the latest `main`, apply the changes, run build checks, and push to `main` directly (no PR).
+
+Always start branches from the latest `main` (`git pull` first). Run the build checks above before every commit/PR.
+
 ## Key environment variables
 
 See `.env.example` for the full list with inline docs. Critical ones:
