@@ -45,7 +45,18 @@ async function request<T>(
       throw new Error(`Server error (HTTP ${res.status}). Check API connectivity.`);
     }
     const body = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(body.detail || `HTTP ${res.status}`);
+    // FastAPI's `detail` may be a string or an object (e.g. {message, validation}).
+    // Normalise to a readable string so callers always get a usable message.
+    const detail = body.detail;
+    let message: string;
+    if (typeof detail === 'string') {
+      message = detail;
+    } else if (detail && typeof detail === 'object') {
+      message = detail.message || JSON.stringify(detail);
+    } else {
+      message = `HTTP ${res.status}`;
+    }
+    throw new Error(message);
   }
 
   if (res.status === 204 || res.headers.get('content-length') === '0') {

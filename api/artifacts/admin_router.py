@@ -1,6 +1,6 @@
 import json
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
 
 from artifacts.schemas import (
     ArtifactSubmissionCreate,
@@ -18,6 +18,8 @@ from artifacts.validator import validate_files
 from artifacts.github_client import push_artifact, test_connection
 from auth.dependencies import require_admin, require_content, get_current_user
 from database import get_db
+from publish.router import _notify_reviewers
+from config import settings
 
 router = APIRouter()
 
@@ -408,7 +410,11 @@ async def validate_artifact(artifact_id: str, user: dict = Depends(require_conte
 
 
 @router.post("/artifacts/{artifact_id}/submit")
-async def submit_artifact(artifact_id: str, user: dict = Depends(require_content)):
+async def submit_artifact(
+    artifact_id: str,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(require_content),
+):
     """Move artifact from draft/rejected → pending (contributor submits for review)."""
     db = await get_db()
     row = await db.fetchrow("SELECT * FROM artifact_submissions WHERE id = $1", artifact_id)
@@ -442,6 +448,13 @@ async def submit_artifact(artifact_id: str, user: dict = Depends(require_content
         WHERE id = $2
         """,
         json.dumps(results), artifact_id,
+    )
+
+    # Notify reviewers (publish authority + admins) that an item awaits review
+    background_tasks.add_task(
+        _notify_reviewers, db,
+        str(artifact_id), "marketplace", row["display_name"],
+        user.get("display_name") or user.get("username"), None, settings.PORTAL_BASE_URL,
     )
     return {"message": "Submitted for review"}
 

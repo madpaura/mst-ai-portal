@@ -297,8 +297,8 @@ const ArtifactDetail: React.FC<{
       await api.post(`/admin/artifacts/${artifact.id}/validate`, {});
       await onRefresh();
       showToast('Validation complete');
-    } catch (e: any) {
-      showToast(`Validation failed: ${e?.detail || 'error'}`);
+    } catch (e: unknown) {
+      showToast(`Validation failed: ${toApiError(e) || 'error'}`);
     } finally { setValidating(false); }
   };
 
@@ -309,9 +309,8 @@ const ArtifactDetail: React.FC<{
       await onRefresh();
       showToast(`${action.charAt(0).toUpperCase() + action.slice(1)} successful`);
       setShowRejectBox(false);
-    } catch (e: any) {
-      const msg = e?.detail?.message || e?.detail || 'Action failed';
-      showToast(typeof msg === 'string' ? msg : 'Action failed');
+    } catch (e: unknown) {
+      showToast(toApiError(e) || 'Action failed');
     } finally { setActionLoading(''); }
   };
 
@@ -329,8 +328,8 @@ const ArtifactDetail: React.FC<{
       setEditMode(false);
       onEditModeChange(false);
       showToast('Saved');
-    } catch (e: any) {
-      showToast(e?.detail || 'Save failed');
+    } catch (e: unknown) {
+      showToast(toApiError(e) || 'Save failed');
     } finally { setSaving(false); }
   };
 
@@ -339,7 +338,7 @@ const ArtifactDetail: React.FC<{
     try {
       await api.delete(`/admin/artifacts/${artifact.id}`);
       onDelete();
-    } catch (e: any) { showToast(e?.detail || 'Delete failed'); }
+    } catch (e: unknown) { showToast(toApiError(e) || 'Delete failed'); }
   };
 
   const vr = artifact.validation_results;
@@ -1061,8 +1060,8 @@ const NewArtifactForm: React.FC<{
         files,
       });
       onCreated(artifact);
-    } catch (e: any) {
-      setError(e?.detail || 'Failed to create artifact');
+    } catch (e: unknown) {
+      setError(toApiError(e) || 'Failed to create artifact');
     } finally { setSaving(false); }
   };
 
@@ -1122,7 +1121,7 @@ const NewArtifactForm: React.FC<{
             {analyzing && <span className="ml-2 text-primary text-xs normal-case">filling…</span>}
           </label>
           <input
-            className={`w-full bg-white/5 border rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-primary/50 transition-colors ${analyzing ? 'border-primary/40 animate-pulse' : 'border-white/10'}`}
+            className={`w-full bg-slate-100 dark:bg-white/5 border rounded px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-primary/50 transition-colors ${analyzing ? 'border-primary/40 animate-pulse' : 'border-slate-300 dark:border-white/10'}`}
             value={form.display_name}
             onChange={e => {
               set('display_name', e.target.value);
@@ -1136,7 +1135,7 @@ const NewArtifactForm: React.FC<{
         <div>
           <label className="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">Folder Name (slug) *</label>
           <input
-            className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-primary/50"
+            className="w-full bg-slate-100 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 font-mono focus:outline-none focus:border-primary/50"
             value={form.name}
             onChange={e => set('name', slugify(e.target.value))}
             placeholder="my-awesome-agent"
@@ -1151,7 +1150,7 @@ const NewArtifactForm: React.FC<{
             {analyzing && <span className="ml-2 text-primary text-xs normal-case">filling…</span>}
           </label>
           <textarea
-            className={`w-full bg-white/5 border rounded px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-primary/50 resize-none transition-colors ${analyzing ? 'border-primary/40 animate-pulse' : 'border-white/10'}`}
+            className={`w-full bg-slate-100 dark:bg-white/5 border rounded px-3 py-2 text-sm text-slate-900 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:border-primary/50 resize-none transition-colors ${analyzing ? 'border-primary/40 animate-pulse' : 'border-slate-300 dark:border-white/10'}`}
             rows={3}
             value={form.description}
             onChange={e => set('description', e.target.value)}
@@ -1163,7 +1162,7 @@ const NewArtifactForm: React.FC<{
         <div className="col-span-2">
           <label className="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">Tags</label>
           <input
-            className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-primary/50"
+            className="w-full bg-slate-100 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded px-3 py-2 text-sm text-slate-900 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:border-primary/50"
             value={form.tags}
             onChange={e => set('tags', e.target.value)}
             placeholder="llm, automation, productivity"
@@ -1179,7 +1178,7 @@ const NewArtifactForm: React.FC<{
           {analyzing && <span className="ml-2 text-primary text-xs normal-case">filling…</span>}
         </label>
         <textarea
-          className={`w-full bg-white/5 border rounded px-3 py-2 text-sm text-slate-300 font-mono focus:outline-none focus:border-primary/50 resize-none transition-colors ${analyzing ? 'border-primary/40 animate-pulse' : 'border-white/10'}`}
+          className={`w-full bg-slate-100 dark:bg-white/5 border rounded px-3 py-2 text-sm text-slate-900 dark:text-slate-300 placeholder-slate-400 font-mono focus:outline-none focus:border-primary/50 resize-none transition-colors ${analyzing ? 'border-primary/40 animate-pulse' : 'border-slate-300 dark:border-white/10'}`}
           rows={10}
           value={form.instructions}
           onChange={e => set('instructions', e.target.value)}
@@ -1251,8 +1250,8 @@ export const GithubConfigPanel: React.FC = () => {
         `/admin/artifacts/github-config/test/${activeType}`, {}
       );
       setConnResult(result);
-    } catch (e: any) {
-      setConnResult({ ok: false, checks: [], error: e?.detail || 'Request failed' });
+    } catch (e: unknown) {
+      setConnResult({ ok: false, checks: [], error: toApiError(e) || 'Request failed' });
     } finally { setTesting(false); }
   };
 
