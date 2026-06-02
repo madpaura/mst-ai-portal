@@ -52,11 +52,6 @@ async def _get_authority_emails(db) -> list[str]:
         return []
 
 
-async def _get_admin_emails(db) -> list[str]:
-    rows = await db.fetch("SELECT email FROM users WHERE role = 'admin' AND email IS NOT NULL AND email <> ''")
-    return [r["email"] for r in rows]
-
-
 # Placeholder / non-routable domains used by seeded or test accounts (e.g. the
 # default admin@mst.internal). Sending to these makes the SMTP server refuse the
 # whole message, so we drop them before notifying.
@@ -79,14 +74,12 @@ def _deliverable(emails: list[str]) -> list[str]:
 async def _notify_reviewers(db, req_id: str, target_type: str, target_title: str,
                             requester_name: str, note: str | None, portal_url: str):
     authority = await _get_authority_emails(db)
-    admins = await _get_admin_emails(db)
-    recipients = _deliverable(list({*authority, *admins}))
+    recipients = _deliverable(list(dict.fromkeys(authority)))
     if not recipients:
         log.warning(
-            "Publish-request notification skipped: no deliverable reviewer emails. "
-            "Configure 'Publish Authority' emails in Admin → Settings, or ensure admin "
-            "users have real (non-.internal/.local) email addresses. "
-            f"(authority={len(authority)}, admins={len(admins)})"
+            "Publish-request notification skipped: no deliverable 'Publish Authority' emails. "
+            "Configure 'Publish Authority' emails in Admin → Settings (real, non-.internal/.local "
+            f"addresses). (authority={len(authority)})"
         )
         return
     log.info(f"Notifying {len(recipients)} reviewer(s) of publish request '{target_title}': {recipients}")
