@@ -70,6 +70,9 @@ export const AdminContributions: React.FC = () => {
   const [currentPassword, setCurrentPassword] = useState('');
   const [resetting, setResetting] = useState(false);
   const [changingRoleId, setChangingRoleId] = useState<string | null>(null);
+  // User list search & filter
+  const [userSearch, setUserSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'content' | 'user'>('all');
   // Create user form
   const [newUser, setNewUser] = useState<NewUserForm>(BLANK_USER);
   const [creatingUser, setCreatingUser] = useState(false);
@@ -236,6 +239,24 @@ export const AdminContributions: React.FC = () => {
 
   const pending = requests.filter((r) => r.status === 'pending');
   const reviewed = requests.filter((r) => r.status !== 'pending');
+
+  const userQuery = userSearch.trim().toLowerCase();
+  const filteredUsers = users.filter((u) => {
+    if (roleFilter !== 'all' && u.role !== roleFilter) return false;
+    if (!userQuery) return true;
+    return (
+      u.display_name.toLowerCase().includes(userQuery) ||
+      u.username.toLowerCase().includes(userQuery) ||
+      (u.email || '').toLowerCase().includes(userQuery)
+    );
+  });
+
+  const ROLE_FILTERS: { key: 'all' | 'admin' | 'content' | 'user'; label: string }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'admin', label: 'Admins' },
+    { key: 'content', label: 'Creators' },
+    { key: 'user', label: 'Others' },
+  ];
 
   return (
     <div className="p-6 lg:p-8 max-w-4xl mx-auto">
@@ -576,10 +597,51 @@ export const AdminContributions: React.FC = () => {
       <div className="border-t border-slate-200 dark:border-white/10 pt-8">
         <h2 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-4 flex items-center gap-2">
           <span className="material-symbols-outlined text-base text-primary">group</span>
-          All Users ({users.length})
+          All Users ({filteredUsers.length}{filteredUsers.length !== users.length ? ` of ${users.length}` : ''})
         </h2>
+
+        {/* Search + role filter */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
+          <div className="relative flex-1">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px] pointer-events-none">search</span>
+            <input
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
+              placeholder="Search by name, username, or email…"
+              className="w-full pl-10 pr-9 py-2 text-sm rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white placeholder-slate-400 focus:border-primary outline-none"
+            />
+            {userSearch && (
+              <button
+                onClick={() => setUserSearch('')}
+                title="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {ROLE_FILTERS.map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setRoleFilter(f.key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                  roleFilter === f.key
+                    ? 'bg-primary/20 border-primary/40 text-primary'
+                    : 'border-slate-200 dark:border-white/10 text-slate-400 hover:border-slate-400 dark:hover:border-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {filteredUsers.length === 0 && (
+          <p className="text-sm text-slate-500 dark:text-slate-400 italic mb-2">No users match your search.</p>
+        )}
         <div className="space-y-2">
-          {users.map((u) => (
+          {filteredUsers.map((u) => (
             <div key={u.id} className="flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-card-light dark:bg-card-dark">
               {/* Avatar */}
               <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-primary text-xs font-bold shrink-0">

@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from loguru import logger
 from pydantic import BaseModel
 
-from auth.dependencies import require_admin
+from auth.dependencies import require_admin, require_content
 from config import settings
 from database import get_db
 
@@ -100,7 +100,7 @@ def _transcript_progress_path(video_id: str) -> str:
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/videos/{video_id}/auto-process")
-async def trigger_auto_process(video_id: str, admin: dict = Depends(require_admin)):
+async def trigger_auto_process(video_id: str, admin: dict = Depends(require_content)):
     """Kick off the full transcript → LLM pipeline for a video."""
     logger.info("Auto-process triggered | video_id={} admin={}", video_id, admin.get("username"))
     db = await get_db()
@@ -118,7 +118,7 @@ async def trigger_auto_process(video_id: str, admin: dict = Depends(require_admi
 
 
 @router.get("/videos/{video_id}/auto-status")
-async def get_auto_status(video_id: str, admin: dict = Depends(require_admin)):
+async def get_auto_status(video_id: str, admin: dict = Depends(require_content)):
     """Return the status of each auto-processing kind for a video."""
     db = await get_db()
     rows = await db.fetch(
@@ -144,7 +144,7 @@ async def get_auto_status(video_id: str, admin: dict = Depends(require_admin)):
 
 
 @router.get("/videos/{video_id}/transcript/progress")
-async def get_transcript_progress(video_id: str, admin: dict = Depends(require_admin)):
+async def get_transcript_progress(video_id: str, admin: dict = Depends(require_content)):
     """Return current transcript generation progress: elapsed time, estimated duration, partial segments."""
     import time as _time
     db = await get_db()
@@ -201,7 +201,7 @@ async def get_transcript_progress(video_id: str, admin: dict = Depends(require_a
 
 
 @router.get("/videos/{video_id}/transcript")
-async def get_transcript(video_id: str, admin: dict = Depends(require_admin)):
+async def get_transcript(video_id: str, admin: dict = Depends(require_content)):
     """Fetch the stored transcript JSON for a video."""
     path = _transcript_path(video_id)
     if not os.path.isfile(path):
@@ -212,7 +212,7 @@ async def get_transcript(video_id: str, admin: dict = Depends(require_admin)):
 
 @router.put("/videos/{video_id}/transcript")
 async def save_transcript(
-    video_id: str, req: TranscriptSaveRequest, admin: dict = Depends(require_admin)
+    video_id: str, req: TranscriptSaveRequest, admin: dict = Depends(require_content)
 ):
     """Save an edited transcript back to disk."""
     db = await get_db()
@@ -235,7 +235,7 @@ async def save_transcript(
 
 @router.post("/videos/{video_id}/auto-process/retry")
 async def retry_auto_job(
-    video_id: str, req: RetryRequest, admin: dict = Depends(require_admin)
+    video_id: str, req: RetryRequest, admin: dict = Depends(require_content)
 ):
     """Re-enqueue a single failed auto-job kind."""
     valid_kinds = {"transcript", "metadata", "chapters", "howto"}
