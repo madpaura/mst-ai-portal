@@ -97,10 +97,22 @@ def _transcript_progress_path(video_id: str) -> str:
     return os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "transcript.progress")
 
 
+async def require_video_owner(video_id: str, user: dict = Depends(require_content)) -> dict:
+    """Dependency: content creators may only auto-process their own videos.
+    Raises 404 (not 403) so a creator can't probe other creators' video IDs.
+    """
+    db = await get_db()
+    row = await db.fetchrow("SELECT created_by FROM videos WHERE id = $1", video_id)
+    is_admin = user.get("role") == "admin"
+    if not row or (not is_admin and (row["created_by"] is None or str(row["created_by"]) != str(user.get("id")))):
+        raise HTTPException(status_code=404, detail="Video not found")
+    return user
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/videos/{video_id}/auto-process")
-async def trigger_auto_process(video_id: str, admin: dict = Depends(require_content)):
+async def trigger_auto_process(video_id: str, admin: dict = Depends(require_video_owner)):
     """Kick off the full transcript → LLM pipeline for a video."""
     logger.info("Auto-process triggered | video_id={} admin={}", video_id, admin.get("username"))
     db = await get_db()
@@ -118,7 +130,7 @@ async def trigger_auto_process(video_id: str, admin: dict = Depends(require_cont
 
 
 @router.get("/videos/{video_id}/auto-status")
-async def get_auto_status(video_id: str, admin: dict = Depends(require_content)):
+async def get_auto_status(video_id: str, admin: dict = Depends(require_video_owner)):
     """Return the status of each auto-processing kind for a video."""
     db = await get_db()
     rows = await db.fetch(
@@ -144,7 +156,7 @@ async def get_auto_status(video_id: str, admin: dict = Depends(require_content))
 
 
 @router.get("/videos/{video_id}/transcript/progress")
-async def get_transcript_progress(video_id: str, admin: dict = Depends(require_content)):
+async def get_transcript_progress(video_id: str, admin: dict = Depends(require_video_owner)):
     """Return current transcript generation progress: elapsed time, estimated duration, partial segments."""
     import time as _time
     db = await get_db()
@@ -201,7 +213,7 @@ async def get_transcript_progress(video_id: str, admin: dict = Depends(require_c
 
 
 @router.get("/videos/{video_id}/transcript")
-async def get_transcript(video_id: str, admin: dict = Depends(require_content)):
+async def get_transcript(video_id: str, admin: dict = Depends(require_video_owner)):
     """Fetch the stored transcript JSON for a video."""
     path = _transcript_path(video_id)
     if not os.path.isfile(path):
@@ -212,7 +224,7 @@ async def get_transcript(video_id: str, admin: dict = Depends(require_content)):
 
 @router.put("/videos/{video_id}/transcript")
 async def save_transcript(
-    video_id: str, req: TranscriptSaveRequest, admin: dict = Depends(require_content)
+    video_id: str, req: TranscriptSaveRequest, admin: dict = Depends(require_video_owner)
 ):
     """Save an edited transcript back to disk."""
     db = await get_db()
@@ -235,7 +247,7 @@ async def save_transcript(
 
 @router.post("/videos/{video_id}/auto-process/retry")
 async def retry_auto_job(
-    video_id: str, req: RetryRequest, admin: dict = Depends(require_content)
+    video_id: str, req: RetryRequest, admin: dict = Depends(require_video_owner)
 ):
     """Re-enqueue a single failed auto-job kind."""
     valid_kinds = {"transcript", "metadata", "chapters", "howto"}

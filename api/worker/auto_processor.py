@@ -32,6 +32,7 @@ log.add(
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import settings
+import database
 
 POLL_INTERVAL = int(os.environ.get("AUTO_POLL_INTERVAL", "5"))
 TRANSCRIPT_MOCK = os.environ.get("TRANSCRIPT_MOCK", "").lower() in ("1", "true", "yes")
@@ -91,6 +92,76 @@ async def mark_failed(pool: asyncpg.Pool, job_id: int, error: str):
             "UPDATE auto_jobs SET status = 'pending', error = $1 WHERE id = $2",
             error[:2000], job_id,
         )
+
+
+async def maybe_notify_owner_ready(pool: asyncpg.Pool, video_id: str):
+    """When a video's auto-pipeline has finished, email the owner that it's
+    ready to publish. Sends at most once per video (guarded by
+    auto_ready_notified) and only when the transcript succeeded and no
+    auto-jobs are still in flight.
+    """
+    # Still-running jobs? Wait for them to finish first.
+    remaining = await pool.fetchval(
+        "SELECT COUNT(*) FROM auto_jobs WHERE video_id = $1 AND status IN ('pending', 'processing')",
+        video_id,
+    )
+    if remaining and remaining > 0:
+        return
+
+    # Atomically claim the notification: only one worker wins this UPDATE, and
+    # only if auto-mode is on, the transcript is ready, and we haven't notified.
+    row = await pool.fetchrow(
+        """
+        UPDATE videos
+           SET auto_ready_notified = true
+         WHERE id = $1
+           AND auto_mode = true
+           AND auto_ready_notified = false
+           AND transcript_status = 'ready'
+        RETURNING title, slug, created_by
+        """,
+        video_id,
+    )
+    if not row or not row["created_by"]:
+        return
+
+    owner = await pool.fetchrow(
+        "SELECT email, display_name FROM users WHERE id = $1", row["created_by"]
+    )
+    if not owner or not owner["email"] or "@" not in owner["email"]:
+        log.info("Auto-ready: owner has no deliverable email | video_id={}", video_id)
+        return
+
+    name = owner["display_name"] or "there"
+    title = row["title"] or "Your video"
+    review_link = f"{settings.PORTAL_URL}/admin/videos"
+    watch_link = f"{settings.PORTAL_URL}/ignite/{row['slug']}" if row["slug"] else review_link
+    html = f"""
+    <div style="font-family:Inter,sans-serif;background:#0a0f14;padding:32px;border-radius:12px;max-width:600px;margin:auto;">
+      <h2 style="color:#22c55e;font-size:20px;margin-bottom:4px;">Your content is ready to publish</h2>
+      <p style="color:#64748b;font-size:13px;margin-bottom:24px;">Hi {name}, auto-processing has finished — transcript, chapters, metadata and the how-to guide are all generated.</p>
+      <div style="background:#131a22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px;margin-bottom:20px;">
+        <p style="color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Video</p>
+        <p style="color:#f1f5f9;font-size:16px;font-weight:600;margin:0;">{title}</p>
+      </div>
+      <a href="{review_link}" style="display:inline-block;background:#258cf4;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;margin-top:8px;">Review &amp; Publish →</a>
+      <p style="color:#475569;font-size:11px;margin-top:24px;">Preview link: <a href="{watch_link}" style="color:#64748b;">{watch_link}</a></p>
+      <p style="color:#475569;font-size:11px;margin-top:8px;">MST AI Portal · Ignite</p>
+    </div>
+    """
+    try:
+        from email_utils.utils import send_email
+        sent = await send_email(
+            to_email=owner["email"],
+            subject=f"Ready to publish: {title}",
+            html_content=html,
+        )
+        if sent:
+            log.info("Auto-ready notification sent | video_id={} to={}", video_id, owner["email"])
+        else:
+            log.warning("Auto-ready notification not delivered | video_id={} (check SMTP settings)", video_id)
+    except Exception as exc:
+        log.error("Auto-ready notification failed | video_id={} error={}", video_id, str(exc))
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -641,6 +712,8 @@ async def _worker_loop(pool: asyncpg.Pool, worker_id: int):
             await handler(pool, job)
             await mark_complete(pool, job_id)
             log.info("Worker-{} | job done | id={} kind={} video_id={}", worker_id, job_id, kind, video_id)
+            # If the whole auto-pipeline is now finished, tell the owner it's ready.
+            await maybe_notify_owner_ready(pool, video_id)
         except Exception as exc:
             log.error("Worker-{} | job failed | id={} kind={} error={}", worker_id, job_id, kind, str(exc))
             if kind == "transcript":
@@ -655,6 +728,9 @@ async def main():
     log.info("Auto-processor starting | poll_interval={}s concurrency={}", POLL_INTERVAL, CONCURRENCY)
     # Pool size: each worker needs its own connection plus headroom for cascaded enqueues
     pool = await asyncpg.create_pool(settings.DATABASE_URL, min_size=CONCURRENCY + 1, max_size=CONCURRENCY * 2 + 2)
+    # Expose the pool to shared helpers (email_utils.send_email reads SMTP config
+    # via database.get_db()), which otherwise has no initialized pool in the worker.
+    database.pool = pool
     log.info("Database pool established | min={} max={}", CONCURRENCY + 1, CONCURRENCY * 2 + 2)
     # Run N workers concurrently — each independently claims jobs from the queue.
     # This means video pipelines run in parallel: transcript(v1) and metadata(v2) can
