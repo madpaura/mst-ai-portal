@@ -150,3 +150,33 @@
 .dark.theme-simple .neon-border-glow {
     border: 1px solid #30363d;
 }
+
+/* ── Light-mode label legibility ──────────────────────────────────
+   Neon accent text colours (the bright -400 shades and the #00ff9d
+   "accent") are designed for dark backgrounds. On the white/light
+   theme they wash out and become hard to read. In light mode only,
+   remap them to the deeper -700 shade of the same hue so labels keep
+   their colour identity but stay legible. Dark mode is untouched.
+   These target the raw utility classes, so the fix applies portal-wide
+   without editing every page. */
+html:not(.dark) .text-accent      { color: #047857; } /* emerald-700 */
+html:not(.dark) .text-green-400   { color: #15803d; } /* green-700   */
+html:not(.dark) .text-emerald-400 { color: #047857; } /* emerald-700 */
+html:not(.dark) .text-teal-400    { color: #0f766e; } /* teal-700    */
+html:not(.dark) .text-cyan-400    { color: #0e7490; } /* cyan-700    */
+html:not(.dark) .text-sky-400     { color: #0369a1; } /* sky-700     */
+html:not(.dark) .text-lime-400    { color: #4d7c0f; } /* lime-700    */
+html:not(.dark) .text-amber-400   { color: #b45309; } /* amber-700   */
+
+/* Exception: some surfaces are intentionally dark even in light mode
+   (code blocks, terminals, command snippets). Neon text there is on a
+   dark panel and is perfectly legible, so re-assert the original neon
+   shade for descendants of always-dark backgrounds. */
+html:not(.dark) :is(.bg-slate-900, .bg-slate-950, .bg-gray-900, .bg-gray-950, .bg-zinc-900, .bg-neutral-900, .bg-black) .text-accent      { color: #00ff9d; }
+html:not(.dark) :is(.bg-slate-900, .bg-slate-950, .bg-gray-900, .bg-gray-950, .bg-zinc-900, .bg-neutral-900, .bg-black) .text-green-400   { color: #4ade80; }
+html:not(.dark) :is(.bg-slate-900, .bg-slate-950, .bg-gray-900, .bg-gray-950, .bg-zinc-900, .bg-neutral-900, .bg-black) .text-emerald-400 { color: #34d399; }
+html:not(.dark) :is(.bg-slate-900, .bg-slate-950, .bg-gray-900, .bg-gray-950, .bg-zinc-900, .bg-neutral-900, .bg-black) .text-teal-400    { color: #2dd4bf; }
+html:not(.dark) :is(.bg-slate-900, .bg-slate-950, .bg-gray-900, .bg-gray-950, .bg-zinc-900, .bg-neutral-900, .bg-black) .text-cyan-400    { color: #22d3ee; }
+html:not(.dark) :is(.bg-slate-900, .bg-slate-950, .bg-gray-900, .bg-gray-950, .bg-zinc-900, .bg-neutral-900, .bg-black) .text-sky-400     { color: #38bdf8; }
+html:not(.dark) :is(.bg-slate-900, .bg-slate-950, .bg-gray-900, .bg-gray-950, .bg-zinc-900, .bg-neutral-900, .bg-black) .text-lime-400    { color: #a3e635; }
+html:not(.dark) :is(.bg-slate-900, .bg-slate-950, .bg-gray-900, .bg-gray-950, .bg-zinc-900, .bg-neutral-900, .bg-black) .text-amber-400   { color: #fbbf24; }
