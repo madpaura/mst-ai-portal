@@ -61,6 +61,8 @@ CREATE TABLE videos (
     is_published    BOOLEAN DEFAULT false,
     is_active       BOOLEAN DEFAULT true,
     sort_order      INTEGER DEFAULT 0,
+    created_by      UUID REFERENCES users(id),
+    auto_ready_notified BOOLEAN DEFAULT false,
     created_at      TIMESTAMPTZ DEFAULT now()
 );
 

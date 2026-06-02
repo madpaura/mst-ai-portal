@@ -62,12 +62,51 @@ def _video_row_to_admin(r, job=None) -> VideoAdminResponse:
     )
 
 
+# ── Ownership helpers ───────────────────────────────────────
+
+def _is_owner_or_admin(user: dict, created_by) -> bool:
+    """Admins can access everything; content creators only their own videos."""
+    if user.get("role") == "admin":
+        return True
+    return created_by is not None and str(created_by) == str(user.get("id"))
+
+
+async def _require_video_access(db, video_id: str, user: dict):
+    """Fetch a video and enforce per-creator isolation.
+
+    Returns the row for owners/admins. Raises 404 (not 403) for everyone else
+    so a creator can't probe the existence of another creator's video by ID.
+    """
+    row = await db.fetchrow("SELECT * FROM videos WHERE id = $1", video_id)
+    if not row or not _is_owner_or_admin(user, row.get("created_by")):
+        raise HTTPException(status_code=404, detail="Video not found")
+    return row
+
+
+async def verify_video_access(video_id: str, admin: dict = Depends(require_admin)) -> dict:
+    """Dependency: authenticate (content/admin) AND enforce video ownership.
+
+    Use on per-video sub-resource endpoints (chapters, howto, attachments, …)
+    so content creators can only touch their own videos. Returns the user dict.
+    """
+    db = await get_db()
+    await _require_video_access(db, video_id, admin)
+    return admin
+
+
 # ── Video CRUD ──────────────────────────────────────────────
 
 @router.get("/videos", response_model=list[VideoAdminResponse])
 async def admin_list_videos(admin: dict = Depends(require_admin)):
     db = await get_db()
-    rows = await db.fetch("SELECT * FROM videos ORDER BY sort_order, created_at DESC")
+    # Content creators see only the videos they own; admins see everything.
+    if admin.get("role") == "admin":
+        rows = await db.fetch("SELECT * FROM videos ORDER BY sort_order, created_at DESC")
+    else:
+        rows = await db.fetch(
+            "SELECT * FROM videos WHERE created_by = $1 ORDER BY sort_order, created_at DESC",
+            admin["id"],
+        )
     result = []
     for r in rows:
         job = await db.fetchrow(
@@ -94,10 +133,10 @@ async def admin_create_video(req: VideoCreate, admin: dict = Depends(require_adm
 
     row = await db.fetchrow(
         """
-        INSERT INTO videos (title, slug, description, category, course_id, sort_order, status)
-        VALUES ($1, $2, $3, $4, $5, $6, 'draft') RETURNING *
+        INSERT INTO videos (title, slug, description, category, course_id, sort_order, status, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, 'draft', $7) RETURNING *
         """,
-        req.title, req.slug, req.description, req.category, course_id, req.sort_order,
+        req.title, req.slug, req.description, req.category, course_id, req.sort_order, admin["id"],
     )
 
     # Create default quality settings
@@ -120,9 +159,7 @@ async def admin_create_video(req: VideoCreate, admin: dict = Depends(require_adm
 @router.get("/videos/{video_id}", response_model=VideoAdminResponse)
 async def admin_get_video(video_id: str, admin: dict = Depends(require_admin)):
     db = await get_db()
-    row = await db.fetchrow("SELECT * FROM videos WHERE id = $1", video_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="Video not found")
+    row = await _require_video_access(db, video_id, admin)
     job = await db.fetchrow(
         "SELECT * FROM transcode_jobs WHERE video_id = $1 ORDER BY created_at DESC LIMIT 1",
         row["id"],
@@ -135,9 +172,7 @@ async def admin_update_video(
     video_id: str, req: VideoUpdate, admin: dict = Depends(require_admin)
 ):
     db = await get_db()
-    existing = await db.fetchrow("SELECT * FROM videos WHERE id = $1", video_id)
-    if not existing:
-        raise HTTPException(status_code=404, detail="Video not found")
+    existing = await _require_video_access(db, video_id, admin)
 
     _VIDEO_UPDATABLE_FIELDS = frozenset({"title", "description", "category", "course_id", "sort_order"})
     fields = {}
@@ -165,9 +200,7 @@ async def admin_update_video(
 @router.delete("/videos/{video_id}")
 async def admin_delete_video(video_id: str, admin: dict = Depends(require_admin)):
     db = await get_db()
-    row = await db.fetchrow("SELECT id FROM videos WHERE id = $1", video_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="Video not found")
+    await _require_video_access(db, video_id, admin)
 
     # Delete all files from disk (raw, hls, banner, thumbnails)
     video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
@@ -186,9 +219,7 @@ async def admin_delete_video(video_id: str, admin: dict = Depends(require_admin)
 @router.post("/videos/{video_id}/publish")
 async def admin_publish_video(video_id: str, admin: dict = Depends(require_admin)):
     db = await get_db()
-    video = await db.fetchrow("SELECT status FROM videos WHERE id = $1", video_id)
-    if not video:
-        raise HTTPException(status_code=404, detail="Video not found")
+    video = await _require_video_access(db, video_id, admin)
     if video["status"] != "ready":
         raise HTTPException(status_code=400, detail="Video must be transcoded (status=ready) before publishing")
     await db.execute("UPDATE videos SET is_published = true WHERE id = $1", video_id)
@@ -199,6 +230,7 @@ async def admin_publish_video(video_id: str, admin: dict = Depends(require_admin
 @router.post("/videos/{video_id}/unpublish")
 async def admin_unpublish_video(video_id: str, admin: dict = Depends(require_admin)):
     db = await get_db()
+    await _require_video_access(db, video_id, admin)
     await db.execute("UPDATE videos SET is_published = false WHERE id = $1", video_id)
     await cache.bump_version(cache.NS_VIDEO)
     return {"message": "Video unpublished"}
@@ -209,9 +241,7 @@ async def admin_unpublish_video(video_id: str, admin: dict = Depends(require_adm
 @router.get("/videos/{video_id}/preview")
 async def admin_preview_video(video_id: str, admin: dict = Depends(require_admin)):
     db = await get_db()
-    row = await db.fetchrow("SELECT hls_path, status FROM videos WHERE id = $1", video_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="Video not found")
+    row = await _require_video_access(db, video_id, admin)
     if not row["hls_path"]:
         raise HTTPException(status_code=400, detail="No HLS path available yet")
     return {"hls_path": row["hls_path"], "status": row["status"]}
@@ -221,12 +251,10 @@ async def admin_preview_video(video_id: str, admin: dict = Depends(require_admin
 
 @router.post("/videos/{video_id}/upload")
 async def admin_upload_video_file(
-    video_id: str, file: UploadFile = File(...), admin: dict = Depends(require_admin)
+    video_id: str, file: UploadFile = File(...), admin: dict = Depends(verify_video_access)
 ):
     db = await get_db()
-    video = await db.fetchrow("SELECT id FROM videos WHERE id = $1", video_id)
-    if not video:
-        raise HTTPException(status_code=404, detail="Video not found")
+    await _require_video_access(db, video_id, admin)
 
     # Save raw file — write to a .tmp sibling first, then atomically rename
     # so the transcoder never picks up a partially-written original.mp4.
@@ -256,6 +284,7 @@ async def admin_upload_video_file(
 @router.post("/videos/{video_id}/cancel-job")
 async def admin_cancel_job(video_id: str, admin: dict = Depends(require_admin)):
     db = await get_db()
+    await _require_video_access(db, video_id, admin)
     await db.execute(
         "UPDATE transcode_jobs SET status = 'cancelled' WHERE video_id = $1 AND status IN ('pending', 'processing')",
         video_id,
@@ -267,6 +296,8 @@ async def admin_cancel_job(video_id: str, admin: dict = Depends(require_admin)):
 @router.get("/videos/{video_id}/storage-info")
 async def admin_storage_info(video_id: str, admin: dict = Depends(require_admin)):
     """List raw files with sizes and flag intermediate/backup files."""
+    db = await get_db()
+    await _require_video_access(db, video_id, admin)
     video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
     raw_dir = os.path.join(video_dir, "raw")
 
@@ -307,6 +338,8 @@ async def admin_storage_info(video_id: str, admin: dict = Depends(require_admin)
 @router.post("/videos/{video_id}/cleanup")
 async def admin_cleanup_video(video_id: str, admin: dict = Depends(require_admin)):
     """Delete intermediate/backup files to free disk space."""
+    db = await get_db()
+    await _require_video_access(db, video_id, admin)
     video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
     raw_dir = os.path.join(video_dir, "raw")
 
@@ -336,9 +369,7 @@ async def admin_cleanup_video(video_id: str, admin: dict = Depends(require_admin
 @router.post("/videos/{video_id}/transcode")
 async def admin_transcode(video_id: str, admin: dict = Depends(require_admin)):
     db = await get_db()
-    video = await db.fetchrow("SELECT id FROM videos WHERE id = $1", video_id)
-    if not video:
-        raise HTTPException(status_code=404, detail="Video not found")
+    await _require_video_access(db, video_id, admin)
 
     raw_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original.mp4")
     if not os.path.exists(raw_path):
@@ -358,9 +389,7 @@ async def admin_trim_video(
 ):
     """Cut/trim a video between start_seconds and end_seconds using ffmpeg."""
     db = await get_db()
-    video = await db.fetchrow("SELECT id, status FROM videos WHERE id = $1", video_id)
-    if not video:
-        raise HTTPException(status_code=404, detail="Video not found")
+    video = await _require_video_access(db, video_id, admin)
 
     raw_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original.mp4")
     backup_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original_pretrim.mp4")
@@ -506,9 +535,7 @@ async def admin_cut_video(
 ):
     """Remove the segment between start_seconds and end_seconds, keeping everything else."""
     db = await get_db()
-    video = await db.fetchrow("SELECT id, status FROM videos WHERE id = $1", video_id)
-    if not video:
-        raise HTTPException(status_code=404, detail="Video not found")
+    video = await _require_video_access(db, video_id, admin)
 
     raw_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original.mp4")
     backup_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original_precut.mp4")
@@ -663,9 +690,7 @@ async def admin_speed_section(
         raise HTTPException(status_code=400, detail="end_seconds must be > start_seconds")
 
     db = await get_db()
-    video = await db.fetchrow("SELECT id, status FROM videos WHERE id = $1", video_id)
-    if not video:
-        raise HTTPException(status_code=404, detail="Video not found")
+    video = await _require_video_access(db, video_id, admin)
 
     raw_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original.mp4")
     backup_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original_prespeed.mp4")
@@ -855,7 +880,7 @@ async def _speed_section_task(
 
 
 @router.get("/videos/{video_id}/job-status", response_model=list[JobStatusResponse])
-async def admin_job_status(video_id: str, admin: dict = Depends(require_admin)):
+async def admin_job_status(video_id: str, admin: dict = Depends(verify_video_access)):
     db = await get_db()
     rows = await db.fetch(
         "SELECT * FROM transcode_jobs WHERE video_id = $1 ORDER BY created_at DESC LIMIT 5",
@@ -873,7 +898,7 @@ async def admin_job_status(video_id: str, admin: dict = Depends(require_admin)):
 
 
 @router.get("/videos/{video_id}/ops-log")
-async def admin_ops_log(video_id: str, admin: dict = Depends(require_admin)):
+async def admin_ops_log(video_id: str, admin: dict = Depends(verify_video_access)):
     raw_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw")
     log_path = os.path.join(raw_dir, "ops.json")
     if not os.path.exists(log_path):
@@ -887,7 +912,7 @@ async def admin_ops_log(video_id: str, admin: dict = Depends(require_admin)):
 # ── Chapters ────────────────────────────────────────────────
 
 @router.get("/videos/{video_id}/chapters", response_model=list[ChapterResponse])
-async def admin_list_chapters(video_id: str, admin: dict = Depends(require_admin)):
+async def admin_list_chapters(video_id: str, admin: dict = Depends(verify_video_access)):
     db = await get_db()
     rows = await db.fetch(
         "SELECT * FROM video_chapters WHERE video_id = $1 ORDER BY sort_order, start_time",
@@ -904,7 +929,7 @@ async def admin_list_chapters(video_id: str, admin: dict = Depends(require_admin
 
 @router.post("/videos/{video_id}/chapters", response_model=ChapterResponse)
 async def admin_create_chapter(
-    video_id: str, req: ChapterCreate, admin: dict = Depends(require_admin)
+    video_id: str, req: ChapterCreate, admin: dict = Depends(verify_video_access)
 ):
     db = await get_db()
     video = await db.fetchrow("SELECT id FROM videos WHERE id = $1", video_id)
@@ -958,7 +983,7 @@ async def admin_delete_chapter(chapter_id: str, admin: dict = Depends(require_ad
 
 @router.put("/videos/{video_id}/chapters/reorder")
 async def admin_reorder_chapters(
-    video_id: str, req: ChapterReorder, admin: dict = Depends(require_admin)
+    video_id: str, req: ChapterReorder, admin: dict = Depends(verify_video_access)
 ):
     db = await get_db()
     for idx, chapter_id in enumerate(req.chapter_ids):
@@ -973,7 +998,7 @@ async def admin_reorder_chapters(
 # ── How-To Guide ────────────────────────────────────────────
 
 @router.get("/videos/{video_id}/howto", response_model=HowtoResponse | None)
-async def admin_get_howto(video_id: str, admin: dict = Depends(require_admin)):
+async def admin_get_howto(video_id: str, admin: dict = Depends(verify_video_access)):
     db = await get_db()
     row = await db.fetchrow("SELECT * FROM howto_guides WHERE video_id = $1", video_id)
     if not row:
@@ -986,7 +1011,7 @@ async def admin_get_howto(video_id: str, admin: dict = Depends(require_admin)):
 
 @router.put("/videos/{video_id}/howto", response_model=HowtoResponse)
 async def admin_upsert_howto(
-    video_id: str, req: HowtoUpdate, admin: dict = Depends(require_admin)
+    video_id: str, req: HowtoUpdate, admin: dict = Depends(verify_video_access)
 ):
     db = await get_db()
     existing = await db.fetchrow("SELECT id FROM howto_guides WHERE video_id = $1", video_id)
@@ -1012,7 +1037,7 @@ async def admin_upsert_howto(
 # ── Quality Settings ────────────────────────────────────────
 
 @router.get("/videos/{video_id}/quality", response_model=list[QualitySettingResponse])
-async def admin_get_quality(video_id: str, admin: dict = Depends(require_admin)):
+async def admin_get_quality(video_id: str, admin: dict = Depends(verify_video_access)):
     db = await get_db()
     rows = await db.fetch(
         "SELECT * FROM video_quality_settings WHERE video_id = $1 ORDER BY quality",
@@ -1026,7 +1051,7 @@ async def admin_get_quality(video_id: str, admin: dict = Depends(require_admin))
 
 @router.put("/videos/{video_id}/quality")
 async def admin_update_quality(
-    video_id: str, req: QualitySettingUpdate, admin: dict = Depends(require_admin)
+    video_id: str, req: QualitySettingUpdate, admin: dict = Depends(verify_video_access)
 ):
     db = await get_db()
     for q in req.qualities:
@@ -1045,7 +1070,7 @@ async def admin_update_quality(
 
 @router.post("/videos/{video_id}/thumbnail")
 async def admin_upload_thumbnail(
-    video_id: str, file: UploadFile = File(...), admin: dict = Depends(require_admin)
+    video_id: str, file: UploadFile = File(...), admin: dict = Depends(verify_video_access)
 ):
     db = await get_db()
     video = await db.fetchrow("SELECT id FROM videos WHERE id = $1", video_id)
@@ -1070,7 +1095,7 @@ async def admin_upload_thumbnail(
 # ── Seed Notes ──────────────────────────────────────────────
 
 @router.get("/videos/{video_id}/seed-notes", response_model=list[SeedNoteResponse])
-async def admin_list_seed_notes(video_id: str, admin: dict = Depends(require_admin)):
+async def admin_list_seed_notes(video_id: str, admin: dict = Depends(verify_video_access)):
     db = await get_db()
     rows = await db.fetch(
         "SELECT * FROM seed_notes WHERE video_id = $1 ORDER BY timestamp_s", video_id
@@ -1087,7 +1112,7 @@ async def admin_list_seed_notes(video_id: str, admin: dict = Depends(require_adm
 
 @router.post("/videos/{video_id}/seed-notes", response_model=SeedNoteResponse)
 async def admin_create_seed_note(
-    video_id: str, req: SeedNoteCreate, admin: dict = Depends(require_admin)
+    video_id: str, req: SeedNoteCreate, admin: dict = Depends(verify_video_access)
 ):
     db = await get_db()
     row = await db.fetchrow(
@@ -1148,7 +1173,7 @@ def _banner_row_to_response(r) -> BannerConfigResponse:
 
 
 @router.get("/videos/{video_id}/banner", response_model=BannerConfigResponse | None)
-async def admin_get_banner(video_id: str, admin: dict = Depends(require_admin)):
+async def admin_get_banner(video_id: str, admin: dict = Depends(verify_video_access)):
     db = await get_db()
     row = await db.fetchrow("SELECT * FROM video_banners WHERE video_id = $1", video_id)
     if not row:
@@ -1158,7 +1183,7 @@ async def admin_get_banner(video_id: str, admin: dict = Depends(require_admin)):
 
 @router.put("/videos/{video_id}/banner", response_model=BannerConfigResponse)
 async def admin_upsert_banner(
-    video_id: str, req: BannerConfigUpdate, admin: dict = Depends(require_admin)
+    video_id: str, req: BannerConfigUpdate, admin: dict = Depends(verify_video_access)
 ):
     db = await get_db()
     video = await db.fetchrow("SELECT id FROM videos WHERE id = $1", video_id)
@@ -1471,7 +1496,7 @@ async def _generate_banner_video(video_id: str, db_url: str):
 
 @router.post("/videos/{video_id}/banner/generate")
 async def admin_generate_banner(
-    video_id: str, background_tasks: BackgroundTasks, admin: dict = Depends(require_admin)
+    video_id: str, background_tasks: BackgroundTasks, admin: dict = Depends(verify_video_access)
 ):
     db = await get_db()
     banner = await db.fetchrow("SELECT * FROM video_banners WHERE video_id = $1", video_id)
@@ -1512,7 +1537,7 @@ def _attachment_row_to_response(r) -> AttachmentResponse:
 
 
 @router.get("/videos/{video_id}/attachments", response_model=list[AttachmentResponse])
-async def admin_list_attachments(video_id: str, admin: dict = Depends(require_admin)):
+async def admin_list_attachments(video_id: str, admin: dict = Depends(verify_video_access)):
     db = await get_db()
     rows = await db.fetch(
         "SELECT * FROM video_attachments WHERE video_id = $1 ORDER BY sort_order, created_at",
@@ -1523,7 +1548,7 @@ async def admin_list_attachments(video_id: str, admin: dict = Depends(require_ad
 
 @router.post("/videos/{video_id}/attachments", response_model=AttachmentResponse)
 async def admin_upload_attachment(
-    video_id: str, file: UploadFile = File(...), admin: dict = Depends(require_admin)
+    video_id: str, file: UploadFile = File(...), admin: dict = Depends(verify_video_access)
 ):
     db = await get_db()
     video = await db.fetchrow("SELECT id FROM videos WHERE id = $1", video_id)
@@ -1641,7 +1666,7 @@ class SendEmailResponse(BaseModel):
 
 @router.post("/videos/{video_id}/email-preview", response_model=EmailPreviewResponse)
 async def admin_email_preview(
-    video_id: str, req: EmailPreviewRequest, admin: dict = Depends(require_admin)
+    video_id: str, req: EmailPreviewRequest, admin: dict = Depends(verify_video_access)
 ):
     try:
         preview = await generate_email_preview(video_id, req.custom_content or None)
@@ -1654,7 +1679,7 @@ async def admin_email_preview(
 
 @router.post("/videos/{video_id}/send-email", response_model=SendEmailResponse)
 async def admin_send_email(
-    video_id: str, req: SendEmailRequest, admin: dict = Depends(require_admin)
+    video_id: str, req: SendEmailRequest, admin: dict = Depends(verify_video_access)
 ):
     try:
         total = len(req.recipient_emails)
