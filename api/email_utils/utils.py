@@ -60,6 +60,9 @@ async def _get_smtp_cfg() -> dict:
             "password": cfg.get("smtp_password", settings.SMTP_PASSWORD),
             "from_email": cfg.get("smtp_from_email", settings.SMTP_FROM_EMAIL),
             "from_name": cfg.get("smtp_from_name", settings.SMTP_FROM_NAME),
+            # Empty string in DB means "no prefix"; only fall back to the env
+            # default when the key is absent entirely.
+            "subject_prefix": cfg.get("subject_prefix", settings.EMAIL_SUBJECT_PREFIX),
         }
     return {
         "server": settings.SMTP_SERVER,
@@ -68,7 +71,19 @@ async def _get_smtp_cfg() -> dict:
         "password": settings.SMTP_PASSWORD,
         "from_email": settings.SMTP_FROM_EMAIL,
         "from_name": settings.SMTP_FROM_NAME,
+        "subject_prefix": settings.EMAIL_SUBJECT_PREFIX,
     }
+
+
+def _apply_subject_prefix(subject: str, cfg: dict) -> str:
+    """Prepend the configured prefix to every email subject (e.g. 'MSTAI-TF').
+    Idempotent — won't double-prefix a subject that already starts with it."""
+    prefix = (cfg.get("subject_prefix") or "").strip()
+    if not prefix:
+        return subject
+    if subject.startswith(prefix):
+        return subject
+    return f"{prefix} {subject}"
 
 
 def _make_smtp_connection(cfg: dict):
@@ -95,7 +110,7 @@ async def send_email(
     try:
         cfg = await _get_smtp_cfg()
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
+        msg["Subject"] = _apply_subject_prefix(subject, cfg)
         msg["From"] = f"{cfg['from_name']} <{cfg['from_email']}>"
         msg["To"] = to_email
         if plain_text:
@@ -133,7 +148,7 @@ async def send_email_multi(
     try:
         cfg = await _get_smtp_cfg()
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
+        msg["Subject"] = _apply_subject_prefix(subject, cfg)
         msg["From"] = f"{cfg['from_name']} <{cfg['from_email']}>"
         # To: header shows explicit To list; if none, show portal address so inbox displays nicely
         msg["To"] = ", ".join(to_emails) if to_emails else f"{cfg['from_name']} <{cfg['from_email']}>"

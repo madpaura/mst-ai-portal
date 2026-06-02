@@ -76,6 +76,9 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM_EMAIL: str = "noreply@mst-ai-portal.local"
     SMTP_FROM_NAME: str = "MST AI Portal"
+    # Prefix prepended to every outgoing email subject. Configurable in
+    # Admin → Settings → SMTP (stored in smtp_config.subject_prefix).
+    EMAIL_SUBJECT_PREFIX: str = "MSTAI-TF"
     # Public base URL for "View on Portal" / review links in publish emails.
     # Defaults to the same port as PORTAL_URL; docker-compose falls this back to
     # PORTAL_URL when PORTAL_BASE_URL isn't set explicitly.

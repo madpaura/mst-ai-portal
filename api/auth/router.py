@@ -1,10 +1,11 @@
 from fastapi import APIRouter, HTTPException, Depends, Response, Request, BackgroundTasks
+from fastapi.responses import HTMLResponse
 import os
 from typing import Optional
 from pydantic import BaseModel
 from loguru import logger as log
 from auth.schemas import LoginRequest, TokenResponse, UserResponse, UserUpdateRequest
-from auth.service import verify_password, create_access_token
+from auth.service import verify_password, create_access_token, create_action_token, decode_action_token
 from auth.dependencies import get_current_user, require_admin
 from auth.audit import audit
 from database import get_db
@@ -125,7 +126,10 @@ async def update_me(req: UserUpdateRequest, user: dict = Depends(get_current_use
 # ── Contribute Requests ────────────────────────────────────
 
 @router.post("/contribute-request", response_model=ContributeRequestResponse)
-async def submit_contribute_request(req: ContributeRequestCreate, user: dict = Depends(get_current_user)):
+async def submit_contribute_request(
+    req: ContributeRequestCreate, background_tasks: BackgroundTasks,
+    user: dict = Depends(get_current_user),
+):
     """Submit a request to become a content contributor."""
     db = await get_db()
     # Check if user already has an active/approved request
@@ -144,6 +148,18 @@ async def submit_contribute_request(req: ContributeRequestCreate, user: dict = D
         "INSERT INTO contribute_requests (user_id, reason) VALUES ($1, $2) RETURNING *",
         user["id"], req.reason.strip(),
     )
+
+    # Notify admins (with one-click approve/reject buttons) and confirm to the requester.
+    requester_name = user.get("display_name") or user.get("username") or "there"
+    background_tasks.add_task(
+        _notify_admins_new_request,
+        str(row["id"]), requester_name,
+        user.get("username") or "", user.get("email") or "", row["reason"],
+    )
+    background_tasks.add_task(
+        _notify_requester_received, user.get("email") or "", requester_name,
+    )
+
     return ContributeRequestResponse(
         id=str(row["id"]), user_id=str(row["user_id"]),
         reason=row["reason"], status=row["status"],
@@ -168,6 +184,113 @@ async def get_my_contribute_request(user: dict = Depends(get_current_user)):
         admin_note=row.get("admin_note"),
         created_at=row["created_at"].isoformat(),
     )
+
+
+_REVIEW_TOKEN_PURPOSE = "contribute_review"
+
+
+async def _get_admin_emails() -> list[str]:
+    """Return deliverable email addresses for all admin users."""
+    db = await get_db()
+    rows = await db.fetch(
+        "SELECT email FROM users WHERE role = 'admin' AND email IS NOT NULL AND email LIKE '%@%'"
+    )
+    return [r["email"] for r in rows if r["email"]]
+
+
+def _review_action_link(request_id: str, action: str) -> str:
+    """Build a signed one-click approve/reject link for admin emails."""
+    token = create_action_token(
+        _REVIEW_TOKEN_PURPOSE, {"rid": request_id, "action": action}
+    )
+    return f"{settings.PORTAL_BASE_URL}/auth/contribute-request/action?token={token}"
+
+
+async def _notify_admins_new_request(request_id: str, requester_name: str,
+                                     username: str, requester_email: str, reason: str):
+    """Email all admins about a new contributor request, with one-click action buttons."""
+    admin_emails = await _get_admin_emails()
+    if not admin_emails:
+        log.info("Contributor request: no admin emails to notify | request_id={}", request_id)
+        return
+    approve_link = _review_action_link(request_id, "approved")
+    reject_link = _review_action_link(request_id, "rejected")
+    review_link = f"{settings.PORTAL_BASE_URL}/admin/contributions"
+    who = f"{requester_name}" + (f" ({username})" if username else "")
+    html = f"""
+    <div style="font-family:Inter,sans-serif;background:#0a0f14;padding:32px;border-radius:12px;max-width:600px;margin:auto;">
+      <h2 style="color:#258cf4;font-size:20px;margin-bottom:4px;">New Contributor Request</h2>
+      <p style="color:#64748b;font-size:13px;margin-bottom:24px;">{who} has requested content creator access.</p>
+      <div style="background:#131a22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px;margin-bottom:20px;">
+        <p style="color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Requested by</p>
+        <p style="color:#f1f5f9;font-size:15px;font-weight:600;margin:0 0 12px;">{who}{(' &lt;' + requester_email + '&gt;') if requester_email else ''}</p>
+        <p style="color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Reason</p>
+        <p style="color:#f1f5f9;font-size:14px;margin:0;">{reason}</p>
+      </div>
+      <div style="margin-top:8px;">
+        <a href="{approve_link}" style="display:inline-block;background:#22c55e;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;margin-right:8px;">Approve ✓</a>
+        <a href="{reject_link}" style="display:inline-block;background:#ef4444;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px;">Decline ✕</a>
+      </div>
+      <p style="color:#475569;font-size:11px;margin-top:24px;">Or open the <a href="{review_link}" style="color:#64748b;">admin review page</a>. These action links expire in 7 days.</p>
+      <p style="color:#475569;font-size:11px;margin-top:8px;">MST AI Portal · Contributor Requests</p>
+    </div>
+    """
+    try:
+        await send_email_multi(
+            subject=f"New contributor request from {requester_name}",
+            html_content=html,
+            to_emails=admin_emails,
+        )
+    except Exception as e:
+        log.error(f"Failed to send admin contributor-request notification: {e}")
+
+
+async def _notify_requester_received(to_email: str, display_name: str):
+    """Confirm to the requester that their contributor request was received."""
+    if not to_email or "@" not in to_email:
+        return
+    html = f"""
+    <div style="font-family:Inter,sans-serif;background:#0a0f14;padding:32px;border-radius:12px;max-width:600px;margin:auto;">
+      <h2 style="color:#258cf4;font-size:20px;margin-bottom:4px;">Request Received</h2>
+      <p style="color:#64748b;font-size:13px;margin-bottom:24px;">Hi {display_name}, we've received your request to become a content contributor.</p>
+      <div style="background:#131a22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px;margin-bottom:20px;">
+        <p style="color:#f1f5f9;font-size:14px;margin:0;">An administrator will review it shortly. You'll get another email once a decision has been made.</p>
+      </div>
+      <p style="color:#475569;font-size:11px;margin-top:24px;">MST AI Portal · Contributor Requests</p>
+    </div>
+    """
+    try:
+        await send_email_multi(
+            subject="Your contributor request was received",
+            html_content=html,
+            to_emails=[to_email],
+        )
+    except Exception as e:
+        log.error(f"Failed to send contributor-request confirmation: {e}")
+
+
+async def _notify_admins_decision(request_id: str, requester_name: str, approved: bool):
+    """Inform admins that a contributor request has been resolved."""
+    admin_emails = await _get_admin_emails()
+    if not admin_emails:
+        return
+    status_word = "approved" if approved else "declined"
+    status_color = "#22c55e" if approved else "#ef4444"
+    html = f"""
+    <div style="font-family:Inter,sans-serif;background:#0a0f14;padding:32px;border-radius:12px;max-width:600px;margin:auto;">
+      <h2 style="color:{status_color};font-size:20px;margin-bottom:4px;">Contributor Request {status_word.capitalize()}</h2>
+      <p style="color:#64748b;font-size:13px;margin-bottom:24px;">The contributor request from {requester_name} has been {status_word}. No further action is needed.</p>
+      <p style="color:#475569;font-size:11px;margin-top:24px;">MST AI Portal · Contributor Requests</p>
+    </div>
+    """
+    try:
+        await send_email_multi(
+            subject=f"Contributor request from {requester_name} {status_word}",
+            html_content=html,
+            to_emails=admin_emails,
+        )
+    except Exception as e:
+        log.error(f"Failed to send admin contributor-decision notification: {e}")
 
 
 async def _notify_contribute_decision(to_email: str, display_name: str,
@@ -239,15 +362,11 @@ async def list_contribute_requests(admin: dict = Depends(require_admin)):
     ]
 
 
-@router.put("/admin/contribute-requests/{request_id}", response_model=ContributeRequestResponse)
-async def review_contribute_request(
-    request: Request, request_id: str, req: ReviewContributeRequest,
-    background_tasks: BackgroundTasks, admin: dict = Depends(require_admin)
-):
-    """Approve or reject a contribution request. Approved → sets user role to 'content'."""
-    if req.status not in ("approved", "rejected"):
-        raise HTTPException(status_code=400, detail="Status must be 'approved' or 'rejected'")
-
+async def _apply_contribute_review(request_id: str, status: str, admin_note: str | None,
+                                   reviewed_by: str | None, background_tasks: BackgroundTasks,
+                                   require_pending: bool = False):
+    """Shared approve/reject logic. Approved → sets user role to 'content'.
+    Returns (row, result) where result is 'not_found' | 'already_done' | 'applied'."""
     db = await get_db()
     row = await db.fetchrow(
         """
@@ -259,36 +378,112 @@ async def review_contribute_request(
         request_id,
     )
     if not row:
-        raise HTTPException(status_code=404, detail="Request not found")
+        return None, "not_found"
+    if require_pending and row["status"] != "pending":
+        return row, "already_done"
 
     await db.execute(
         "UPDATE contribute_requests SET status = $1, admin_note = $2, reviewed_by = $3, reviewed_at = now() WHERE id = $4",
-        req.status, req.admin_note, admin["id"], request_id,
+        status, admin_note, reviewed_by, request_id,
     )
-
-    if req.status == "approved":
+    if status == "approved":
         await db.execute(
             "UPDATE users SET role = 'content' WHERE id = $1 AND role = 'user'",
             row["user_id"],
         )
 
-    # Notify the requesting user of the decision
+    approved = status == "approved"
+    name = row.get("user_display_name") or "there"
+    # Notify the requesting user of the decision, and the admins of the outcome.
     background_tasks.add_task(
-        _notify_contribute_decision,
-        row.get("user_email") or "",
-        row.get("user_display_name") or "there",
-        req.status == "approved",
-        req.admin_note,
+        _notify_contribute_decision, row.get("user_email") or "", name, approved, admin_note,
     )
+    background_tasks.add_task(_notify_admins_decision, request_id, name, approved)
+    return row, "applied"
+
+
+@router.put("/admin/contribute-requests/{request_id}", response_model=ContributeRequestResponse)
+async def review_contribute_request(
+    request: Request, request_id: str, req: ReviewContributeRequest,
+    background_tasks: BackgroundTasks, admin: dict = Depends(require_admin)
+):
+    """Approve or reject a contribution request. Approved → sets user role to 'content'."""
+    if req.status not in ("approved", "rejected"):
+        raise HTTPException(status_code=400, detail="Status must be 'approved' or 'rejected'")
+
+    row, result = await _apply_contribute_review(
+        request_id, req.status, req.admin_note, admin["id"], background_tasks,
+    )
+    if result == "not_found":
+        raise HTTPException(status_code=404, detail="Request not found")
 
     await audit(request, admin, f"contribute_request.{req.status}", "contribute_request", request_id,
                 {"user_id": str(row["user_id"]), "admin_note": req.admin_note})
+    db = await get_db()
     updated = await db.fetchrow("SELECT * FROM contribute_requests WHERE id = $1", request_id)
     return ContributeRequestResponse(
         id=str(updated["id"]), user_id=str(updated["user_id"]),
         reason=updated["reason"], status=updated["status"],
         admin_note=updated.get("admin_note"),
         created_at=updated["created_at"].isoformat(),
+    )
+
+
+def _review_result_page(title: str, message: str, color: str = "#258cf4") -> HTMLResponse:
+    html = f"""<!doctype html><html><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{title}</title></head>
+    <body style="font-family:Inter,system-ui,sans-serif;background:#0a0f14;margin:0;padding:0;">
+      <div style="max-width:520px;margin:64px auto;background:#131a22;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:40px;text-align:center;">
+        <h1 style="color:{color};font-size:22px;margin:0 0 12px;">{title}</h1>
+        <p style="color:#94a3b8;font-size:14px;margin:0 0 28px;">{message}</p>
+        <a href="{settings.PORTAL_BASE_URL}/admin/contributions" style="display:inline-block;background:#258cf4;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:600;font-size:14px;">Open review page →</a>
+      </div>
+    </body></html>"""
+    return HTMLResponse(content=html)
+
+
+@router.get("/contribute-request/action", response_class=HTMLResponse)
+async def contribute_request_action(token: str, background_tasks: BackgroundTasks):
+    """One-click approve/reject from an admin notification email. The action is
+    authorised by a signed token embedded in the link (no login required)."""
+    payload = decode_action_token(token, _REVIEW_TOKEN_PURPOSE)
+    if not payload:
+        return _review_result_page(
+            "Link expired or invalid",
+            "This approval link is no longer valid. Please use the admin review page instead.",
+            color="#ef4444",
+        )
+    action = payload.get("action")
+    request_id = payload.get("rid")
+    if action not in ("approved", "rejected") or not request_id:
+        return _review_result_page(
+            "Invalid action",
+            "This link doesn't carry a valid action.",
+            color="#ef4444",
+        )
+
+    row, result = await _apply_contribute_review(
+        request_id, action, None, None, background_tasks, require_pending=True,
+    )
+    name = (row.get("user_display_name") if row else None) or "the requester"
+    if result == "not_found":
+        return _review_result_page(
+            "Request not found",
+            "This contributor request no longer exists.",
+            color="#ef4444",
+        )
+    if result == "already_done":
+        return _review_result_page(
+            "Already reviewed",
+            f"This request from {name} was already {row['status']}. No change was made.",
+        )
+    verb = "approved" if action == "approved" else "declined"
+    color = "#22c55e" if action == "approved" else "#ef4444"
+    return _review_result_page(
+        f"Request {verb}",
+        f"The contributor request from {name} has been {verb} and they have been notified.",
+        color=color,
     )
 
 
