@@ -32,7 +32,7 @@ export const AdminSettings: React.FC = () => {
   const [showSmtpModal, setShowSmtpModal] = useState(false);
   const [smtpForm, setSmtpForm] = useState({
     smtp_server: '', smtp_port: '1025', smtp_user: '', smtp_password: '',
-    smtp_from_email: '', smtp_from_name: '', test_recipient: '',
+    smtp_from_email: '', smtp_from_name: '', subject_prefix: 'MSTAI-TF', test_recipient: '',
   });
   const [smtpTesting, setSmtpTesting] = useState(false);
   const [smtpSaving, setSmtpSaving] = useState(false);
@@ -101,6 +101,7 @@ export const AdminSettings: React.FC = () => {
           smtp_password: '',
           smtp_from_email: data.smtp_from_email || '',
           smtp_from_name: data.smtp_from_name || '',
+          subject_prefix: data.subject_prefix ?? 'MSTAI-TF',
         }));
       }
     } catch { }
@@ -699,6 +700,14 @@ export const AdminSettings: React.FC = () => {
               </div>
 
               <div>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Subject Prefix</label>
+                <input value={smtpForm.subject_prefix} onChange={e => setSmtpForm(f => ({ ...f, subject_prefix: e.target.value }))}
+                  placeholder="MSTAI-TF"
+                  className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
+                <p className="text-xs text-slate-500 mt-1">Prepended to every email subject. Leave blank to disable.</p>
+              </div>
+
+              <div>
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Test Recipient Email</label>
                 <input value={smtpForm.test_recipient} onChange={e => setSmtpForm(f => ({ ...f, test_recipient: e.target.value }))}
                   placeholder="test@example.com"
@@ -803,6 +812,7 @@ export const AdminSettings: React.FC = () => {
                         smtp_user: smtpForm.smtp_user,
                         smtp_from_email: smtpForm.smtp_from_email,
                         smtp_from_name: smtpForm.smtp_from_name,
+                        subject_prefix: smtpForm.subject_prefix,
                       };
                       if (smtpForm.smtp_password) payload.smtp_password = smtpForm.smtp_password;
                       await api.put('/settings/admin/smtp_config', { value: payload });

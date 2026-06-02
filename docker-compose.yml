@@ -62,6 +62,7 @@ services:
       # Public portal base used for "View on Portal" links in publish/review
       # emails. Falls back to PORTAL_URL when not set separately.
       PORTAL_BASE_URL: ${PORTAL_BASE_URL:-${PORTAL_URL:-http://localhost:9810}}
+      EMAIL_SUBJECT_PREFIX: ${EMAIL_SUBJECT_PREFIX:-MSTAI-TF}
       CORS_ORIGINS: ${CORS_ORIGINS:-["*"]}
       CORS_ALLOW_ORIGIN_REGEX: ${CORS_ALLOW_ORIGIN_REGEX:-}
       SAML_SP_ENTITY_ID: ${SAML_SP_ENTITY_ID:-}
@@ -144,6 +145,17 @@ services:
       VIDEO_STORAGE_PATH: /data/videos
       FFMPEG_PATH: ffmpeg
       OLLAMA_BASE_URL: http://host.docker.internal:11434
+      # Needed for the "Ready to publish" email links — this worker sends them.
+      PORTAL_URL: ${PORTAL_URL:-http://localhost:9810}
+      PORTAL_BASE_URL: ${PORTAL_BASE_URL:-${PORTAL_URL:-http://localhost:9810}}
+      # SMTP — auto-ready notification is sent from this worker
+      SMTP_SERVER: ${SMTP_SERVER:-localhost}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@mst-ai-portal.local}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-MST AI Portal}
+      EMAIL_SUBJECT_PREFIX: ${EMAIL_SUBJECT_PREFIX:-MSTAI-TF}
       AUTO_POLL_INTERVAL: "5"
       AUTO_PROCESSOR_CONCURRENCY: ${AUTO_PROCESSOR_CONCURRENCY:-4}
       TRANSCRIPT_MOCK: ${TRANSCRIPT_MOCK:-false}

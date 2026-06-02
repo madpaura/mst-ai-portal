@@ -33,3 +33,23 @@ def decode_access_token(token: str) -> Optional[dict]:
         return payload
     except JWTError:
         return None
+
+
+def create_action_token(purpose: str, data: dict, expires_hours: int = 168) -> str:
+    """Create a short-lived signed token for one-click email actions (e.g. approve
+    a contributor request). Default validity: 7 days."""
+    expire = datetime.now(timezone.utc) + timedelta(hours=expires_hours)
+    payload = {"purpose": purpose, "exp": expire, **data}
+    return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+
+
+def decode_action_token(token: str, expected_purpose: str) -> Optional[dict]:
+    """Verify a token created by create_action_token. Returns the payload only if
+    the signature is valid, it hasn't expired, and the purpose matches."""
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+    except JWTError:
+        return None
+    if payload.get("purpose") != expected_purpose:
+        return None
+    return payload
