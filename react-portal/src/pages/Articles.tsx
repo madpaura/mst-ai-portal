@@ -66,7 +66,7 @@ export const Articles: React.FC = () => {
     new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-sans">
+    <div className="bg-background-light dark:bg-background-dark text-text-strong min-h-screen font-sans">
       <Navbar variant="solutions" />
 
       <main className="relative pt-16">
@@ -77,7 +77,7 @@ export const Articles: React.FC = () => {
               <h1 className="text-5xl md:text-6xl font-bold tracking-tight text-slate-900 dark:text-white">
                 Articles
               </h1>
-              <p className="mt-3 text-lg text-slate-500 dark:text-slate-400 max-w-2xl">
+              <p className="mt-3 text-lg text-text-muted max-w-2xl">
                 Insights, tutorials, and best practices from the team.
               </p>
             </div>
@@ -166,7 +166,7 @@ export const Articles: React.FC = () => {
                     {article.title}
                   </h3>
                   {article.summary && (
-                    <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-3">
+                    <p className="text-sm text-text-muted leading-relaxed line-clamp-3">
                       {article.summary}
                     </p>
                   )}

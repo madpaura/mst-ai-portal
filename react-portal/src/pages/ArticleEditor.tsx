@@ -99,7 +99,7 @@ export const ArticleEditor: React.FC = () => {
   }
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-sans">
+    <div className="bg-background-light dark:bg-background-dark text-text-strong min-h-screen font-sans">
       <Navbar variant="solutions" />
 
       <main className="relative pt-16">

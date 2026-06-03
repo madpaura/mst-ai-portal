@@ -48,7 +48,7 @@ export const PublishAuthority: React.FC = () => {
     <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden mb-6">
       <div className="px-5 py-3 bg-panel-light dark:bg-panel-dark/60 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
         <div>
-          <span className="text-xs font-bold uppercase tracking-widest text-slate-700 dark:text-slate-300">Publish Authority</span>
+          <span className="text-xs font-bold uppercase tracking-widest text-text">Publish Authority</span>
           <span className="ml-2 text-xs text-slate-500">Who receives publish request notifications</span>
         </div>
         <span className="material-symbols-outlined text-sm text-amber-500">pending_actions</span>
@@ -88,7 +88,7 @@ export const PublishAuthority: React.FC = () => {
                   <div key={email} className="flex items-center justify-between px-3 py-2 bg-panel-light dark:bg-panel-dark/50 rounded-lg border border-slate-200 dark:border-white/5">
                     <div className="flex items-center gap-2">
                       <span className="material-symbols-outlined text-sm text-amber-500">person</span>
-                      <span className="text-sm text-slate-700 dark:text-slate-300">{email}</span>
+                      <span className="text-sm text-text">{email}</span>
                     </div>
                     <button
                       onClick={() => removeEmail(email)}

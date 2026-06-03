@@ -65,7 +65,7 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
               <span className="text-xl font-bold tracking-tight w-[4rem] inline-block">
                 {showVmg
                   ? <span className="vmg-pop text-[#258CF4]">VMG</span>
-                  : <span className="text-slate-900 dark:text-slate-100">MST AI</span>
+                  : <span className="text-text-strong">MST AI</span>
                 }
               </span>
             </Link>
@@ -77,25 +77,25 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
           </div>
           <div className="hidden md:flex flex-1 items-center justify-center gap-8">
             <Link
-              className={`text-sm font-medium transition-colors ${isActive('/') ? 'text-primary' : 'text-slate-500 dark:text-slate-400 hover:text-primary'}`}
+              className={`text-sm font-medium transition-colors ${isActive('/') ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
               to="/"
             >
               Solutions
             </Link>
             <Link
-              className={`text-sm font-medium transition-colors ${isActive('/ignite') ? 'text-primary' : 'text-slate-500 dark:text-slate-400 hover:text-primary'}`}
+              className={`text-sm font-medium transition-colors ${isActive('/ignite') ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
               to="/ignite"
             >
               Learn
             </Link>
             <Link
-              className={`text-sm font-medium transition-colors ${isActive('/marketplace') ? 'text-primary' : 'text-slate-500 dark:text-slate-400 hover:text-primary'}`}
+              className={`text-sm font-medium transition-colors ${isActive('/marketplace') ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
               to="/marketplace"
             >
               Marketplace
             </Link>
             <Link
-              className={`text-sm font-medium transition-colors ${isActive('/articles') ? 'text-primary' : 'text-slate-500 dark:text-slate-400 hover:text-primary'}`}
+              className={`text-sm font-medium transition-colors ${isActive('/articles') ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
               to="/articles"
             >
               Articles
@@ -103,24 +103,24 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
             <div className="relative" ref={discoverRef}>
               <button
                 onClick={() => setDiscoverOpen((o) => !o)}
-                className={`flex items-center gap-1 text-sm font-medium transition-colors ${isDiscoverActive ? 'text-primary' : 'text-slate-500 dark:text-slate-400 hover:text-primary'}`}
+                className={`flex items-center gap-1 text-sm font-medium transition-colors ${isDiscoverActive ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
               >
                 Discover
                 <span className="material-symbols-outlined text-[16px]">{discoverOpen ? 'expand_less' : 'expand_more'}</span>
               </button>
               {discoverOpen && (
-                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-40 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg py-1 z-50">
-                  <Link to="/memes" onClick={() => setDiscoverOpen(false)} className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:text-primary hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-40 bg-white dark:bg-slate-900 border border-border-base rounded-xl shadow-lg py-1 z-50">
+                  <Link to="/memes" onClick={() => setDiscoverOpen(false)} className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:text-primary hover:bg-surface-muted transition-colors">
                     <span className="material-symbols-outlined text-[16px]">collections</span>Memes
                   </Link>
-                  <Link to="/news" onClick={() => setDiscoverOpen(false)} className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:text-primary hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                  <Link to="/news" onClick={() => setDiscoverOpen(false)} className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:text-primary hover:bg-surface-muted transition-colors">
                     <span className="material-symbols-outlined text-[16px]">newspaper</span>News
                   </Link>
                 </div>
               )}
             </div>
             <Link
-              className={`text-sm font-medium transition-colors ${isActive('/contact') ? 'text-primary' : 'text-slate-500 dark:text-slate-400 hover:text-primary'}`}
+              className={`text-sm font-medium transition-colors ${isActive('/contact') ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
               to="/contact"
             >
               Contact
@@ -130,7 +130,7 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
           <SearchBar />
             <button
               onClick={toggleTheme}
-              className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-primary transition-colors"
+              className="w-9 h-9 flex items-center justify-center rounded-lg border border-border-base bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-primary transition-colors"
               title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             >
               <span className="material-symbols-outlined text-[20px]">
@@ -160,7 +160,7 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
                   <span className="text-sm text-slate-600 dark:text-slate-300 cursor-default select-none">
                     {user.display_name}
                   </span>
-                  <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 z-50 pointer-events-none">
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-slate-800 border border-border-base rounded-xl shadow-xl p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 z-50 pointer-events-none">
                     <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{user.display_name}</p>
                     {user.dept_name_en && (
                       <p className="text-xs text-primary mt-1 flex items-center gap-1">
@@ -169,7 +169,7 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
                       </p>
                     )}
                     {user.email && (
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1 truncate">
+                      <p className="text-xs text-text-muted mt-1 flex items-center gap-1 truncate">
                         <span className="material-symbols-outlined text-[14px]">mail</span>
                         {user.email}
                       </p>

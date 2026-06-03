@@ -372,7 +372,7 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
         ) : flatItems.length === 0 ? (
           <div className="text-center py-12">
             <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600 block mb-3">video_library</span>
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+            <p className="text-sm font-medium text-text-muted">
               {searchQuery ? 'No videos match your search.' : 'No content available yet.'}
             </p>
           </div>

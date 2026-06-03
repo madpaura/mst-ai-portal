@@ -447,7 +447,7 @@ export const AdminDigest: React.FC = () => {
               <h2 className="text-lg font-bold mb-4">Digest Settings</h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Time Period (days)</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Time Period (days)</label>
                   <input
                     type="number" min="1" max="30" value={digestDays}
                     onChange={(e) => setDigestDays(parseInt(e.target.value) || 7)}
@@ -456,7 +456,7 @@ export const AdminDigest: React.FC = () => {
                   <p className="text-xs text-slate-500 mt-1">Look back this many days for content</p>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Custom Message</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Custom Message</label>
                   <textarea
                     value={customContent}
                     onChange={(e) => setCustomContent(e.target.value)}
@@ -507,9 +507,9 @@ export const AdminDigest: React.FC = () => {
             <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/10 p-6">
               <h3 className="text-sm font-bold mb-4">Previous Issues</h3>
               {loadingIssues ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">Loading...</p>
+                <p className="text-xs text-text-muted">Loading...</p>
               ) : digestIssues.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">No previous issues</p>
+                <p className="text-xs text-text-muted">No previous issues</p>
               ) : (
                 <div className="space-y-3">
                   {digestIssues.map((issue) => (
@@ -518,7 +518,7 @@ export const AdminDigest: React.FC = () => {
                         <span className="text-xs font-bold text-white leading-snug">{issue.title}</span>
                         {issue.sent_at && <span className="shrink-0 text-xs text-green-400 font-medium">Sent</span>}
                       </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                      <div className="text-xs text-text-muted">
                         {issue.recipient_count} recipients · {issue.days_covered}d · {new Date(issue.created_at).toLocaleDateString()}
                       </div>
                       <div className="flex items-center gap-1.5 mt-2">
@@ -576,7 +576,7 @@ export const AdminDigest: React.FC = () => {
                   </div>
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Subject</label>
+                      <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Subject</label>
                       <input
                         type="text" value={editedSubject}
                         onChange={(e) => setEditedSubject(e.target.value)}
@@ -584,7 +584,7 @@ export const AdminDigest: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Email Preview</label>
+                      <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Email Preview</label>
                       <div
                         className="bg-white rounded-lg p-4 text-slate-900 text-sm max-h-96 overflow-y-auto border border-slate-200 dark:border-white/10"
                         dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(preview.html_content) }}
@@ -624,7 +624,7 @@ export const AdminDigest: React.FC = () => {
                   {showSavedEmails && savedEmails.length > 0 && (
                     <div className="p-3 bg-slate-100/60 dark:bg-slate-900/60 rounded-lg border border-slate-100 dark:border-white/5 space-y-1.5 max-h-48 overflow-y-auto">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Saved Addresses</span>
+                        <span className="text-xs font-bold text-text-muted uppercase tracking-wider">Saved Addresses</span>
                         <button
                           onClick={() => {
                             const current = recipientEmails.split('\n').map(e => e.trim()).filter(Boolean);
@@ -659,7 +659,7 @@ export const AdminDigest: React.FC = () => {
 
                   {/* Recipient textarea */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
                       Recipient Emails (one per line)
                     </label>
                     <textarea
@@ -726,7 +726,7 @@ export const AdminDigest: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-bold">Announcements</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Active announcements are included in digest emails unless skipped above</p>
+              <p className="text-xs text-text-muted mt-0.5">Active announcements are included in digest emails unless skipped above</p>
             </div>
             <button
               onClick={openCreateAnn}
@@ -743,7 +743,7 @@ export const AdminDigest: React.FC = () => {
               <h3 className="text-sm font-bold text-slate-200">{editingAnn ? 'Edit Announcement' : 'New Announcement'}</h3>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Title *</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Title *</label>
                   <input
                     type="text"
                     value={annForm.title}
@@ -753,7 +753,7 @@ export const AdminDigest: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Badge (optional)</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Badge (optional)</label>
                   <input
                     type="text"
                     value={annForm.badge}
@@ -764,7 +764,7 @@ export const AdminDigest: React.FC = () => {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Content</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Content</label>
                 <textarea
                   value={annForm.content}
                   onChange={(e) => setAnnForm(f => ({ ...f, content: e.target.value }))}
@@ -804,9 +804,9 @@ export const AdminDigest: React.FC = () => {
 
           {/* Announcements list */}
           {loadingAnn ? (
-            <p className="text-xs text-slate-500 dark:text-slate-400">Loading announcements…</p>
+            <p className="text-xs text-text-muted">Loading announcements…</p>
           ) : announcements.length === 0 ? (
-            <p className="text-xs text-slate-500 dark:text-slate-400">No announcements yet. Create one to include in digest emails.</p>
+            <p className="text-xs text-text-muted">No announcements yet. Create one to include in digest emails.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {announcements.map((ann) => (
@@ -818,7 +818,7 @@ export const AdminDigest: React.FC = () => {
                     )}
                   </div>
                   {ann.content && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 line-clamp-2">{ann.content}</p>
+                    <p className="text-xs text-text-muted mb-3 line-clamp-2">{ann.content}</p>
                   )}
                   <div className="flex items-center gap-2">
                     <button

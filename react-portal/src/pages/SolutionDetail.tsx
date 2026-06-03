@@ -68,7 +68,7 @@ export const SolutionDetail: React.FC = () => {
   }
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+    <div className="bg-background-light dark:bg-background-dark text-text-strong min-h-screen">
       <Navbar variant="solutions" />
 
       <main className="relative pt-16">
@@ -78,7 +78,7 @@ export const SolutionDetail: React.FC = () => {
           <div className="max-w-4xl mx-auto px-6 py-20 relative z-10">
             <button
               onClick={() => navigate('/')}
-              className="flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400 hover:text-primary transition-colors mb-8"
+              className="flex items-center gap-1 text-sm text-text-muted hover:text-primary transition-colors mb-8"
             >
               <span className="material-symbols-outlined text-sm">arrow_back</span>
               Back to Solutions
@@ -91,7 +91,7 @@ export const SolutionDetail: React.FC = () => {
               <div>
                 <h1 className="text-4xl font-bold text-slate-900 dark:text-white">{card.title}</h1>
                 {card.subtitle && (
-                  <p className="text-lg text-slate-500 dark:text-slate-400 mt-1">{card.subtitle}</p>
+                  <p className="text-lg text-text-muted mt-1">{card.subtitle}</p>
                 )}
               </div>
               {card.badge && (
@@ -126,7 +126,7 @@ export const SolutionDetail: React.FC = () => {
           <div className="rounded-2xl bg-gradient-to-r from-primary/5 to-blue-500/5 border border-primary/20 p-8 flex items-center justify-between">
             <div>
               <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Ready to get started?</h3>
-              <p className="text-slate-500 dark:text-slate-400">Explore the AI Forge marketplace or start the training.</p>
+              <p className="text-text-muted">Explore the AI Forge marketplace or start the training.</p>
             </div>
             <div className="flex gap-3">
               <button
@@ -137,7 +137,7 @@ export const SolutionDetail: React.FC = () => {
               </button>
               <button
                 onClick={() => navigate('/ignite')}
-                className="px-6 py-3 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-bold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors border border-slate-200 dark:border-slate-700"
+                className="px-6 py-3 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-bold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors border border-border-base"
               >
                 AI Ignite
               </button>

@@ -96,7 +96,7 @@ export const PublishRequests: React.FC<Props> = ({ targetType, onClose, onApprov
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-white/10 shrink-0">
           <div>
             <h2 className="text-base font-bold text-slate-900 dark:text-white">Publish Requests</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Review and approve contributor publish requests</p>
+            <p className="text-xs text-text-muted mt-0.5">Review and approve contributor publish requests</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden text-xs">
@@ -142,17 +142,17 @@ export const PublishRequests: React.FC<Props> = ({ targetType, onClose, onApprov
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-sm text-slate-900 dark:text-white truncate">{r.target_title}</span>
                       {statusBadge(r.status)}
-                      <span className="text-xs text-slate-500 dark:text-slate-400 capitalize px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700">{r.target_type}</span>
+                      <span className="text-xs text-text-muted capitalize px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700">{r.target_type}</span>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Requested by <span className="text-slate-700 dark:text-slate-300">{r.requester_name || r.requester_email || 'Unknown'}</span>
+                    <p className="text-xs text-text-muted mt-1">
+                      Requested by <span className="text-text">{r.requester_name || r.requester_email || 'Unknown'}</span>
                       {r.created_at && ` · ${new Date(r.created_at).toLocaleString()}`}
                     </p>
                     {r.note && r.status !== 'pending' && (
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Note: {r.note}</p>
+                      <p className="text-xs text-text-muted mt-1">Note: {r.note}</p>
                     )}
                     {r.reviewer_name && (
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      <p className="text-xs text-text-muted mt-0.5">
                         Reviewed by {r.reviewer_name}{r.reviewed_at && ` · ${new Date(r.reviewed_at).toLocaleString()}`}
                       </p>
                     )}

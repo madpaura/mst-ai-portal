@@ -140,7 +140,7 @@ export const AdminContacts: React.FC = () => {
             <h2 className="text-sm font-bold text-slate-200">{editing ? 'Edit Contact' : 'New Contact'}</h2>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Division *</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">Division *</label>
                 <input
                   type="text"
                   list="division-list"
@@ -154,7 +154,7 @@ export const AdminContacts: React.FC = () => {
                 </datalist>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Name *</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">Name *</label>
                 <input
                   type="text"
                   value={form.name}
@@ -164,7 +164,7 @@ export const AdminContacts: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Title / Role</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">Title / Role</label>
                 <input
                   type="text"
                   value={form.title}
@@ -174,7 +174,7 @@ export const AdminContacts: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Email *</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">Email *</label>
                 <input
                   type="email"
                   value={form.email}
@@ -184,7 +184,7 @@ export const AdminContacts: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Sort Order</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">Sort Order</label>
                 <input
                   type="number"
                   value={form.sort_order}
@@ -241,10 +241,10 @@ export const AdminContacts: React.FC = () => {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-sm text-slate-900 dark:text-white truncate">{c.name}</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{c.title && `${c.title} · `}{c.email}</div>
+                        <div className="text-xs text-text-muted truncate">{c.title && `${c.title} · `}{c.email}</div>
                       </div>
                       {!c.is_active && (
-                        <span className="text-xs px-2 py-0.5 rounded bg-muted-light dark:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/10">Inactive</span>
+                        <span className="text-xs px-2 py-0.5 rounded bg-muted-light dark:bg-slate-700 text-text-muted border border-slate-200 dark:border-white/10">Inactive</span>
                       )}
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button

@@ -265,7 +265,7 @@ export const AdminAnalytics: React.FC = () => {
             <span className="material-symbols-outlined text-primary text-3xl">analytics</span>
             Analytics Dashboard
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Complete metrics across all portal sections</p>
+          <p className="text-sm text-text-muted mt-1">Complete metrics across all portal sections</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
@@ -690,8 +690,8 @@ export const AdminAnalytics: React.FC = () => {
                                 </div>
                               )}
                             </div>
-                            <span className="flex-1 text-sm text-slate-700 dark:text-slate-300 truncate">{meme.meme_title}</span>
-                            <span className="text-sm text-slate-500 dark:text-slate-400 tabular-nums">{meme.clicks}</span>
+                            <span className="flex-1 text-sm text-text truncate">{meme.meme_title}</span>
+                            <span className="text-sm text-text-muted tabular-nums">{meme.clicks}</span>
                           </div>
                         ))}
                         {group.memes.length === 0 && (

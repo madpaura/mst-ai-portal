@@ -232,11 +232,11 @@ export const AssistantWidget: React.FC<AssistantWidgetProps> = ({ videoSlug }) =
 
       {/* Chat panel */}
       {open && (
-        <div className="fixed bottom-6 right-6 z-50 w-[380px] max-w-[calc(100vw-1.5rem)] flex flex-col rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden"
+        <div className="fixed bottom-6 right-6 z-50 w-[380px] max-w-[calc(100vw-1.5rem)] flex flex-col rounded-2xl shadow-2xl border border-border-base bg-white dark:bg-slate-900 overflow-hidden"
           style={{ height: '520px' }}>
 
           {/* Header */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-border-base bg-surface-muted">
             <span className="material-symbols-outlined text-primary text-xl">smart_toy</span>
             <span className="font-semibold text-sm text-slate-800 dark:text-slate-100 flex-1">Portal Assistant</span>
             <button
@@ -251,7 +251,7 @@ export const AssistantWidget: React.FC<AssistantWidgetProps> = ({ videoSlug }) =
           {/* Message list */}
           <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
             {messages.length === 0 && (
-              <p className="text-xs text-slate-400 dark:text-slate-500 text-center mt-8">
+              <p className="text-xs text-text-faint text-center mt-8">
                 Ask me anything about the portal — videos, articles, solutions, marketplace components, or your request statuses.
               </p>
             )}
@@ -264,7 +264,7 @@ export const AssistantWidget: React.FC<AssistantWidgetProps> = ({ videoSlug }) =
                 ) : (
                   <div className="max-w-[92%] text-sm">
                     {msg.toolHint && (
-                      <p className="text-xs text-slate-400 dark:text-slate-500 mb-2 flex items-center gap-1">
+                      <p className="text-xs text-text-faint mb-2 flex items-center gap-1">
                         <span className="material-symbols-outlined text-xs animate-spin">progress_activity</span>
                         {msg.toolHint}
                       </p>
@@ -325,7 +325,7 @@ export const AssistantWidget: React.FC<AssistantWidgetProps> = ({ videoSlug }) =
                                   <code className="font-mono text-xs text-slate-800 dark:text-slate-200">{children}</code>
                                 </pre>
                               ),
-                            hr: () => <hr className="my-2 border-slate-200 dark:border-slate-700" />,
+                            hr: () => <hr className="my-2 border-border-base" />,
                           }}
                         >
                           {msg.content}
@@ -343,7 +343,7 @@ export const AssistantWidget: React.FC<AssistantWidgetProps> = ({ videoSlug }) =
           </div>
 
           {/* Input */}
-          <div className="px-3 py-3 border-t border-slate-200 dark:border-slate-700 flex items-center gap-2">
+          <div className="px-3 py-3 border-t border-border-base flex items-center gap-2">
             <input
               ref={inputRef}
               type="text"

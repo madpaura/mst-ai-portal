@@ -2,6 +2,138 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ════════════════════════════════════════════════════════════════════
+   Centralized theming token layer (PRD #150 / slice #151)
+
+   ~20 semantic CSS custom properties defined once per theme×mode.
+   Dark mode is a *variable flip* — the same token name resolves to a
+   different value under `.dark`, so migrated components need no `dark:`
+   colour prefixes. Theme (`default` | `simple`) is orthogonal to mode.
+
+   Four blocks:
+     :root              default light
+     .dark              default dark
+     .theme-simple      simple  light
+     .dark.theme-simple simple  dark
+
+   Phase-1 values are chosen to EXACTLY match today's dominant rendered
+   colour for each role, so this layer is non-breaking / pixel-identical.
+   See react-portal/THEMING.md for the role → token vocabulary.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── default · light ── */
+:root {
+    /* surfaces */
+    --canvas:         #f5f7f8;  /* background-light */
+    --surface:        #ffffff;  /* card-light       */
+    --surface-muted:  #f8fafc;  /* slate-50         */
+    /* text (4-rank hierarchy) */
+    --text-strong:    #0f172a;  /* slate-900 */
+    --text:           #334155;  /* slate-700 */
+    --text-muted:     #64748b;  /* slate-500 */
+    --text-faint:     #94a3b8;  /* slate-400 */
+    /* borders */
+    --border-base:    #e2e8f0;  /* slate-200 */
+    --border-strong:  #cbd5e1;  /* slate-300 */
+    /* brand */
+    --primary:        37 140 244;   /* #258cf4 — RGB channels for rgb(var/<alpha>) */
+    --primary-subtle: rgba(37, 140, 244, 0.1);
+    --accent:         4 120 87;   /* emerald-700 — legible on light (neon override) */
+    /* state (fg + subtle fill) */
+    --success:         #15803d;  /* green-700 */
+    --success-subtle:  rgba(34, 197, 94, 0.1);
+    --warning:         #b45309;  /* amber-700 */
+    --warning-subtle:  rgba(245, 158, 11, 0.1);
+    --danger:          #b91c1c;  /* red-700 */
+    --danger-subtle:   rgba(239, 68, 68, 0.1);
+    --info:            #0369a1;  /* sky-700 */
+    --info-subtle:     rgba(14, 165, 233, 0.1);
+}
+
+/* ── default · dark ── */
+.dark {
+    --canvas:         #0a0f14;  /* background-dark */
+    --surface:        #131a22;  /* card-dark       */
+    --surface-muted:  #1e293b;  /* panel-dark / slate-800 */
+    --text-strong:    #f1f5f9;  /* slate-100 */
+    --text:           #cbd5e1;  /* slate-300 */
+    --text-muted:     #94a3b8;  /* slate-400 */
+    --text-faint:     #64748b;  /* slate-500 */
+    --border-base:    #334155;  /* slate-700 */
+    --border-strong:  #475569;  /* slate-600 */
+    --primary:        37 140 244;   /* #258cf4 — RGB channels for rgb(var/<alpha>) */
+    --primary-subtle: rgba(37, 140, 244, 0.1);
+    --accent:         0 255 157;  /* neon — legible on dark */
+    --success:         #4ade80;  /* green-400 */
+    --success-subtle:  rgba(34, 197, 94, 0.1);
+    --warning:         #fbbf24;  /* amber-400 */
+    --warning-subtle:  rgba(245, 158, 11, 0.1);
+    --danger:          #f87171;  /* red-400 */
+    --danger-subtle:   rgba(239, 68, 68, 0.1);
+    --info:            #38bdf8;  /* sky-400 */
+    --info-subtle:     rgba(14, 165, 233, 0.1);
+}
+
+/* ── simple · light (GitHub-inspired) ──
+   IMPORTANT: the `simple` theme today only overrides a handful of specific
+   surfaces (nav bg, `.glass-card`, `.neon-border-glow`, shadows). It does
+   NOT generically remap raw `slate-*` text/border utilities — those still
+   render their default slate values under `.theme-simple`. To stay strictly
+   pixel-identical in phase 1, the text/border/surface-muted tokens here
+   mirror the DEFAULT-light values (what raw classes actually render today).
+   `--surface`/`--canvas` carry the GitHub surface values that the specific
+   `nav`/`glass-card` overrides already paint, leaving a seam for phase-2
+   normalization to lean into the GitHub palette without breaking today. */
+.theme-simple {
+    --canvas:         #ffffff;  /* simple nav/page paint white */
+    --surface:        #ffffff;  /* simple glass-card light */
+    --surface-muted:  #f8fafc;  /* mirror default (raw slate-50) */
+    --text-strong:    #0f172a;  /* mirror default (raw slate-900) */
+    --text:           #334155;  /* mirror default (raw slate-700) */
+    --text-muted:     #64748b;  /* mirror default (raw slate-500) */
+    --text-faint:     #94a3b8;  /* mirror default (raw slate-400) */
+    --border-base:    #e2e8f0;  /* mirror default (raw slate-200) */
+    --border-strong:  #cbd5e1;  /* mirror default (raw slate-300) */
+    --primary:        37 140 244;   /* #258cf4 — RGB channels for rgb(var/<alpha>) */
+    --primary-subtle: rgba(37, 140, 244, 0.1);
+    --accent:         4 120 87;   /* light-legibility override applies in simple light too */
+    --success:         #15803d;
+    --success-subtle:  rgba(34, 197, 94, 0.1);
+    --warning:         #b45309;
+    --warning-subtle:  rgba(245, 158, 11, 0.1);
+    --danger:          #b91c1c;
+    --danger-subtle:   rgba(239, 68, 68, 0.1);
+    --info:            #0369a1;
+    --info-subtle:     rgba(14, 165, 233, 0.1);
+}
+
+/* ── simple · dark (GitHub-inspired) ──
+   Same rule as simple-light: text/border tokens mirror DEFAULT-dark slate
+   values (what raw classes render today); surfaces carry the GitHub dark
+   values the specific overrides already paint. */
+.dark.theme-simple {
+    --canvas:         #0d1117;  /* simple dark nav/page */
+    --surface:        #161b22;  /* simple dark glass-card */
+    --surface-muted:  #1e293b;  /* mirror default-dark (raw slate-800) */
+    --text-strong:    #f1f5f9;  /* mirror default-dark (raw slate-100) */
+    --text:           #cbd5e1;  /* mirror default-dark (raw slate-300) */
+    --text-muted:     #94a3b8;  /* mirror default-dark (raw slate-400) */
+    --text-faint:     #64748b;  /* mirror default-dark (raw slate-500) */
+    --border-base:    #334155;  /* mirror default-dark (raw slate-700) */
+    --border-strong:  #475569;  /* mirror default-dark (raw slate-600) */
+    --primary:        37 140 244;   /* #258cf4 — RGB channels for rgb(var/<alpha>) */
+    --primary-subtle: rgba(37, 140, 244, 0.1);
+    --accent:         0 255 157;
+    --success:         #4ade80;
+    --success-subtle:  rgba(34, 197, 94, 0.1);
+    --warning:         #fbbf24;
+    --warning-subtle:  rgba(245, 158, 11, 0.1);
+    --danger:          #f87171;
+    --danger-subtle:   rgba(239, 68, 68, 0.1);
+    --info:            #38bdf8;
+    --info-subtle:     rgba(14, 165, 233, 0.1);
+}
+
 /* WebVTT caption styling — matches portal font */
 ::cue {
     font-family: 'Space Grotesk', system-ui, sans-serif;
@@ -180,3 +312,16 @@ html:not(.dark) :is(.bg-slate-900, .bg-slate-950, .bg-gray-900, .bg-gray-950, .b
 html:not(.dark) :is(.bg-slate-900, .bg-slate-950, .bg-gray-900, .bg-gray-950, .bg-zinc-900, .bg-neutral-900, .bg-black) .text-sky-400     { color: #38bdf8; }
 html:not(.dark) :is(.bg-slate-900, .bg-slate-950, .bg-gray-900, .bg-gray-950, .bg-zinc-900, .bg-neutral-900, .bg-black) .text-lime-400    { color: #a3e635; }
 html:not(.dark) :is(.bg-slate-900, .bg-slate-950, .bg-gray-900, .bg-gray-950, .bg-zinc-900, .bg-neutral-900, .bg-black) .text-amber-400   { color: #fbbf24; }
+
+/* Non-breaking pin: the legacy `accent` colour utilities used as fills /
+   borders (`bg-accent`, `border-accent`, and their opacity variants) were
+   the literal neon #00ff9d before the token migration. The semantic
+   `--accent` token now flips to emerald in light mode (for legible text),
+   so re-assert the original neon literal for these non-text raw utilities
+   to keep un-migrated call sites pixel-identical. Migrated code should use
+   surface/state tokens instead. */
+html:not(.dark) .bg-accent       { background-color: #00ff9d; }
+html:not(.dark) .bg-accent\/5    { background-color: rgba(0, 255, 157, 0.05); }
+html:not(.dark) .bg-accent\/10   { background-color: rgba(0, 255, 157, 0.10); }
+html:not(.dark) .bg-accent\/20   { background-color: rgba(0, 255, 157, 0.20); }
+html:not(.dark) .border-accent   { border-color: #00ff9d; }

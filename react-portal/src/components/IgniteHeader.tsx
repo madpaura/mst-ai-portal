@@ -21,7 +21,7 @@ export const IgniteHeader: React.FC<IgniteHeaderProps> = ({
           <PortalLogo size={38} />
           <div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white leading-none">MST AI — Learn</h1>
-            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono uppercase tracking-wider">Internal Training Series</span>
+            <span className="text-[10px] text-text-muted font-mono uppercase tracking-wider">Internal Training Series</span>
           </div>
         </Link>
 
@@ -55,7 +55,7 @@ export const IgniteHeader: React.FC<IgniteHeaderProps> = ({
         </div>}
         <button
           onClick={toggleTheme}
-          className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-primary transition-colors"
+          className="w-9 h-9 flex items-center justify-center rounded-lg border border-border-base bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-primary transition-colors"
           title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
         >
           <span className="material-symbols-outlined text-[20px]">

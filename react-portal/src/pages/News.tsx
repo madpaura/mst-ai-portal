@@ -69,7 +69,7 @@ export const News: React.FC = () => {
   const categoryLabel = (item: NewsItem) => item.badge || item.source;
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-sans">
+    <div className="bg-background-light dark:bg-background-dark text-text-strong min-h-screen font-sans">
       <Navbar variant="solutions" />
 
       <main className="relative pt-16">
@@ -113,7 +113,7 @@ export const News: React.FC = () => {
                       <span className="text-slate-400 whitespace-nowrap">
                         {formatDate(featured.published_at)}
                       </span>
-                      <p className="text-[15px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                      <p className="text-[15px] text-text-muted leading-relaxed">
                         {featured.summary}
                       </p>
                     </div>
@@ -140,7 +140,7 @@ export const News: React.FC = () => {
                         <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-primary transition-colors leading-snug mb-2">
                           {item.title}
                         </h3>
-                        <p className="text-[15px] text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-3">
+                        <p className="text-[15px] text-text-muted leading-relaxed line-clamp-3">
                           {item.summary}
                         </p>
                       </article>

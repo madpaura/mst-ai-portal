@@ -61,7 +61,7 @@ export const NewsArticle: React.FC = () => {
     });
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-sans">
+    <div className="bg-background-light dark:bg-background-dark text-text-strong min-h-screen font-sans">
       <Navbar variant="solutions" />
 
       <main className="relative pt-16">
@@ -102,7 +102,7 @@ export const NewsArticle: React.FC = () => {
               </h1>
 
               {/* Summary */}
-              <p className="text-xl text-slate-500 dark:text-slate-400 leading-relaxed mb-10 border-b border-slate-200 dark:border-white/10 pb-10">
+              <p className="text-xl text-text-muted leading-relaxed mb-10 border-b border-slate-200 dark:border-white/10 pb-10">
                 {item.summary}
               </p>
 

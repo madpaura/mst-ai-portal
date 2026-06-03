@@ -251,7 +251,7 @@ export const AdminSettings: React.FC = () => {
 
       <div className="mb-8">
         <h1 className="text-xl font-bold text-slate-900 dark:text-white">Admin Settings</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Portal configuration — email, theme, transcription, and caching</p>
+        <p className="text-sm text-text-muted mt-1">Portal configuration — email, theme, transcription, and caching</p>
       </div>
 
       {/* ── Ollama Configuration ───────────────────────────────────── */}
@@ -260,13 +260,13 @@ export const AdminSettings: React.FC = () => {
           <span className="material-symbols-outlined text-primary">psychology</span>
           <div>
             <h2 className="text-base font-bold text-slate-900 dark:text-white">Ollama Configuration</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Global Ollama endpoint — used by video Auto Mode and article AI features</p>
+            <p className="text-xs text-text-muted mt-0.5">Global Ollama endpoint — used by video Auto Mode and article AI features</p>
           </div>
         </div>
         <div className="space-y-4">
           {/* URL + Test */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Base URL</label>
+            <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Base URL</label>
             <div className="flex gap-3">
               <input
                 type="url"
@@ -303,7 +303,7 @@ export const AdminSettings: React.FC = () => {
 
           {/* Model selection — shown once models are loaded */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Model</label>
+            <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Model</label>
             {ollamaModels.length > 0 ? (
               <select
                 value={ollamaModel}
@@ -350,7 +350,7 @@ export const AdminSettings: React.FC = () => {
           <span className="material-symbols-outlined text-primary">contact_mail</span>
           <div>
             <h2 className="text-base font-bold text-slate-900 dark:text-white">Contact Email</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Email address shown when users click "Contact" in the navigation</p>
+            <p className="text-xs text-text-muted mt-0.5">Email address shown when users click "Contact" in the navigation</p>
           </div>
         </div>
         <div className="flex gap-3 items-center">
@@ -384,7 +384,7 @@ export const AdminSettings: React.FC = () => {
           <span className="material-symbols-outlined text-primary">palette</span>
           <div>
             <h2 className="text-base font-bold text-slate-900 dark:text-white">Portal Theme</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Choose the visual style applied portal-wide to all users</p>
+            <p className="text-xs text-text-muted mt-0.5">Choose the visual style applied portal-wide to all users</p>
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -407,7 +407,7 @@ export const AdminSettings: React.FC = () => {
             </div>
             <div>
               <p className="text-sm font-semibold text-white">Default</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Blue glass cards, neon glow, circuit background</p>
+              <p className="text-xs text-text-muted mt-0.5">Blue glass cards, neon glow, circuit background</p>
             </div>
           </button>
 
@@ -433,12 +433,12 @@ export const AdminSettings: React.FC = () => {
             </div>
             <div>
               <p className="text-sm font-semibold text-white">Simple</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">GitHub-inspired flat cards, clean borders — supports light &amp; dark toggle</p>
+              <p className="text-xs text-text-muted mt-0.5">GitHub-inspired flat cards, clean borders — supports light &amp; dark toggle</p>
             </div>
           </button>
         </div>
         {themeSaving && (
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-3 flex items-center gap-1">
+          <p className="text-xs text-text-muted mt-3 flex items-center gap-1">
             <span className="material-symbols-outlined text-[13px] animate-spin">progress_activity</span>
             Applying theme…
           </p>
@@ -452,7 +452,7 @@ export const AdminSettings: React.FC = () => {
             <span className="material-symbols-outlined text-primary">mic</span>
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white">Transcript Service</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Configure the remote speech-to-text service for Auto Mode video processing</p>
+              <p className="text-xs text-text-muted mt-0.5">Configure the remote speech-to-text service for Auto Mode video processing</p>
             </div>
           </div>
           <button
@@ -465,7 +465,7 @@ export const AdminSettings: React.FC = () => {
         </div>
         {transcriptForm.url && (
           <div className="mt-4 pt-4 border-t border-white/5">
-            <div className="flex flex-wrap gap-4 text-xs text-slate-500 dark:text-slate-400">
+            <div className="flex flex-wrap gap-4 text-xs text-text-muted">
               <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">link</span>{transcriptForm.url}</span>
               <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">model_training</span>Model: {transcriptForm.model}</span>
             </div>
@@ -480,13 +480,13 @@ export const AdminSettings: React.FC = () => {
           <div className="relative w-full max-w-md bg-white dark:bg-background-dark border border-slate-200 dark:border-white/10 rounded-xl shadow-2xl p-6">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-base font-bold text-slate-900 dark:text-white">Transcript Service</h2>
-              <button onClick={() => setShowTranscriptModal(false)} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white">
+              <button onClick={() => setShowTranscriptModal(false)} className="text-text-muted hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Service URL</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Service URL</label>
                 <input
                   value={transcriptForm.url}
                   onChange={e => setTranscriptForm(f => ({ ...f, url: e.target.value }))}
@@ -499,7 +499,7 @@ export const AdminSettings: React.FC = () => {
                 </p>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">API Key</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">API Key</label>
                 <input
                   type="password"
                   value={transcriptForm.api_key}
@@ -509,7 +509,7 @@ export const AdminSettings: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Whisper Model</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Whisper Model</label>
                 <select
                   value={transcriptForm.model}
                   onChange={e => setTranscriptForm(f => ({ ...f, model: e.target.value }))}
@@ -557,7 +557,7 @@ export const AdminSettings: React.FC = () => {
             <span className="material-symbols-outlined text-primary">mail</span>
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white">SMTP Email Configuration</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Configure outgoing email server for newsletters</p>
+              <p className="text-xs text-text-muted mt-0.5">Configure outgoing email server for newsletters</p>
             </div>
           </div>
           <button
@@ -570,7 +570,7 @@ export const AdminSettings: React.FC = () => {
         </div>
         {smtpConfig && (
           <div className="mt-4 pt-4 border-t border-white/5">
-            <div className="flex flex-wrap gap-4 text-xs text-slate-500 dark:text-slate-400">
+            <div className="flex flex-wrap gap-4 text-xs text-text-muted">
               <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">server</span>{smtpConfig.smtp_server}:{smtpConfig.smtp_port}</span>
               <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">email</span>From: {smtpConfig.smtp_from_email}</span>
               <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">verified_user</span>Auth: {smtpConfig.smtp_user ? 'Yes' : 'No'}</span>
@@ -586,7 +586,7 @@ export const AdminSettings: React.FC = () => {
             <span className="material-symbols-outlined text-primary">memory</span>
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white">Redis Cache</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Version-based invalidation for hot public endpoints</p>
+              <p className="text-xs text-text-muted mt-0.5">Version-based invalidation for hot public endpoints</p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -614,14 +614,14 @@ export const AdminSettings: React.FC = () => {
                     { label: 'Cache Misses', value: (cacheStats.keyspace_misses ?? 0).toLocaleString() },
                   ].map(({ label, value }) => (
                     <div key={label} className="bg-panel-light dark:bg-slate-900/50 rounded-lg p-3">
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{label}</p>
+                      <p className="text-xs text-text-muted">{label}</p>
                       <p className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">{value ?? '—'}</p>
                     </div>
                   ))}
                 </div>
                 {cacheStats.namespace_versions && (
                   <div>
-                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Namespace Versions</p>
+                    <p className="text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Namespace Versions</p>
                     <div className="flex flex-wrap gap-2">
                       {Object.entries(cacheStats.namespace_versions as Record<string, number>).map(([ns, ver]) => (
                         <div key={ns} className="flex items-center gap-1.5 bg-panel-light dark:bg-slate-900/50 rounded-lg px-3 py-1.5 border border-slate-200 dark:border-white/5">
@@ -648,14 +648,14 @@ export const AdminSettings: React.FC = () => {
           <div className="relative w-full max-w-lg bg-white dark:bg-background-dark border-l border-slate-200 dark:border-white/10 overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">SMTP Email Configuration</h2>
-              <button onClick={() => setShowSmtpModal(false)} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
+              <button onClick={() => setShowSmtpModal(false)} className="text-text-muted hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">SMTP Server</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">SMTP Server</label>
                 <input value={smtpForm.smtp_server} onChange={e => setSmtpForm(f => ({ ...f, smtp_server: e.target.value }))}
                   placeholder="smtp.gmail.com"
                   className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
@@ -663,7 +663,7 @@ export const AdminSettings: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">SMTP Port</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">SMTP Port</label>
                 <input value={smtpForm.smtp_port} onChange={e => setSmtpForm(f => ({ ...f, smtp_port: e.target.value }))}
                   placeholder="587"
                   className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
@@ -671,14 +671,14 @@ export const AdminSettings: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Username</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Username</label>
                 <input value={smtpForm.smtp_user} onChange={e => setSmtpForm(f => ({ ...f, smtp_user: e.target.value }))}
                   placeholder="user@example.com"
                   className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Password</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Password</label>
                 <input type="password" value={smtpForm.smtp_password} onChange={e => setSmtpForm(f => ({ ...f, smtp_password: e.target.value }))}
                   placeholder="(leave blank to keep existing)"
                   className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
@@ -686,21 +686,21 @@ export const AdminSettings: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">From Email</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">From Email</label>
                 <input value={smtpForm.smtp_from_email} onChange={e => setSmtpForm(f => ({ ...f, smtp_from_email: e.target.value }))}
                   placeholder="noreply@company.com"
                   className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">From Name</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">From Name</label>
                 <input value={smtpForm.smtp_from_name} onChange={e => setSmtpForm(f => ({ ...f, smtp_from_name: e.target.value }))}
                   placeholder="MST AI Portal"
                   className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Subject Prefix</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Subject Prefix</label>
                 <input value={smtpForm.subject_prefix} onChange={e => setSmtpForm(f => ({ ...f, subject_prefix: e.target.value }))}
                   placeholder="MSTAI-TF"
                   className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
@@ -708,7 +708,7 @@ export const AdminSettings: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Test Recipient Email</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Test Recipient Email</label>
                 <input value={smtpForm.test_recipient} onChange={e => setSmtpForm(f => ({ ...f, test_recipient: e.target.value }))}
                   placeholder="test@example.com"
                   className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
@@ -719,7 +719,7 @@ export const AdminSettings: React.FC = () => {
                   <div className={`flex items-center gap-2 px-3 py-2 text-xs font-bold ${smtpProbeResult.reachable ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
                     <span className="material-symbols-outlined text-sm">{smtpProbeResult.reachable ? 'check_circle' : 'error'}</span>
                     {smtpProbeResult.reachable ? 'Server reachable' : 'Server not reachable'}
-                    <button onClick={() => setSmtpProbeResult(null)} className="ml-auto text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white">
+                    <button onClick={() => setSmtpProbeResult(null)} className="ml-auto text-text-muted hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white">
                       <span className="material-symbols-outlined text-sm">close</span>
                     </button>
                   </div>
@@ -844,7 +844,7 @@ export const AdminSettings: React.FC = () => {
           <span className="material-symbols-outlined text-primary">smart_toy</span>
           <div className="flex-1">
             <h2 className="text-base font-bold text-slate-900 dark:text-white">AI Assistant</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">System prompt for the floating chat widget — overrides the built-in default</p>
+            <p className="text-xs text-text-muted mt-0.5">System prompt for the floating chat widget — overrides the built-in default</p>
           </div>
           <button
             type="button"
@@ -877,13 +877,13 @@ export const AdminSettings: React.FC = () => {
           <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-primary/5 border border-primary/20">
             <span className="material-symbols-outlined text-primary text-sm mt-0.5">info</span>
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Default: <span className="font-mono text-slate-500 dark:text-slate-400">You are a helpful AI assistant for the MST AI Portal. You help users find content, check statuses, and learn. Be concise and direct.</span>
+              Default: <span className="font-mono text-text-muted">You are a helpful AI assistant for the MST AI Portal. You help users find content, check statuses, and learn. Be concise and direct.</span>
             </p>
           </div>
 
           {/* System prompt textarea */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+            <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">
               Custom System Prompt
             </label>
             <textarea
@@ -893,7 +893,7 @@ export const AdminSettings: React.FC = () => {
               placeholder={"You are a helpful AI assistant for the MST AI Portal.\nYou help users find content, check statuses, and learn.\nBe concise and direct.\nIf asked how to install something, give the install command and a link."}
               className="w-full px-3 py-2.5 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm font-mono placeholder-slate-400 focus:border-primary outline-none resize-y leading-relaxed"
             />
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 text-right">
+            <p className="text-xs text-text-faint mt-1 text-right">
               {assistantPrompt.length > 0 ? `${assistantPrompt.length} chars` : 'Leave blank to use the default prompt'}
             </p>
           </div>

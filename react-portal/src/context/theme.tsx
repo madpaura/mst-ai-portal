@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { resolveTheme, applyResolvedTheme, type ThemeName } from './themeRegistry';
 
 type Theme = 'light' | 'dark';
-export type PortalTheme = 'default' | 'simple';
+// PortalTheme is the set of valid theme names, sourced from the registry.
+export type PortalTheme = ThemeName;
 
 const API_BASE = (import.meta.env.VITE_API_URL as string) || '';
 
@@ -28,14 +30,13 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
   const [portalTheme, setPortalTheme] = useState<PortalTheme>('default');
 
-  const applyPortalTheme = (pt: PortalTheme) => {
-    setPortalTheme(pt);
-    const root = document.documentElement;
-    if (pt === 'simple') {
-      root.classList.add('theme-simple');
-    } else {
-      root.classList.remove('theme-simple');
-    }
+  // Route theme selection through the pure resolver. Unknown/empty/invalid
+  // names fall back to the default theme. Dark/light is handled separately
+  // below and stays strictly orthogonal — never touched here.
+  const applyPortalTheme = (pt: string | null | undefined) => {
+    const resolved = resolveTheme(pt);
+    setPortalTheme(resolved.name);
+    applyResolvedTheme(document.documentElement, resolved);
   };
 
   // Fetch portal theme from backend on mount
@@ -43,7 +44,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     fetch(`${API_BASE}/settings/portal_theme`, { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null))
       .then((val: string | null) => {
-        if (val === 'simple') applyPortalTheme('simple');
+        // Resolver tolerates any value (incl. future themes) and is safe on
+        // unknown ones, so we always route through it.
+        applyPortalTheme(val);
       })
       .catch(() => {});
   }, []);

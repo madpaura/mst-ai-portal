@@ -657,18 +657,18 @@ const FilesViewer: React.FC<{ files: ArtifactFile[] }> = ({ files }) => {
       {files.map((f, i) => {
         const isOpen = expanded.has(f.name);
         return (
-          <div key={i} className="border border-white/10 rounded-lg overflow-hidden">
+          <div key={i} className="border border-slate-200 dark:border-white/10 rounded-lg overflow-hidden">
             <button
               onClick={() => setExpanded(s => { const n = new Set(s); isOpen ? n.delete(f.name) : n.add(f.name); return n; })}
-              className="w-full flex items-center gap-3 px-4 py-2.5 bg-white/5 hover:bg-white/10 transition-colors text-left"
+              className="w-full flex items-center gap-3 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 transition-colors text-left"
             >
-              <span className="material-symbols-outlined text-slate-400 text-sm">description</span>
-              <span className="text-sm font-mono text-slate-300 flex-1">{f.name}</span>
-              <span className="text-xs text-slate-600">{f.content.length.toLocaleString()} chars</span>
+              <span className="material-symbols-outlined text-slate-500 dark:text-slate-400 text-sm">description</span>
+              <span className="text-sm font-mono text-slate-700 dark:text-slate-300 flex-1">{f.name}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-600">{f.content.length.toLocaleString()} chars</span>
               <span className="material-symbols-outlined text-slate-500 text-sm">{isOpen ? 'expand_less' : 'expand_more'}</span>
             </button>
             {isOpen && (
-              <pre className="px-4 py-3 overflow-x-auto text-xs text-slate-300 bg-black/20 font-mono leading-relaxed max-h-96 overflow-y-auto">
+              <pre className="px-4 py-3 overflow-x-auto text-xs text-slate-900 dark:text-slate-300 bg-slate-100 dark:bg-black/20 font-mono leading-relaxed max-h-96 overflow-y-auto">
                 {f.content}
               </pre>
             )}
@@ -903,7 +903,7 @@ const FilesEditor: React.FC<{
         const overLimit = used > _2MB;
         return (
           <div className="flex items-center gap-2">
-            <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
+            <div className="flex-1 h-1 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all ${overLimit ? 'bg-red-400' : pct > 75 ? 'bg-yellow-400' : 'bg-emerald-400'}`}
                 style={{ width: `${pct}%` }}
@@ -926,7 +926,7 @@ const FilesEditor: React.FC<{
                 <div
                   key={i}
                   onClick={() => setActiveIdx(i)}
-                  className={`flex items-center gap-1.5 group rounded px-2 py-1.5 cursor-pointer transition-colors ${activeIdx === i ? 'bg-primary/20 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-slate-300'}`}
+                  className={`flex items-center gap-1.5 group rounded px-2 py-1.5 cursor-pointer transition-colors ${activeIdx === i ? 'bg-primary/20 text-primary dark:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-300'}`}
                 >
                   <span className="material-symbols-outlined text-xs text-slate-500 shrink-0">description</span>
                   <span className="flex-1 text-xs font-mono truncate" title={f.name}>{f.name}</span>
@@ -941,9 +941,9 @@ const FilesEditor: React.FC<{
             </div>
 
             {/* Add blank file */}
-            <div className="flex gap-1 pt-1 border-t border-white/10">
+            <div className="flex gap-1 pt-1 border-t border-slate-200 dark:border-white/10">
               <input
-                className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-primary/50 min-w-0 font-mono"
+                className="flex-1 bg-slate-100 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded px-2 py-1 text-xs text-slate-900 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:border-primary/50 min-w-0 font-mono"
                 placeholder="new-file.py"
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
@@ -963,11 +963,11 @@ const FilesEditor: React.FC<{
               <>
                 <div className="flex items-center gap-2 mb-1.5">
                   <span className="material-symbols-outlined text-xs text-slate-500">description</span>
-                  <span className="text-xs font-mono text-slate-400">{files[activeIdx].name}</span>
-                  <span className="ml-auto text-xs text-slate-600">{files[activeIdx].content.length.toLocaleString()} chars</span>
+                  <span className="text-xs font-mono text-slate-600 dark:text-slate-400">{files[activeIdx].name}</span>
+                  <span className="ml-auto text-xs text-slate-500 dark:text-slate-600">{files[activeIdx].content.length.toLocaleString()} chars</span>
                 </div>
                 <textarea
-                  className="flex-1 bg-black/20 border border-white/10 rounded px-3 py-2 text-xs font-mono text-slate-300 focus:outline-none focus:border-primary/50 resize-none leading-relaxed"
+                  className="flex-1 bg-slate-100 dark:bg-black/20 border border-slate-300 dark:border-white/10 rounded px-3 py-2 text-xs font-mono text-slate-900 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:border-primary/50 resize-none leading-relaxed"
                   value={files[activeIdx].content}
                   onChange={e => updateContent(activeIdx, e.target.value)}
                   placeholder="Paste or type file content here…"
@@ -975,7 +975,7 @@ const FilesEditor: React.FC<{
                 />
               </>
             ) : (
-              <div className="flex-1 flex items-center justify-center text-slate-600 text-sm border border-white/5 rounded">
+              <div className="flex-1 flex items-center justify-center text-slate-500 dark:text-slate-600 text-sm border border-slate-200 dark:border-white/5 rounded">
                 Select a file to edit
               </div>
             )}
@@ -1069,7 +1069,7 @@ const NewArtifactForm: React.FC<{
     <form onSubmit={handleSubmit} className="p-6 max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-slate-900 dark:text-white">New Artifact Submission</h2>
-        <button type="button" onClick={onCancel} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
+        <button type="button" onClick={onCancel} className="text-text-muted hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
           <span className="material-symbols-outlined">close</span>
         </button>
       </div>

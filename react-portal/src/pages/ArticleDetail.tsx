@@ -69,7 +69,7 @@ export const ArticleDetail: React.FC = () => {
     new Date(d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-sans">
+    <div className="bg-background-light dark:bg-background-dark text-text-strong min-h-screen font-sans">
       <Navbar variant="solutions" />
 
       <main className="relative pt-16">
@@ -121,7 +121,7 @@ export const ArticleDetail: React.FC = () => {
                         title={att.filename}
                       >
                         <span className="material-symbols-outlined text-sm text-slate-400 group-hover:text-primary transition-colors">attach_file</span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400 group-hover:text-primary transition-colors max-w-[140px] truncate">
+                        <span className="text-xs text-text-muted group-hover:text-primary transition-colors max-w-[140px] truncate">
                           {att.filename}
                         </span>
                         <span className="material-symbols-outlined text-sm text-slate-400 group-hover:text-primary transition-colors">download</span>
@@ -136,7 +136,7 @@ export const ArticleDetail: React.FC = () => {
               </h1>
 
               {article.summary && (
-                <p className="text-xl text-slate-500 dark:text-slate-400 leading-relaxed mb-10 border-b border-slate-200 dark:border-white/10 pb-10">
+                <p className="text-xl text-text-muted leading-relaxed mb-10 border-b border-slate-200 dark:border-white/10 pb-10">
                   {article.summary}
                 </p>
               )}

@@ -116,7 +116,7 @@ export const Contact: React.FC = () => {
         {/* Header */}
         <div className="mb-10">
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2 tracking-tight">Contact Us</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-base">
+          <p className="text-text-muted text-base">
             Choose the division or person you'd like to reach and send your message directly.
             You'll be CC'd on the email.
           </p>
@@ -132,7 +132,7 @@ export const Contact: React.FC = () => {
               <span className="material-symbols-outlined text-3xl text-green-400" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
             </div>
             <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Message Sent!</h2>
-            <p className="text-slate-500 dark:text-slate-400 mb-6">
+            <p className="text-text-muted mb-6">
               Your message was delivered to {selectedContacts.length} contact{selectedContacts.length !== 1 ? 's' : ''}.
               A copy was sent to {senderEmail}.
             </p>
@@ -182,7 +182,7 @@ export const Contact: React.FC = () => {
                             onClick={() => toggleDivision(division)}
                             className="w-full flex items-center justify-between px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group"
                           >
-                            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 group-hover:text-primary transition-colors">
+                            <span className="text-xs font-bold uppercase tracking-wider text-text-muted group-hover:text-primary transition-colors">
                               {division}
                             </span>
                             <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
@@ -242,7 +242,7 @@ export const Contact: React.FC = () => {
                   <p className="text-xs font-semibold text-primary mb-1">
                     {selectedIds.size} recipient{selectedIds.size !== 1 ? 's' : ''} selected
                   </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-3">
+                  <p className="text-xs text-text-muted leading-relaxed line-clamp-3">
                     {selectedContacts.map(c => c.name).join(', ')}
                   </p>
                 </div>
@@ -255,7 +255,7 @@ export const Contact: React.FC = () => {
                 <h2 className="text-sm font-bold text-slate-700 dark:text-slate-200">Your Details</h2>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Name *</label>
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">Name *</label>
                     <input
                       type="text"
                       value={senderName}
@@ -265,7 +265,7 @@ export const Contact: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Email *</label>
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">Email *</label>
                     <input
                       type="email"
                       value={senderEmail}
@@ -280,7 +280,7 @@ export const Contact: React.FC = () => {
               <div className="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-white/10 p-6 space-y-5">
                 <h2 className="text-sm font-bold text-slate-700 dark:text-slate-200">Message</h2>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Subject *</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">Subject *</label>
                   <input
                     type="text"
                     value={subject}
@@ -290,7 +290,7 @@ export const Contact: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Message *</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">Message *</label>
                   <textarea
                     value={message}
                     onChange={e => setMessage(e.target.value)}
@@ -307,7 +307,7 @@ export const Contact: React.FC = () => {
                 )}
 
                 <div className="flex items-center justify-between pt-1">
-                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                  <p className="text-xs text-text-faint">
                     {selectedIds.size === 0
                       ? 'Select at least one contact on the left'
                       : `Will be sent to ${selectedIds.size} contact${selectedIds.size !== 1 ? 's' : ''} · you'll be CC'd`}
