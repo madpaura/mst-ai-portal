@@ -72,7 +72,7 @@ export const Solutions: React.FC = () => {
   });
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-sans">
+    <div className="bg-background-light dark:bg-background-dark text-text-strong min-h-screen font-sans">
       <Navbar variant="solutions" />
 
       <main className="relative pt-16">
@@ -195,7 +195,7 @@ export const Solutions: React.FC = () => {
                     {card.subtitle && (
                       <p className="text-xs text-primary font-semibold uppercase tracking-wider mb-2">{card.subtitle}</p>
                     )}
-                    <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed line-clamp-2">{card.description}</p>
+                    <p className="text-text-muted text-sm leading-relaxed line-clamp-2">{card.description}</p>
                   </div>
                   <div className="mt-auto flex items-center justify-between gap-3">
                     <div className="flex items-center gap-1 text-primary text-sm font-medium group-hover:gap-2 transition-all">
@@ -298,7 +298,7 @@ export const Solutions: React.FC = () => {
                       </span>
                       <div>
                         <h4 className="text-slate-900 dark:text-white font-semibold text-base">{h.title}</h4>
-                        <p className="text-slate-500 dark:text-slate-400 text-[15px] mt-1.5 leading-relaxed">{h.description}</p>
+                        <p className="text-text-muted text-[15px] mt-1.5 leading-relaxed">{h.description}</p>
                       </div>
                     </li>
                   ))}

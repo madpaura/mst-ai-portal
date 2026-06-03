@@ -542,7 +542,7 @@ export const AdminMarketplace: React.FC = () => {
           <div className="p-6 lg:p-8 max-w-3xl mx-auto">
             <div className="mb-6">
               <h1 className="text-xl font-bold text-slate-900 dark:text-white">Marketplace Overview</h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Control marketplace visibility for all users</p>
+              <p className="text-sm text-text-muted mt-1">Control marketplace visibility for all users</p>
             </div>
 
             <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/5 p-6">
@@ -551,11 +551,11 @@ export const AdminMarketplace: React.FC = () => {
                   <span className="material-symbols-outlined text-primary">store</span>
                   <div>
                     <h2 className="text-base font-bold text-slate-900 dark:text-white">Marketplace Status</h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Set under construction to show users a friendly notice</p>
+                    <p className="text-xs text-text-muted mt-0.5">Set under construction to show users a friendly notice</p>
                   </div>
                 </div>
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <span className="text-xs text-slate-500 dark:text-slate-400">Under Construction</span>
+                  <span className="text-xs text-text-muted">Under Construction</span>
                   <button
                     type="button"
                     role="switch"
@@ -575,7 +575,7 @@ export const AdminMarketplace: React.FC = () => {
               {marketplaceForm.under_construction && (
                 <div className="mt-4 pt-4 border-t border-slate-200 dark:border-white/5 space-y-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Message shown to users</label>
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Message shown to users</label>
                     <textarea
                       rows={2}
                       value={marketplaceForm.message}
@@ -654,7 +654,7 @@ export const AdminMarketplace: React.FC = () => {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h1 className="text-xl font-bold text-slate-900 dark:text-white">Marketplace Catalog</h1>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{components.length} component(s) in catalog</p>
+                <p className="text-sm text-text-muted mt-1">{components.length} component(s) in catalog</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -714,7 +714,7 @@ export const AdminMarketplace: React.FC = () => {
               <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/5 overflow-hidden">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-slate-200 dark:border-white/10 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    <tr className="border-b border-slate-200 dark:border-white/10 text-xs font-bold text-text-muted uppercase tracking-wider">
                       <th className="text-left px-4 py-3">Component</th>
                       <th className="text-left px-4 py-3">Type</th>
                       <th className="text-left px-4 py-3">Version</th>
@@ -745,7 +745,7 @@ export const AdminMarketplace: React.FC = () => {
                             ? <span className="px-2 py-0.5 text-[10px] rounded bg-green-500/20 text-green-400 border border-green-500/30 capitalize">{comp.badge}</span>
                             : <span className="text-slate-600 text-xs">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">{comp.downloads}</td>
+                        <td className="px-4 py-3 text-xs text-text-muted">{comp.downloads}</td>
                         <td className="px-4 py-3">
                           {comp.is_active
                             ? <span className="px-2 py-0.5 text-[10px] rounded bg-green-500/10 text-green-400">Active</span>
@@ -789,7 +789,7 @@ export const AdminMarketplace: React.FC = () => {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h1 className="text-xl font-bold text-slate-900 dark:text-white">Sync Sources</h1>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Git repositories scanned to populate the marketplace catalog</p>
+                <p className="text-sm text-text-muted mt-1">Git repositories scanned to populate the marketplace catalog</p>
               </div>
               <div className="flex gap-2">
                 <button onClick={handleSyncAll} className="flex items-center gap-2 px-4 py-2 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold rounded-lg transition-colors border border-slate-300 dark:border-white/10">
@@ -815,7 +815,7 @@ export const AdminMarketplace: React.FC = () => {
                           ? <span className="px-2 py-0.5 text-[10px] rounded bg-green-500/10 text-green-400">Active</span>
                           : <span className="px-2 py-0.5 text-[10px] rounded bg-slate-700 text-slate-400">Inactive</span>}
                       </div>
-                      <div className="flex flex-wrap gap-4 text-xs text-slate-500 dark:text-slate-400">
+                      <div className="flex flex-wrap gap-4 text-xs text-text-muted">
                         <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">commit</span>{s.git_branch}</span>
                         <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">schedule</span>{s.update_frequency}</span>
                         <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">key</span>Token: {s.git_token || 'not set'}</span>
@@ -844,8 +844,8 @@ export const AdminMarketplace: React.FC = () => {
                   {verifyResults[s.id] && (
                     <div className="mt-4 pt-4 border-t border-slate-200 dark:border-white/5">
                       <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Connection Verification</h4>
-                        <button onClick={() => setVerifyResults(v => ({ ...v, [s.id]: null }))} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
+                        <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider">Connection Verification</h4>
+                        <button onClick={() => setVerifyResults(v => ({ ...v, [s.id]: null }))} className="text-text-muted hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
                           <span className="material-symbols-outlined text-sm">close</span>
                         </button>
                       </div>
@@ -873,7 +873,7 @@ export const AdminMarketplace: React.FC = () => {
 
                   {selectedSourceId === s.id && (
                     <div className="mt-4 pt-4 border-t border-slate-200 dark:border-white/5">
-                      <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Recent Sync Jobs</h4>
+                      <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">Recent Sync Jobs</h4>
                       {jobs.length === 0 ? (
                         <p className="text-xs text-slate-500">No sync jobs yet</p>
                       ) : (
@@ -943,7 +943,7 @@ export const AdminMarketplace: React.FC = () => {
           <div className="p-6 lg:p-8 max-w-4xl mx-auto">
             <div className="mb-6">
               <h1 className="text-xl font-bold text-slate-900 dark:text-white">Marketplace Settings</h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Artifact Hub publish targets and contributor guide</p>
+              <p className="text-sm text-text-muted mt-1">Artifact Hub publish targets and contributor guide</p>
             </div>
 
             <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/5 overflow-hidden">
@@ -970,12 +970,12 @@ export const AdminMarketplace: React.FC = () => {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Name</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Name</label>
                   <input value={compForm.name} onChange={e => setCompForm(f => ({ ...f, name: e.target.value }))}
                     className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Slug</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Slug</label>
                   <input value={compForm.slug} onChange={e => setCompForm(f => ({ ...f, slug: e.target.value }))}
                     disabled={!!editingComp}
                     className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none disabled:opacity-50" />
@@ -984,7 +984,7 @@ export const AdminMarketplace: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Type</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Type</label>
                   <select value={compForm.component_type} onChange={e => setCompForm(f => ({ ...f, component_type: e.target.value }))}
                     disabled={!!editingComp}
                     className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none disabled:opacity-50">
@@ -994,21 +994,21 @@ export const AdminMarketplace: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Version</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Version</label>
                   <input value={compForm.version} onChange={e => setCompForm(f => ({ ...f, version: e.target.value }))}
                     className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Description</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Description</label>
                 <textarea value={compForm.description} onChange={e => setCompForm(f => ({ ...f, description: e.target.value }))}
                   rows={2} className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none" />
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider">
                     How-To Guide
                     <span className="ml-1 text-[10px] normal-case text-slate-500 font-normal">(Markdown)</span>
                   </label>
@@ -1027,14 +1027,14 @@ export const AdminMarketplace: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Install Command <span className="text-slate-400 normal-case font-normal">(skills.sh tab)</span></label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Install Command <span className="text-slate-400 normal-case font-normal">(skills.sh tab)</span></label>
                 <input value={compForm.install_command} onChange={e => setCompForm(f => ({ ...f, install_command: e.target.value }))}
                   placeholder="forge install my-agent"
                   className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none font-mono" />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Manual Install <span className="text-slate-400 normal-case font-normal">(Manual tab — optional)</span></label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Manual Install <span className="text-slate-400 normal-case font-normal">(Manual tab — optional)</span></label>
                 <textarea value={compForm.manual_install} onChange={e => setCompForm(f => ({ ...f, manual_install: e.target.value }))}
                   rows={3} placeholder={'npm install my-package\n# or\npip install my-package'}
                   className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none font-mono" />
@@ -1043,7 +1043,7 @@ export const AdminMarketplace: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Icon</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Icon</label>
                   <div className="flex flex-wrap gap-1.5">
                     {ICON_OPTIONS.map(icon => (
                       <button
@@ -1059,7 +1059,7 @@ export const AdminMarketplace: React.FC = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Icon Color</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Icon Color</label>
                   <select value={compForm.icon_color} onChange={e => setCompForm(f => ({ ...f, icon_color: e.target.value }))}
                     className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none">
                     {COLOR_OPTIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
@@ -1069,7 +1069,7 @@ export const AdminMarketplace: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Badge</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Badge</label>
                   <select value={compForm.badge} onChange={e => setCompForm(f => ({ ...f, badge: e.target.value }))}
                     className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none">
                     <option value="">None</option>
@@ -1079,21 +1079,21 @@ export const AdminMarketplace: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Author</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Author</label>
                   <input value={compForm.author} onChange={e => setCompForm(f => ({ ...f, author: e.target.value }))}
                     className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Tags (comma-separated)</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Tags (comma-separated)</label>
                 <input value={compForm.tags} onChange={e => setCompForm(f => ({ ...f, tags: e.target.value }))}
                   placeholder="verification, systemverilog, uvm"
                   className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">
                   How-To Guide URL
                   <span className="ml-1 text-[10px] normal-case text-slate-500 font-normal">(overrides scanned guide)</span>
                 </label>
@@ -1103,7 +1103,7 @@ export const AdminMarketplace: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">
                   Video Link
                   <span className="ml-1 text-[10px] normal-case text-slate-500 font-normal">(YouTube, Vimeo — shown as Watch button)</span>
                 </label>
@@ -1141,7 +1141,7 @@ export const AdminMarketplace: React.FC = () => {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Git Repository URL</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Git Repository URL</label>
                 <input value={sourceForm.git_url} onChange={e => setSourceForm(f => ({ ...f, git_url: e.target.value }))}
                   placeholder="https://github.com/org/repo"
                   className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
@@ -1149,12 +1149,12 @@ export const AdminMarketplace: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Branch</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Branch</label>
                   <input value={sourceForm.git_branch} onChange={e => setSourceForm(f => ({ ...f, git_branch: e.target.value }))}
                     className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Update Frequency</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Update Frequency</label>
                   <select value={sourceForm.update_frequency} onChange={e => setSourceForm(f => ({ ...f, update_frequency: e.target.value }))}
                     className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none">
                     <option value="hourly">Hourly</option>
@@ -1166,14 +1166,14 @@ export const AdminMarketplace: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Git Token (Personal Access Token)</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Git Token (Personal Access Token)</label>
                 <input type="password" value={sourceForm.git_token} onChange={e => setSourceForm(f => ({ ...f, git_token: e.target.value }))}
                   placeholder={editingSource ? '(leave blank to keep existing)' : 'ghp_...'}
                   className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Scan Paths (comma-separated)</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Scan Paths (comma-separated)</label>
                 <input value={sourceForm.scan_paths} onChange={e => setSourceForm(f => ({ ...f, scan_paths: e.target.value }))}
                   placeholder="., skills/, agents/"
                   className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
@@ -1183,7 +1183,7 @@ export const AdminMarketplace: React.FC = () => {
                 <input type="checkbox" checked={sourceForm.auto_update_release_tag}
                   onChange={e => setSourceForm(f => ({ ...f, auto_update_release_tag: e.target.checked }))}
                   className="rounded border-slate-600 text-primary focus:ring-primary bg-transparent" />
-                <span className="text-sm text-slate-700 dark:text-slate-300">Auto-update release tag version</span>
+                <span className="text-sm text-text">Auto-update release tag version</span>
               </label>
 
               <div className="flex gap-3 pt-4 border-t border-slate-200 dark:border-white/10">

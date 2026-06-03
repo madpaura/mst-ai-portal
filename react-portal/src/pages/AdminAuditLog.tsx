@@ -98,7 +98,7 @@ export const AdminAuditLog: React.FC = () => {
             <button
               type="button"
               onClick={() => { setFilterAction(''); setPage(0); }}
-              className="px-3 py-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors"
+              className="px-3 py-1.5 text-sm text-text-muted hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors"
             >
               Clear
             </button>
@@ -173,7 +173,7 @@ export const AdminAuditLog: React.FC = () => {
                         <div className="space-y-2">
                           {Object.keys(entry.details).length > 0 && (
                             <div>
-                              <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Details</div>
+                              <div className="text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Details</div>
                               <pre className="text-xs text-slate-600 dark:text-slate-300 bg-panel-light dark:bg-input-dark rounded p-3 overflow-x-auto">
                                 {JSON.stringify(entry.details, null, 2)}
                               </pre>
@@ -196,7 +196,7 @@ export const AdminAuditLog: React.FC = () => {
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
+        <div className="flex items-center justify-between text-sm text-text-muted">
           <span>Page {page + 1} of {totalPages} ({total} entries)</span>
           <div className="flex items-center gap-2">
             <button

@@ -1193,12 +1193,12 @@ export const AdminVideos: React.FC = () => {
                 <span className="material-symbols-outlined text-primary">library_add</span>
                 Add New Course
               </h3>
-              <button onClick={() => setShowCourseCreate(false)} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
+              <button onClick={() => setShowCourseCreate(false)} className="text-text-muted hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Course Title *</label>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Course Title *</label>
               <input
                 value={courseForm.title}
                 onChange={(e) => setCourseForm(f => ({ ...f, title: e.target.value }))}
@@ -1207,7 +1207,7 @@ export const AdminVideos: React.FC = () => {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Slug</label>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Slug</label>
               <input
                 value={courseForm.slug}
                 onChange={(e) => setCourseForm(f => ({ ...f, slug: e.target.value }))}
@@ -1216,7 +1216,7 @@ export const AdminVideos: React.FC = () => {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Description</label>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Description</label>
               <textarea
                 value={courseForm.description}
                 onChange={(e) => setCourseForm(f => ({ ...f, description: e.target.value }))}
@@ -1246,12 +1246,12 @@ export const AdminVideos: React.FC = () => {
                 <span className="material-symbols-outlined text-primary">edit</span>
                 Edit Course
               </h3>
-              <button onClick={() => setEditingCourse(null)} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
+              <button onClick={() => setEditingCourse(null)} className="text-text-muted hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Title *</label>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Title *</label>
               <input
                 value={courseEditForm.title}
                 onChange={(e) => setCourseEditForm(f => ({ ...f, title: e.target.value }))}
@@ -1260,7 +1260,7 @@ export const AdminVideos: React.FC = () => {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Slug</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Slug</label>
                 <input
                   value={courseEditForm.slug}
                   onChange={(e) => setCourseEditForm(f => ({ ...f, slug: e.target.value }))}
@@ -1269,7 +1269,7 @@ export const AdminVideos: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Sort Order</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Sort Order</label>
                 <input
                   type="number"
                   value={courseEditForm.sort_order}
@@ -1279,7 +1279,7 @@ export const AdminVideos: React.FC = () => {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Description</label>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Description</label>
               <textarea
                 value={courseEditForm.description}
                 onChange={(e) => setCourseEditForm(f => ({ ...f, description: e.target.value }))}
@@ -1308,7 +1308,7 @@ export const AdminVideos: React.FC = () => {
                 <span className="material-symbols-outlined text-red-500">delete</span>
                 Delete Course
               </h3>
-              <button onClick={() => setDeletingCourse(null)} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
+              <button onClick={() => setDeletingCourse(null)} className="text-text-muted hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
@@ -1322,7 +1322,7 @@ export const AdminVideos: React.FC = () => {
 
             {deletingCourse.video_count > 0 && (
               <div className="space-y-3">
-                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">What should happen to the videos?</p>
+                <p className="text-xs font-bold text-text-muted uppercase tracking-wider">What should happen to the videos?</p>
 
                 <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-white/10 cursor-pointer hover:border-primary/50 transition-colors">
                   <input
@@ -1361,7 +1361,7 @@ export const AdminVideos: React.FC = () => {
                   />
                   <div>
                     <p className="text-sm font-semibold text-red-500">Delete all videos permanently</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">This cannot be undone. All video files, transcripts and metadata will be removed.</p>
+                    <p className="text-xs text-text-muted mt-0.5">This cannot be undone. All video files, transcripts and metadata will be removed.</p>
                   </div>
                 </label>
               </div>
@@ -1393,12 +1393,12 @@ export const AdminVideos: React.FC = () => {
                 <span className="material-symbols-outlined text-primary">category</span>
                 Add New Category
               </h3>
-              <button onClick={() => setShowAddCategory(false)} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
+              <button onClick={() => setShowAddCategory(false)} className="text-text-muted hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Category Name *</label>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Category Name *</label>
               <input
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
@@ -1410,7 +1410,7 @@ export const AdminVideos: React.FC = () => {
             <div className="flex flex-wrap gap-1.5">
               <span className="text-[10px] text-slate-500 w-full mb-1">Existing categories:</span>
               {allCategories.map(c => (
-                <span key={c} className="px-2 py-0.5 text-[10px] rounded-full bg-panel-light dark:bg-input-dark text-slate-500 border border-slate-200 dark:border-slate-700">{c}</span>
+                <span key={c} className="px-2 py-0.5 text-[10px] rounded-full bg-panel-light dark:bg-input-dark text-slate-500 border border-border-base">{c}</span>
               ))}
             </div>
             <div className="flex gap-3 pt-2">
@@ -1440,7 +1440,7 @@ export const AdminVideos: React.FC = () => {
             </div>
 
             <div className="space-y-1.5">
-              <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Raw Files</p>
+              <p className="text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Raw Files</p>
               {storageInfo.files.map((f) => (
                 <div key={f.name} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${
                   f.is_intermediate ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-panel-light dark:bg-input-dark border border-slate-200 dark:border-white/5'
@@ -1457,14 +1457,14 @@ export const AdminVideos: React.FC = () => {
               {storageInfo.hls_size > 0 && (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-panel-light dark:bg-input-dark border border-slate-200 dark:border-white/5">
                   <span className="material-symbols-outlined text-sm text-primary">video_library</span>
-                  <span className="flex-1 text-slate-700 dark:text-slate-300">HLS streams/</span>
+                  <span className="flex-1 text-text">HLS streams/</span>
                   <span className="text-slate-500">{fmtBytes(storageInfo.hls_size)}</span>
                 </div>
               )}
               {storageInfo.thumb_size > 0 && (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-panel-light dark:bg-input-dark border border-slate-200 dark:border-white/5">
-                  <span className="material-symbols-outlined text-sm text-slate-500 dark:text-slate-400">image</span>
-                  <span className="flex-1 text-slate-700 dark:text-slate-300">thumb.jpg</span>
+                  <span className="material-symbols-outlined text-sm text-text-muted">image</span>
+                  <span className="flex-1 text-text">thumb.jpg</span>
                   <span className="text-slate-500">{fmtBytes(storageInfo.thumb_size)}</span>
                 </div>
               )}
@@ -1521,7 +1521,7 @@ export const AdminVideos: React.FC = () => {
                 return (
                   <button
                     onClick={toggleCollapseAll}
-                    className="flex items-center text-xs text-slate-500 dark:text-slate-400 hover:text-slate-200 transition-colors"
+                    className="flex items-center text-xs text-text-muted hover:text-slate-200 transition-colors"
                     title={allCollapsed ? 'Expand all' : 'Collapse all'}
                   >
                     <span className="material-symbols-outlined text-sm">{allCollapsed ? 'unfold_more' : 'unfold_less'}</span>
@@ -1579,7 +1579,7 @@ export const AdminVideos: React.FC = () => {
                     <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider flex-1 text-left truncate">
                       {group.course?.title || 'Uncategorized'}
                     </span>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded-full shrink-0">
+                    <span className="text-[10px] text-text-muted bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded-full shrink-0">
                       {group.videos.length}
                     </span>
                   </button>
@@ -1642,7 +1642,7 @@ export const AdminVideos: React.FC = () => {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Title</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Title</label>
                   <input
                     value={createForm.title}
                     onChange={(e) => setCreateForm((f) => ({ ...f, title: e.target.value }))}
@@ -1650,7 +1650,7 @@ export const AdminVideos: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Slug</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Slug</label>
                   <input
                     value={createForm.slug}
                     onChange={(e) => setCreateForm((f) => ({ ...f, slug: e.target.value }))}
@@ -1660,7 +1660,7 @@ export const AdminVideos: React.FC = () => {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Description</label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Description</label>
                 <textarea
                   value={createForm.description}
                   onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))}
@@ -1670,7 +1670,7 @@ export const AdminVideos: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Category</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Category</label>
                   <select
                     value={createForm.category}
                     onChange={(e) => {
@@ -1686,7 +1686,7 @@ export const AdminVideos: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Course</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Course</label>
                   <select
                     value={createForm.course_id}
                     onChange={(e) => {
@@ -1741,7 +1741,7 @@ export const AdminVideos: React.FC = () => {
                       style={{ transformOrigin: '22px 22px' }}
                     />
                   </svg>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Transcoding…</p>
+                  <p className="text-xs text-text-muted">Transcoding…</p>
                   <button onClick={handleCancelJob} className="mt-1 flex items-center gap-1 px-3 py-1.5 text-xs text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-colors">
                     <span className="material-symbols-outlined text-xs">cancel</span>
                     Cancel
@@ -1761,7 +1761,7 @@ export const AdminVideos: React.FC = () => {
                   />
                   <div className="flex items-center justify-between mt-2 px-1">
                     <span className="font-mono text-[10px] text-slate-500">0:00</span>
-                    <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
+                    <span className="font-mono text-[10px] text-text-muted">
                       Current: {formatDuration(Math.floor(playerTime))}
                     </span>
                     <span className="font-mono text-[10px] text-slate-500">{formatDuration(Math.floor(playerDuration))}</span>
@@ -1780,7 +1780,7 @@ export const AdminVideos: React.FC = () => {
                   />
                   <div className="flex items-center justify-between mt-2 px-1">
                     <span className="font-mono text-[10px] text-slate-500">0:00</span>
-                    <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
+                    <span className="font-mono text-[10px] text-text-muted">
                       Current: {formatDuration(Math.floor(playerTime))}
                     </span>
                     <span className="font-mono text-[10px] text-slate-500">{formatDuration(Math.floor(playerDuration))}</span>
@@ -1788,7 +1788,7 @@ export const AdminVideos: React.FC = () => {
                   <div className="flex items-center gap-3 mt-3">
                     <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-slate-300 dark:border-white/10 hover:border-primary/50 cursor-pointer transition-colors">
                       <span className="material-symbols-outlined text-slate-500 text-sm">cloud_upload</span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">{uploadFile ? uploadFile.name : 'Choose video'}</span>
+                      <span className="text-xs text-text-muted">{uploadFile ? uploadFile.name : 'Choose video'}</span>
                       <input type="file" accept="video/*" className="hidden" onChange={(e) => setUploadFile(e.target.files?.[0] || null)} />
                     </label>
                     {uploadFile && (
@@ -1811,13 +1811,13 @@ export const AdminVideos: React.FC = () => {
                     <span className="material-symbols-outlined text-primary text-sm">auto_awesome</span>
                     <div>
                       <span className="text-sm font-bold text-slate-900 dark:text-white">Auto Mode</span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400 ml-2">— transcribe + auto-generate metadata, chapters &amp; how-to guide</span>
+                      <span className="text-xs text-text-muted ml-2">— transcribe + auto-generate metadata, chapters &amp; how-to guide</span>
                     </div>
                   </label>
                   <div className="flex items-center gap-4">
                     <label className="flex-1 flex items-center justify-center gap-2 px-4 py-6 rounded-lg border-2 border-dashed border-slate-300 dark:border-white/10 hover:border-primary/50 cursor-pointer transition-colors">
                       <span className="material-symbols-outlined text-slate-500">cloud_upload</span>
-                      <span className="text-sm text-slate-500 dark:text-slate-400">{uploadFile ? uploadFile.name : 'Choose video file or drag & drop'}</span>
+                      <span className="text-sm text-text-muted">{uploadFile ? uploadFile.name : 'Choose video file or drag & drop'}</span>
                       <input
                         type="file"
                         accept="video/*"
@@ -1912,7 +1912,7 @@ export const AdminVideos: React.FC = () => {
                   <h2 className="text-lg font-bold text-slate-900 dark:text-white">{selected.title}</h2>
                   {statusBadge(selected)}
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{selected.slug}</p>
+                <p className="text-xs text-text-muted font-mono">{selected.slug}</p>
               </div>
               <div className="flex items-center gap-2">
                 {isContent ? (
@@ -1980,12 +1980,12 @@ export const AdminVideos: React.FC = () => {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Title</label>
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Title</label>
                     <input value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
                       className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Category</label>
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Category</label>
                     <select value={editForm.category} onChange={(e) => {
                       if (e.target.value === '__new__') { setShowAddCategory(true); return; }
                       setEditForm((f) => ({ ...f, category: e.target.value }));
@@ -2000,7 +2000,7 @@ export const AdminVideos: React.FC = () => {
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Description</label>
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider">Description</label>
                     <button
                       onClick={() => handleBeautify('meta-desc', editForm.description, (v) => setEditForm((f) => ({ ...f, description: v })))}
                       disabled={beautifying === 'meta-desc' || !editForm.description.trim()}
@@ -2015,7 +2015,7 @@ export const AdminVideos: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Course</label>
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Course</label>
                     <select value={editForm.course_id} onChange={(e) => {
                       if (e.target.value === '__new__') { setShowCourseCreate(true); return; }
                       setEditForm((f) => ({ ...f, course_id: e.target.value }));
@@ -2027,7 +2027,7 @@ export const AdminVideos: React.FC = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Sort Order</label>
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Sort Order</label>
                     <input type="number" value={editForm.sort_order} onChange={(e) => setEditForm((f) => ({ ...f, sort_order: parseInt(e.target.value) || 0 }))}
                       className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                   </div>
@@ -2076,13 +2076,13 @@ export const AdminVideos: React.FC = () => {
                 {/* Mark chapter at current time */}
                 <div className="flex items-end gap-3 p-3 rounded-xl bg-primary/5 border border-primary/20">
                   <div className="flex-1">
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Chapter Title</label>
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Chapter Title</label>
                     <input value={newChapter.title} onChange={(e) => setNewChapter((f) => ({ ...f, title: e.target.value }))}
                       placeholder="e.g. Introduction, Architecture Overview..."
                       className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                   </div>
                   <div className="w-32">
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Start (sec)</label>
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Start (sec)</label>
                     <input type="number" value={newChapter.start_time} onChange={(e) => setNewChapter((f) => ({ ...f, start_time: parseInt(e.target.value) || 0 }))}
                       className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                   </div>
@@ -2100,7 +2100,7 @@ export const AdminVideos: React.FC = () => {
 
                 {/* Chapter List */}
                 <div>
-                  <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                  <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
                     Chapters ({chapters.length})
                   </h4>
                   <div className="space-y-2">
@@ -2109,7 +2109,7 @@ export const AdminVideos: React.FC = () => {
                         {editingChapterId === ch.id ? (
                           <div className="flex items-end gap-3 p-3">
                             <div className="flex-1">
-                              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Title</label>
+                              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Title</label>
                               <input
                                 value={editChapterForm.title}
                                 onChange={(e) => setEditChapterForm((f) => ({ ...f, title: e.target.value }))}
@@ -2118,7 +2118,7 @@ export const AdminVideos: React.FC = () => {
                               />
                             </div>
                             <div className="w-32">
-                              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Start (sec)</label>
+                              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Start (sec)</label>
                               <input
                                 type="number"
                                 value={editChapterForm.start_time}
@@ -2169,13 +2169,13 @@ export const AdminVideos: React.FC = () => {
             {activeTab === 'howto' && (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Guide Title</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Guide Title</label>
                   <input value={howtoTitle} onChange={(e) => setHowtoTitle(e.target.value)}
                     placeholder="Getting Started with the Coding Agent" className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Content (Markdown)</label>
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider">Content (Markdown)</label>
                     <button
                       onClick={() => handleBeautify('howto', howtoContent, setHowtoContent)}
                       disabled={beautifying === 'howto' || !howtoContent.trim()}
@@ -2227,7 +2227,7 @@ export const AdminVideos: React.FC = () => {
                               startAutoStatusPoll(selected.id);
                               showMsg('success', 'LLM jobs re-queued');
                             }}
-                            className="flex items-center gap-1 px-2.5 py-1 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 text-[11px] font-bold rounded-lg transition-colors border border-slate-300 dark:border-white/10"
+                            className="flex items-center gap-1 px-2.5 py-1 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-text text-[11px] font-bold rounded-lg transition-colors border border-slate-300 dark:border-white/10"
                             title="Regenerate metadata, chapters and how-to from existing transcript"
                           >
                             <span className="material-symbols-outlined text-xs">refresh</span>
@@ -2266,7 +2266,7 @@ export const AdminVideos: React.FC = () => {
                                 startAutoStatusPoll(selected.id);
                                 showMsg('success', `${label} re-queued`);
                               }}
-                              className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white bg-slate-200/70 dark:bg-slate-700/50 hover:bg-slate-300 dark:hover:bg-slate-700 rounded transition-colors"
+                              className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-text-muted hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white bg-slate-200/70 dark:bg-slate-700/50 hover:bg-slate-300 dark:hover:bg-slate-700 rounded transition-colors"
                               title={`Regenerate ${label}`}
                             >
                               <span className="material-symbols-outlined text-xs">refresh</span>
@@ -2288,7 +2288,7 @@ export const AdminVideos: React.FC = () => {
                         <p className="text-sm font-bold text-amber-300">
                           {transcriptProgress.status === 'pending' ? 'Queued — waiting for worker…' : 'Transcribing audio…'}
                         </p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        <p className="text-xs text-text-muted mt-0.5">
                           {transcriptProgress.status === 'processing'
                             ? 'Audio is being processed by the speech-to-text service'
                             : 'The transcription job is queued and will start shortly'}
@@ -2357,14 +2357,14 @@ export const AdminVideos: React.FC = () => {
 
                 {/* Transcript content */}
                 {transcriptLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 py-8 justify-center">
+                  <div className="flex items-center gap-2 text-sm text-text-muted py-8 justify-center">
                     <span className="material-symbols-outlined animate-spin">autorenew</span>
                     Loading transcript...
                   </div>
                 ) : transcriptData ? (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <div className="flex gap-3 text-xs text-slate-500 dark:text-slate-400">
+                      <div className="flex gap-3 text-xs text-text-muted">
                         {transcriptData.language && <span>Language: <span className="text-slate-200 font-bold">{transcriptData.language}</span></span>}
                         {transcriptData.duration && <span>Duration: <span className="text-slate-200 font-bold">{Math.floor(transcriptData.duration / 60)}:{String(Math.floor(transcriptData.duration % 60)).padStart(2, '0')}</span></span>}
                         {transcriptData.segments?.length && <span>Segments: <span className="text-slate-200 font-bold">{transcriptData.segments.length}</span></span>}
@@ -2412,7 +2412,7 @@ export const AdminVideos: React.FC = () => {
                       <div>
                         <p className="text-sm font-bold text-red-300">Transcript generation failed</p>
                         {transcriptProgress.error && (
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-mono">{transcriptProgress.error}</p>
+                          <p className="text-xs text-text-muted mt-1 font-mono">{transcriptProgress.error}</p>
                         )}
                       </div>
                     </div>
@@ -2429,7 +2429,7 @@ export const AdminVideos: React.FC = () => {
 
             {activeTab === 'quality' && (
               <div className="space-y-4">
-                <p className="text-sm text-slate-500 dark:text-slate-400">Select which quality tiers to transcode. Lower CRF = better quality (larger files).</p>
+                <p className="text-sm text-text-muted">Select which quality tiers to transcode. Lower CRF = better quality (larger files).</p>
                 <div className="space-y-3">
                   {['360p', '720p', '1080p'].map((q) => {
                     const setting = qualitySettings.find((s) => s.quality === q) || { quality: q, enabled: true, crf: 23 };
@@ -2451,7 +2451,7 @@ export const AdminVideos: React.FC = () => {
                           <span className="text-sm font-bold text-slate-900 dark:text-white">{q}</span>
                         </label>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-500 dark:text-slate-400">CRF:</span>
+                          <span className="text-xs text-text-muted">CRF:</span>
                           <input
                             type="number"
                             value={setting.crf}
@@ -2480,7 +2480,7 @@ export const AdminVideos: React.FC = () => {
 
             {activeTab === 'seed-notes' && (
               <div className="space-y-4">
-                <p className="text-sm text-slate-500 dark:text-slate-400">Seed notes are visible to all users as pre-populated key takeaways.</p>
+                <p className="text-sm text-text-muted">Seed notes are visible to all users as pre-populated key takeaways.</p>
                 <div className="space-y-2">
                   {seedNotes.map((n) => (
                     <div key={n.id} className="flex items-start gap-3 p-3 rounded-lg bg-input-light dark:bg-input-dark/30 border border-slate-200 dark:border-white/5">
@@ -2495,12 +2495,12 @@ export const AdminVideos: React.FC = () => {
                 </div>
                 <div className="flex items-end gap-3 pt-2 border-t border-white/5">
                   <div className="w-32">
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Time (sec)</label>
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Time (sec)</label>
                     <input type="number" value={newSeedNote.timestamp_s} onChange={(e) => setNewSeedNote((f) => ({ ...f, timestamp_s: parseInt(e.target.value) || 0 }))}
                       className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                   </div>
                   <div className="flex-1">
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Note Content</label>
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Note Content</label>
                     <input value={newSeedNote.content} onChange={(e) => setNewSeedNote((f) => ({ ...f, content: e.target.value }))}
                       placeholder="Key takeaway..." className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                   </div>
@@ -2549,7 +2549,7 @@ export const AdminVideos: React.FC = () => {
                     Speed Up
                   </button>
                 </div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">
+                <p className="text-sm text-text-muted">
                   {trimMode === 'trim'
                     ? 'Trim keeps only the section between start and end times. The original is backed up before the first trim.'
                     : trimMode === 'cut'
@@ -2560,7 +2560,7 @@ export const AdminVideos: React.FC = () => {
                 {/* Speed factor selector */}
                 {trimMode === 'speed' && (
                   <div className="flex items-center gap-2 p-3 rounded-xl bg-orange-500/5 border border-orange-500/20">
-                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mr-1">Speed Factor</span>
+                    <span className="text-xs font-bold text-text-muted uppercase tracking-wider mr-1">Speed Factor</span>
                     {[2, 4, 8, 16, 32].map((f) => (
                       <button
                         key={f}
@@ -2678,7 +2678,7 @@ export const AdminVideos: React.FC = () => {
                 {/* Trim Controls */}
                 <div className="flex items-end gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
                   <div className="w-40">
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Start (seconds)</label>
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Start (seconds)</label>
                     <input
                       type="number"
                       step="0.1"
@@ -2696,7 +2696,7 @@ export const AdminVideos: React.FC = () => {
                     <span className="material-symbols-outlined text-sm">first_page</span>
                   </button>
                   <div className="w-40">
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">End (seconds)</label>
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">End (seconds)</label>
                     <input
                       type="number"
                       step="0.1"
@@ -2724,7 +2724,7 @@ export const AdminVideos: React.FC = () => {
 
                 {/* Summary & Execute */}
                 <div className="flex items-center justify-between p-4 rounded-xl bg-input-light dark:bg-input-dark/30 border border-slate-200 dark:border-white/5">
-                  <div className="text-sm text-slate-700 dark:text-slate-300">
+                  <div className="text-sm text-text">
                     {trimEnd > trimStart ? (
                       trimMode === 'trim' ? (
                         <>
@@ -2833,7 +2833,7 @@ export const AdminVideos: React.FC = () => {
                 <div className="flex gap-5">
                   {/* Left: Live Preview */}
                   <div className="flex-1 min-w-0">
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Live Preview</label>
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Live Preview</label>
                     <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 bg-card-light dark:bg-card-dark">
                       <iframe
                         srcDoc={bannerPreviewHtml}
@@ -2846,7 +2846,7 @@ export const AdminVideos: React.FC = () => {
 
                   {/* Right: Settings */}
                   <div className="w-[320px] shrink-0 space-y-3">
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Settings</label>
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider">Settings</label>
                     <div className="space-y-2.5">
                       <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Company Logo</label>
@@ -3063,7 +3063,7 @@ export const AdminVideos: React.FC = () => {
                 {/* Generate Preview */}
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Custom Content (optional)</label>
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Custom Content (optional)</label>
                     <textarea
                       value={emailCustomContent}
                       onChange={(e) => setEmailCustomContent(e.target.value)}
@@ -3161,7 +3161,7 @@ export const AdminVideos: React.FC = () => {
                       </button>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Subject</label>
+                      <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Subject</label>
                       <input
                         type="text"
                         value={emailSubject}
@@ -3170,14 +3170,14 @@ export const AdminVideos: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Preview</label>
+                      <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Preview</label>
                       <div
                         className="bg-input-light dark:bg-input-dark rounded-lg p-4 text-slate-900 dark:text-white text-sm max-h-64 overflow-y-auto border border-slate-200 dark:border-white/10"
                         dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(emailPreview.html_content) }}
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Send To</label>
+                      <label className="block text-xs font-bold text-text-muted uppercase tracking-wider">Send To</label>
                       {/* Toolbar */}
                       <div className="flex items-center gap-2 flex-wrap">
                         <button
@@ -3228,7 +3228,7 @@ export const AdminVideos: React.FC = () => {
                       {emailShowSaved && emailSavedAddresses.length > 0 && (
                         <div className="p-3 bg-panel-light dark:bg-panel-dark border border-slate-100 dark:border-white/5 space-y-1.5 max-h-40 overflow-y-auto">
                           <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Saved</span>
+                            <span className="text-xs font-bold text-text-muted uppercase tracking-wider">Saved</span>
                             <button
                               onClick={() => {
                                 const current = emailRecipients.split('\n').map(x => x.trim()).filter(Boolean);

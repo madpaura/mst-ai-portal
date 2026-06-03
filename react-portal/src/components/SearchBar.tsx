@@ -116,7 +116,7 @@ export const SearchBar: React.FC = () => {
 
   return (
     <div className="relative w-52">
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/30 transition-all">
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border-base bg-slate-100 dark:bg-slate-800 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/30 transition-all">
         <span className="material-symbols-outlined text-[18px] text-slate-400">search</span>
         <input
           ref={inputRef}
@@ -141,7 +141,7 @@ export const SearchBar: React.FC = () => {
       {open && suggestions.length > 0 && (
         <div
           ref={dropdownRef}
-          className="absolute top-full left-0 right-0 mt-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-[200] overflow-hidden"
+          className="absolute top-full left-0 right-0 mt-1.5 bg-white dark:bg-slate-900 border border-border-base rounded-xl shadow-xl z-[200] overflow-hidden"
         >
           <ul>
             {suggestions.map((item, i) => (
@@ -169,7 +169,7 @@ export const SearchBar: React.FC = () => {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{item.title}</p>
                     {item.description && (
-                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{item.description}</p>
+                      <p className="text-xs text-text-muted truncate mt-0.5">{item.description}</p>
                     )}
                   </div>
                   <span className={`text-[10px] font-semibold uppercase tracking-wide mt-1 flex-shrink-0 ${TYPE_COLORS[item.type] || 'text-slate-400'}`}>

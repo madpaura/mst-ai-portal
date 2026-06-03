@@ -271,7 +271,7 @@ export const AdminContributions: React.FC = () => {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Users & Contributors</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-sm text-text-muted mt-1">
             Manage users, roles, passwords, and contribution requests.
           </p>
         </div>
@@ -289,7 +289,7 @@ export const AdminContributions: React.FC = () => {
         <div className="flex items-center gap-2 mb-3">
           <span className="material-symbols-outlined text-primary text-base">smart_display</span>
           <h2 className="text-sm font-bold text-slate-900 dark:text-white">Contribute Guide Video</h2>
-          <span className="text-xs text-slate-500 dark:text-slate-400 ml-1">— shown to users on the Contribute page</span>
+          <span className="text-xs text-text-muted ml-1">— shown to users on the Contribute page</span>
         </div>
         <div className="flex items-center gap-3">
           <input
@@ -319,7 +319,7 @@ export const AdminContributions: React.FC = () => {
           )}
         </div>
         {guideSlug && (
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+          <p className="text-xs text-text-muted mt-2">
             Currently set to: <span className="font-mono text-primary">{guideSlug}</span>
           </p>
         )}
@@ -422,18 +422,18 @@ export const AdminContributions: React.FC = () => {
       <div className="mb-6 p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-input-light dark:bg-input-dark/30">
         <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">User Roles</h2>
         <div className="flex gap-4 text-xs text-slate-500">
-          <span><strong className="text-slate-700 dark:text-slate-300">user</strong> — view only</span>
+          <span><strong className="text-text">user</strong> — view only</span>
           <span><strong className="text-primary">content</strong> — videos, articles, marketplace</span>
           <span><strong className="text-purple-400">admin</strong> — full access</span>
         </div>
       </div>
 
       {/* Pending Requests */}
-      <h2 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">
+      <h2 className="text-sm font-bold text-text mb-3">
         Pending ({pending.length})
       </h2>
       {pending.length === 0 && (
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 italic">No pending requests.</p>
+        <p className="text-sm text-text-muted mb-6 italic">No pending requests.</p>
       )}
       <div className="space-y-4 mb-8">
         {pending.map((req) => (
@@ -443,9 +443,9 @@ export const AdminContributions: React.FC = () => {
                 <span className={`inline-flex items-center px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${STATUS_STYLES[req.status]}`}>
                   {req.status}
                 </span>
-                <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">{new Date(req.created_at).toLocaleDateString()}</span>
+                <span className="ml-2 text-xs text-text-muted">{new Date(req.created_at).toLocaleDateString()}</span>
               </div>
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-mono truncate max-w-[180px]">{req.user_id}</span>
+              <span className="text-xs text-text-muted font-mono truncate max-w-[180px]">{req.user_id}</span>
             </div>
             <div className="bg-input-light dark:bg-input-dark/40 rounded-lg p-3 mb-3">
               <p className="text-xs text-slate-500 mb-1 font-bold uppercase tracking-wider">Reason</p>
@@ -485,7 +485,7 @@ export const AdminContributions: React.FC = () => {
       {/* Reviewed Requests */}
       {reviewed.length > 0 && (
         <>
-          <h2 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">Reviewed ({reviewed.length})</h2>
+          <h2 className="text-sm font-bold text-text mb-3">Reviewed ({reviewed.length})</h2>
           <div className="space-y-2 mb-10">
             {reviewed.map((req) => (
               <div key={req.id} className="px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10 flex items-center gap-4">
@@ -493,7 +493,7 @@ export const AdminContributions: React.FC = () => {
                   {req.status}
                 </span>
                 <span className="text-xs text-slate-500 font-mono truncate flex-1">{req.user_id}</span>
-                <span className="text-xs text-slate-500 dark:text-slate-400">{new Date(req.created_at).toLocaleDateString()}</span>
+                <span className="text-xs text-text-muted">{new Date(req.created_at).toLocaleDateString()}</span>
               </div>
             ))}
           </div>
@@ -503,20 +503,20 @@ export const AdminContributions: React.FC = () => {
       {/* ── Guest Interest Signups ────────────────────────── */}
       <div className="border-t border-slate-200 dark:border-white/10 pt-8 mb-8">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+          <h2 className="text-sm font-bold text-text flex items-center gap-2">
             <span className="material-symbols-outlined text-base text-amber-400">mail</span>
             Guest Interest Signups ({guestInterests.filter(g => g.status === 'pending').length} pending)
           </h2>
           <button
             onClick={() => setShowDismissed(v => !v)}
-            className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-300 transition-colors"
+            className="text-xs text-text-muted hover:text-slate-300 transition-colors"
           >
             {showDismissed ? 'Hide dismissed' : 'Show dismissed'}
           </button>
         </div>
 
         {guestInterests.filter(g => showDismissed || g.status !== 'dismissed').length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400 italic">No guest interest submissions.</p>
+          <p className="text-sm text-text-muted italic">No guest interest submissions.</p>
         ) : (
           <div className="space-y-3">
             {guestInterests
@@ -530,7 +530,7 @@ export const AdminContributions: React.FC = () => {
                       </div>
                       <div>
                         <div className="text-sm font-medium text-slate-800 dark:text-slate-200">{g.email}</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                        <div className="text-xs text-text-muted">
                           {g.source} · {new Date(g.created_at).toLocaleDateString()}
                         </div>
                       </div>
@@ -582,7 +582,7 @@ export const AdminContributions: React.FC = () => {
                   )}
 
                   {g.status !== 'pending' && g.admin_note && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400 italic mt-1">Note: {g.admin_note}</p>
+                    <p className="text-xs text-text-muted italic mt-1">Note: {g.admin_note}</p>
                   )}
                   {g.status !== 'pending' && g.reviewer_name && (
                     <p className="text-xs text-slate-500 mt-0.5">by {g.reviewer_name} · {g.reviewed_at ? new Date(g.reviewed_at).toLocaleDateString() : ''}</p>
@@ -595,7 +595,7 @@ export const AdminContributions: React.FC = () => {
 
       {/* ── User List ─────────────────────────────────────── */}
       <div className="border-t border-slate-200 dark:border-white/10 pt-8">
-        <h2 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-4 flex items-center gap-2">
+        <h2 className="text-sm font-bold text-text mb-4 flex items-center gap-2">
           <span className="material-symbols-outlined text-base text-primary">group</span>
           All Users ({filteredUsers.length}{filteredUsers.length !== users.length ? ` of ${users.length}` : ''})
         </h2>
@@ -638,7 +638,7 @@ export const AdminContributions: React.FC = () => {
         </div>
 
         {filteredUsers.length === 0 && (
-          <p className="text-sm text-slate-500 dark:text-slate-400 italic mb-2">No users match your search.</p>
+          <p className="text-sm text-text-muted italic mb-2">No users match your search.</p>
         )}
         <div className="space-y-2">
           {filteredUsers.map((u) => (
@@ -652,13 +652,13 @@ export const AdminContributions: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{u.display_name}</span>
                   {currentUser?.id === u.id && (
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">(you)</span>
+                    <span className="text-[10px] text-text-muted font-medium">(you)</span>
                   )}
                   {u.username === 'admin' && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-500 font-bold">system</span>
                   )}
                 </div>
-                <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">{u.username}{u.email ? ` · ${u.email}` : ''}</span>
+                <span className="text-xs text-text-muted font-mono">{u.username}{u.email ? ` · ${u.email}` : ''}</span>
               </div>
               {/* Role pills */}
               <div className="flex items-center gap-1 shrink-0">
@@ -724,7 +724,7 @@ export const AdminContributions: React.FC = () => {
             <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">
               {currentUser?.id === resetTarget.id ? 'Change Your Password' : 'Reset Password'}
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+            <p className="text-xs text-text-muted mb-4">
               {currentUser?.id === resetTarget.id
                 ? 'Verify your current password before setting a new one.'
                 : <>Set a new password for <strong className="text-slate-600 dark:text-slate-300">{resetTarget.username}</strong></>

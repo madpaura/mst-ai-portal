@@ -69,7 +69,7 @@ export const ContributeRequest: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-sans">
+    <div className="min-h-screen bg-background-light dark:bg-background-dark text-text-strong font-sans">
       <div className="max-w-2xl mx-auto px-6 pt-16 pb-24">
         {/* Back link */}
         <Link to="/ignite" className="flex items-center gap-2 text-sm text-slate-500 hover:text-primary transition-colors mb-8">
@@ -96,7 +96,7 @@ export const ContributeRequest: React.FC = () => {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-slate-900 dark:text-white">Watch: How to Contribute</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Learn how to create videos, articles, and marketplace items on the portal</p>
+              <p className="text-xs text-text-muted mt-0.5">Learn how to create videos, articles, and marketplace items on the portal</p>
             </div>
             <span className="material-symbols-outlined text-primary/50 group-hover:text-primary transition-colors shrink-0">arrow_forward</span>
           </Link>
@@ -178,7 +178,7 @@ export const ContributeRequest: React.FC = () => {
             <h2 className="text-base font-bold text-slate-900 dark:text-white mb-4">Submit a request</h2>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              <label className="block text-sm font-medium text-text mb-2">
                 Why do you want to contribute?
               </label>
               <textarea

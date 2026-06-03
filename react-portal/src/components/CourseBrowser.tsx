@@ -174,7 +174,7 @@ export const CourseBrowser: React.FC<CourseBrowserProps> = ({
         </div>
 
         {/* Video list */}
-        <h2 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-3">
+        <h2 className="text-sm font-bold text-text uppercase tracking-wider mb-3">
           Course Content
         </h2>
         {previewLoading ? (
@@ -253,8 +253,8 @@ export const CourseBrowser: React.FC<CourseBrowserProps> = ({
       {courses.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24">
           <span className="material-symbols-outlined text-6xl text-slate-300 dark:text-slate-600 mb-4">school</span>
-          <h2 className="text-xl font-bold text-slate-400 dark:text-slate-500 mb-2">No Courses Available</h2>
-          <p className="text-sm text-slate-400 dark:text-slate-500">Courses will appear here once created by an admin.</p>
+          <h2 className="text-xl font-bold text-text-faint mb-2">No Courses Available</h2>
+          <p className="text-sm text-text-faint">Courses will appear here once created by an admin.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">

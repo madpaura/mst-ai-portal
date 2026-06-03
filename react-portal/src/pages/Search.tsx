@@ -104,7 +104,7 @@ export const Search: React.FC = () => {
           {/* Search input */}
           <form onSubmit={handleSubmit} className="mb-8">
             <div className="flex gap-3">
-              <div className="flex-1 flex items-center gap-2 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all shadow-sm">
+              <div className="flex-1 flex items-center gap-2 px-4 py-3 rounded-xl border border-border-base bg-white dark:bg-slate-800 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all shadow-sm">
                 <span className="material-symbols-outlined text-slate-400">search</span>
                 <input
                   type="text"
@@ -150,7 +150,7 @@ export const Search: React.FC = () => {
 
               {/* Status line */}
               {!loading && results && (
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                <p className="text-sm text-text-muted mb-6">
                   {results.total === 0
                     ? `No results for "${q}"`
                     : `${results.total} result${results.total !== 1 ? 's' : ''} for "${q}"`
@@ -187,8 +187,8 @@ export const Search: React.FC = () => {
               {!loading && results && results.results.length === 0 && (
                 <div className="text-center py-16">
                   <span className="material-symbols-outlined text-[56px] text-slate-300 dark:text-slate-600">search_off</span>
-                  <p className="text-slate-500 dark:text-slate-400 mt-4 text-lg">No results found</p>
-                  <p className="text-slate-400 dark:text-slate-500 text-sm mt-1">Try different keywords or a different filter</p>
+                  <p className="text-text-muted mt-4 text-lg">No results found</p>
+                  <p className="text-text-faint text-sm mt-1">Try different keywords or a different filter</p>
                 </div>
               )}
 
@@ -198,17 +198,17 @@ export const Search: React.FC = () => {
                   <button
                     disabled={page <= 1}
                     onClick={() => updateSearch({ page: page - 1 })}
-                    className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300 disabled:opacity-40 hover:border-primary hover:text-primary transition-colors"
+                    className="px-4 py-2 rounded-lg border border-border-base text-sm text-slate-600 dark:text-slate-300 disabled:opacity-40 hover:border-primary hover:text-primary transition-colors"
                   >
                     Previous
                   </button>
-                  <span className="text-sm text-slate-500 dark:text-slate-400 px-2">
+                  <span className="text-sm text-text-muted px-2">
                     Page {page} of {totalPages}
                   </span>
                   <button
                     disabled={page >= totalPages}
                     onClick={() => updateSearch({ page: page + 1 })}
-                    className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300 disabled:opacity-40 hover:border-primary hover:text-primary transition-colors"
+                    className="px-4 py-2 rounded-lg border border-border-base text-sm text-slate-600 dark:text-slate-300 disabled:opacity-40 hover:border-primary hover:text-primary transition-colors"
                   >
                     Next
                   </button>
@@ -221,7 +221,7 @@ export const Search: React.FC = () => {
           {!q && (
             <div className="text-center py-20">
               <span className="material-symbols-outlined text-[64px] text-slate-300 dark:text-slate-600">search</span>
-              <p className="text-slate-400 dark:text-slate-500 mt-4">Enter a search term above</p>
+              <p className="text-text-faint mt-4">Enter a search term above</p>
             </div>
           )}
         </div>
@@ -266,14 +266,14 @@ const ResultCard: React.FC<{ item: SearchResult }> = ({ item }) => {
         </div>
         {item.highlight ? (
           <p
-            className="text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 [&_mark]:bg-primary/20 [&_mark]:text-primary [&_mark]:rounded-sm [&_mark]:px-0.5"
+            className="text-sm text-text-muted mt-1 line-clamp-2 [&_mark]:bg-primary/20 [&_mark]:text-primary [&_mark]:rounded-sm [&_mark]:px-0.5"
             dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.highlight, { ALLOWED_TAGS: ['mark'] }) }}
           />
         ) : item.description ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">{item.description}</p>
+          <p className="text-sm text-text-muted mt-1 line-clamp-2">{item.description}</p>
         ) : null}
         {item.category && (
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">{item.category}</p>
+          <p className="text-xs text-text-faint mt-1.5">{item.category}</p>
         )}
       </div>
     </Link>

@@ -8,8 +8,37 @@ export default {
     theme: {
         extend: {
             colors: {
-                "primary": "#258cf4",
-                "accent": "#00ff9d",
+                // ── Semantic theming tokens (PRD #150 / slice #151) ──
+                // Each maps to a CSS variable defined per theme×mode in
+                // index.css. Dark mode is a variable flip — no `dark:` needed.
+                // surfaces
+                "canvas":         "var(--canvas)",
+                "surface":        "var(--surface)",
+                "surface-muted":  "var(--surface-muted)",
+                // text (4-rank hierarchy)
+                "text-strong":    "var(--text-strong)",
+                "text":           "var(--text)",
+                "text-muted":     "var(--text-muted)",
+                "text-faint":     "var(--text-faint)",
+                // borders
+                "border-base":    "var(--border-base)",
+                "border-strong":  "var(--border-strong)",
+                // brand — primary/accent use RGB-channel vars so Tailwind
+                // opacity modifiers (bg-primary/10, border-primary/20, …) work.
+                "primary":        "rgb(var(--primary) / <alpha-value>)",
+                "primary-subtle": "var(--primary-subtle)",
+                "accent":         "rgb(var(--accent) / <alpha-value>)",
+                // state (fg + paired subtle fill)
+                "success":         "var(--success)",
+                "success-subtle":  "var(--success-subtle)",
+                "warning":         "var(--warning)",
+                "warning-subtle":  "var(--warning-subtle)",
+                "danger":          "var(--danger)",
+                "danger-subtle":   "var(--danger-subtle)",
+                "info":            "var(--info)",
+                "info-subtle":     "var(--info-subtle)",
+
+                // ── Legacy mode-specific tokens (kept for non-breaking) ──
                 // Page/layout backgrounds
                 "background-light": "#f5f7f8",
                 "background-dark": "#0a0f14",

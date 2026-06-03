@@ -92,14 +92,14 @@ export const Memes: React.FC = () => {
   const currentMeme = lightbox?.group.memes[lightbox.index];
 
   return (
-    <div className="min-h-screen bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-sans">
+    <div className="min-h-screen bg-background-light dark:bg-background-dark text-text-strong font-sans">
       <Navbar variant="solutions" />
       <div className="pt-24 pb-16 max-w-7xl mx-auto px-6">
 
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-1">Memes</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm">Browse meme collections — click any card to view the series.</p>
+          <p className="text-text-muted text-sm">Browse meme collections — click any card to view the series.</p>
         </div>
 
         {/* Category tabs */}

@@ -170,7 +170,7 @@ export const Marketplace: React.FC = () => {
 
   if (underConstruction?.under_construction) {
     return (
-      <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-sans">
+      <div className="bg-background-light dark:bg-background-dark text-text-strong min-h-screen font-sans">
         <Navbar variant="solutions" />
         <main className="flex flex-col items-center justify-center min-h-screen px-6 pt-16 text-center">
           <div className="relative mb-8">
@@ -182,7 +182,7 @@ export const Marketplace: React.FC = () => {
           <h1 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4">
             Marketplace Under Construction
           </h1>
-          <p className="text-base text-slate-500 dark:text-slate-400 max-w-md leading-relaxed mb-8">
+          <p className="text-base text-text-muted max-w-md leading-relaxed mb-8">
             {underConstruction.message ||
               "We're upgrading the marketplace with new features. Check back soon — great things are coming!"}
           </p>
@@ -195,7 +195,7 @@ export const Marketplace: React.FC = () => {
             </a>
             <a
               href="/ignite"
-              className="px-6 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-lg text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors border border-slate-200 dark:border-slate-700"
+              className="px-6 py-2.5 bg-slate-100 dark:bg-slate-800 text-text font-bold rounded-lg text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors border border-border-base"
             >
               Explore Learning
             </a>
@@ -210,7 +210,7 @@ export const Marketplace: React.FC = () => {
   }
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen font-sans">
+    <div className="bg-background-light dark:bg-background-dark text-text-strong min-h-screen font-sans">
       <Navbar variant="solutions" />
 
       <div className="relative flex flex-col min-h-screen w-full pt-16">
@@ -244,7 +244,7 @@ export const Marketplace: React.FC = () => {
                   <span className="material-symbols-outlined text-primary text-[18px]">volunteer_activism</span>
                   <h3 className="text-xs font-bold text-primary uppercase tracking-widest">Contribute</h3>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 leading-relaxed">
+                <p className="text-xs text-text-muted mb-3 leading-relaxed">
                   Interested in contributing an agent, skill, or MCP server to the marketplace?
                 </p>
                 {contributingGuide?.video_link ? (
@@ -316,7 +316,7 @@ export const Marketplace: React.FC = () => {
               <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-1">
                 <div>
                   <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Marketplace</h1>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
+                  <p className="text-sm text-text-muted max-w-2xl leading-relaxed">
                     Deploy pre-trained design agents, specialized skills, and model-context protocol servers
                     directly to your development environment.
                   </p>
@@ -374,14 +374,14 @@ export const Marketplace: React.FC = () => {
                 return (
                   <div
                     key={card.id}
-                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-4 flex flex-col gap-2 hover:border-slate-300 dark:hover:border-slate-500 transition-colors cursor-pointer"
+                    className="bg-white dark:bg-slate-900 border border-border-base rounded-lg p-4 flex flex-col gap-2 hover:border-slate-300 dark:hover:border-slate-500 transition-colors cursor-pointer"
                     onClick={() => handleShowCard(card)}
                   >
                     {/* Name + verification badge */}
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="text-sm font-semibold text-primary leading-snug">{card.name}</h3>
                       {badgeStyle && (
-                        <span className="shrink-0 px-2 py-0.5 text-[11px] rounded-full border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        <span className="shrink-0 px-2 py-0.5 text-[11px] rounded-full border border-border-strong text-text-muted whitespace-nowrap">
                           {badgeStyle.label}
                         </span>
                       )}
@@ -389,11 +389,11 @@ export const Marketplace: React.FC = () => {
 
                     {/* Author */}
                     {card.author && (
-                      <p className="text-[11px] text-slate-400 dark:text-slate-500">by {card.author}</p>
+                      <p className="text-[11px] text-text-faint">by {card.author}</p>
                     )}
 
                     {/* Description */}
-                    <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed flex-1">
+                    <p className="text-xs text-text-muted line-clamp-2 leading-relaxed flex-1">
                       {card.description || '—'}
                     </p>
 
@@ -401,7 +401,7 @@ export const Marketplace: React.FC = () => {
                     <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 mt-1">
                       <div className="flex items-center gap-1.5">
                         <span className={`size-2.5 rounded-full shrink-0 ${dotColor}`} />
-                        <span className="text-xs text-slate-500 dark:text-slate-400">{typeStyle.label}</span>
+                        <span className="text-xs text-text-muted">{typeStyle.label}</span>
                       </div>
                       <div className="flex items-center gap-2 text-slate-400">
                         <span className="flex items-center gap-0.5 text-[11px]">
@@ -456,7 +456,7 @@ export const Marketplace: React.FC = () => {
                 return (
                   <div
                     key={card.id}
-                    className="px-4 py-4 flex items-center gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-slate-300 dark:hover:border-slate-500 transition-colors cursor-pointer"
+                    className="px-4 py-4 flex items-center gap-4 bg-white dark:bg-slate-900 border border-border-base rounded-lg hover:border-slate-300 dark:hover:border-slate-500 transition-colors cursor-pointer"
                     onClick={() => handleShowCard(card)}
                   >
                     {/* Name + description */}
@@ -464,18 +464,18 @@ export const Marketplace: React.FC = () => {
                       <div className="flex items-center gap-2 mb-0.5">
                         <h3 className="text-sm font-semibold text-primary leading-snug truncate">{card.name}</h3>
                         {badgeStyle && (
-                          <span className="shrink-0 px-2 py-0.5 text-[10px] rounded-full border border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                          <span className="shrink-0 px-2 py-0.5 text-[10px] rounded-full border border-border-strong text-text-muted whitespace-nowrap">
                             {badgeStyle.label}
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">{card.description || '—'}</p>
+                      <p className="text-xs text-text-muted line-clamp-2 leading-relaxed">{card.description || '—'}</p>
                     </div>
                     {/* Right: type indicator + download count + actions */}
                     <div className="flex items-center gap-2.5 shrink-0 text-slate-400">
                       <div className="flex items-center gap-1.5 hidden sm:flex">
                         <span className={`size-2 rounded-full shrink-0 ${dotColor}`} />
-                        <span className="text-[11px] text-slate-500 dark:text-slate-400">{typeStyle.label}</span>
+                        <span className="text-[11px] text-text-muted">{typeStyle.label}</span>
                       </div>
                       <span className="flex items-center gap-0.5 text-[11px]">
                         <span className="material-symbols-outlined text-[13px]">download</span>
@@ -565,7 +565,7 @@ export const Marketplace: React.FC = () => {
                     <h2 className="text-sm font-bold text-slate-900 dark:text-white leading-tight truncate">{selectedCard.name}</h2>
                     <p className="text-[11px] text-slate-400 mt-0.5">
                       {selectedCard.version}
-                      {selectedCard.author && <> · by <span className="text-slate-500 dark:text-slate-400">{selectedCard.author}</span></>}
+                      {selectedCard.author && <> · by <span className="text-text-muted">{selectedCard.author}</span></>}
                     </p>
                   </div>
                 </div>
@@ -637,7 +637,7 @@ export const Marketplace: React.FC = () => {
                   {selectedCard.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {selectedCard.tags.map(tag => (
-                        <span key={tag} className="px-2 py-0.5 rounded-full text-[11px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                        <span key={tag} className="px-2 py-0.5 rounded-full text-[11px] bg-slate-100 dark:bg-slate-800 text-text-muted border border-border-base">
                           {tag}
                         </span>
                       ))}
@@ -663,11 +663,11 @@ export const Marketplace: React.FC = () => {
                     <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
                       <div className="bg-slate-50 dark:bg-slate-900 px-4 py-3 flex items-center gap-2 border-b border-slate-200 dark:border-slate-800">
                         <span className="material-symbols-outlined text-[15px] text-slate-400">source</span>
-                        <span className="text-xs font-mono text-slate-500 dark:text-slate-400 truncate">{selectedCard.git_repo_url.replace(/^https?:\/\//, '')}</span>
+                        <span className="text-xs font-mono text-text-muted truncate">{selectedCard.git_repo_url.replace(/^https?:\/\//, '')}</span>
                       </div>
                       <div className="px-4 py-3">
                         {selectedCard.author && (
-                          <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mb-3">
+                          <p className="text-xs text-text-muted font-mono mb-3">
                             <span className="text-emerald-500">"author"</span>: <span className="text-amber-500">"{selectedCard.author}"</span>
                           </p>
                         )}
@@ -675,7 +675,7 @@ export const Marketplace: React.FC = () => {
                           href={selectedCard.git_repo_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg border border-border-base text-sm font-semibold text-text hover:bg-surface-muted transition-colors"
                         >
                           <span className="material-symbols-outlined text-[16px]">open_in_new</span>
                           View GitHub Repository
@@ -764,7 +764,7 @@ export const Marketplace: React.FC = () => {
                         href={selectedCard.howto_guide_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                        className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl border border-border-base text-text text-sm font-semibold hover:bg-surface-muted transition-colors"
                       >
                         <span className="material-symbols-outlined text-[18px]">menu_book</span>
                         Open Full Guide

@@ -48,10 +48,10 @@ export const AdminLayout: React.FC = () => {
             <div className="w-8 h-8 rounded-lg bg-primary/20 border border-primary/30 flex items-center justify-center">
               <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
             </div>
-            <span className="text-white font-bold text-sm">MST AI Admin</span>
+            <span className="text-slate-900 dark:text-white font-bold text-sm">MST AI Admin</span>
           </Link>
 
-          <div className="h-6 w-px bg-white/10" />
+          <div className="h-6 w-px bg-slate-200 dark:bg-white/10" />
 
           <span className="text-xs font-bold uppercase tracking-widest text-primary/70">{isContent ? 'Creator' : 'Admin'}</span>
 
@@ -60,9 +60,9 @@ export const AdminLayout: React.FC = () => {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${location.pathname.startsWith(item.path)
-                  ? 'bg-primary/10 text-white border border-primary/20'
-                  : 'text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/50'
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${location.pathname.startsWith(item.path)
+                  ? 'bg-primary/10 text-primary dark:text-white border-primary/20'
+                  : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/50'
                   }`}
               >
                 <span className="material-symbols-outlined text-base">{item.icon}</span>
@@ -75,7 +75,7 @@ export const AdminLayout: React.FC = () => {
         <div className="flex items-center gap-4">
           <button
             onClick={toggleTheme}
-            className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+            className="flex items-center gap-1.5 text-xs text-text-muted hover:text-slate-900 dark:hover:text-white transition-colors"
             title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           >
             <span className="material-symbols-outlined text-sm">
@@ -84,17 +84,17 @@ export const AdminLayout: React.FC = () => {
           </button>
           <Link
             to="/"
-            className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+            className="flex items-center gap-1.5 text-xs text-text-muted hover:text-slate-900 dark:hover:text-white transition-colors"
           >
             <span className="material-symbols-outlined text-sm">arrow_back</span>
             Back to Portal
           </Link>
-          <div className="h-6 w-px bg-white/10" />
+          <div className="h-6 w-px bg-slate-200 dark:bg-white/10" />
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-primary text-xs font-bold">
               {user.initials || user.display_name.charAt(0)}
             </div>
-            <span className="text-sm text-slate-300">{user.display_name}</span>
+            <span className="text-sm text-slate-700 dark:text-slate-300">{user.display_name}</span>
           </div>
           <button
             onClick={logout}

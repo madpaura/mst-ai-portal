@@ -247,7 +247,7 @@ export const AdminHtmlMailer: React.FC = () => {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">HTML Mailer</h1>
-        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+        <p className="text-text-muted text-sm mt-1">
           Upload any HTML file and send it as a formatted email
         </p>
       </div>
@@ -270,7 +270,7 @@ export const AdminHtmlMailer: React.FC = () => {
         <div className="space-y-4">
           {/* File upload */}
           <div className="glass-card p-4 rounded-xl border border-slate-200 dark:border-white/10">
-            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-text mb-3 flex items-center gap-2">
               <span className="material-symbols-outlined text-base text-primary">upload_file</span>
               HTML File
             </h2>
@@ -283,7 +283,7 @@ export const AdminHtmlMailer: React.FC = () => {
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 hover:border-primary text-slate-600 dark:text-slate-400 hover:text-primary transition-colors text-sm"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed border-border-strong hover:border-primary text-slate-600 dark:text-slate-400 hover:text-primary transition-colors text-sm"
             >
               <span className="material-symbols-outlined text-lg">html</span>
               {fileName ? fileName : 'Click to choose an HTML file'}
@@ -333,7 +333,7 @@ export const AdminHtmlMailer: React.FC = () => {
 
           {/* Subject */}
           <div className="glass-card p-4 rounded-xl border border-slate-200 dark:border-white/10">
-            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
+            <label className="text-sm font-semibold text-text mb-2 flex items-center gap-2">
               <span className="material-symbols-outlined text-base text-primary">subject</span>
               Subject
             </label>
@@ -342,14 +342,14 @@ export const AdminHtmlMailer: React.FC = () => {
               value={subject}
               onChange={e => setSubject(e.target.value)}
               placeholder="Email subject line"
-              className="w-full mt-2 px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full mt-2 px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-border-base text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
           </div>
 
           {/* Recipients */}
           <div className="glass-card p-4 rounded-xl border border-slate-200 dark:border-white/10">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-text flex items-center gap-2">
                 <span className="material-symbols-outlined text-base text-primary">group</span>
                 Recipients
               </h2>
@@ -374,7 +374,7 @@ export const AdminHtmlMailer: React.FC = () => {
             </div>
 
             {showSaved && savedEmails.length > 0 && (
-              <div className="mb-3 p-3 bg-panel-light dark:bg-panel-dark/50 rounded-lg border border-slate-200 dark:border-slate-700">
+              <div className="mb-3 p-3 bg-panel-light dark:bg-panel-dark/50 rounded-lg border border-border-base">
                 <p className="text-xs text-slate-500 mb-2">Click to toggle into To or BCC field:</p>
                 <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto">
                   {savedEmails.map(email => {
@@ -417,7 +417,7 @@ export const AdminHtmlMailer: React.FC = () => {
 
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">
+                <label className="text-xs font-medium text-text-muted mb-1 block">
                   To <span className="text-slate-400">(visible recipients)</span>
                 </label>
                 <textarea
@@ -426,11 +426,11 @@ export const AdminHtmlMailer: React.FC = () => {
                   onFocus={() => setActiveEmailField('to')}
                   placeholder="one@example.com&#10;two@example.com"
                   rows={3}
-                  className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none font-mono"
+                  className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-border-base text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none font-mono"
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 block">
+                <label className="text-xs font-medium text-text-muted mb-1 block">
                   BCC <span className="text-slate-400">(hidden recipients)</span>
                 </label>
                 <textarea
@@ -439,9 +439,9 @@ export const AdminHtmlMailer: React.FC = () => {
                   onFocus={() => setActiveEmailField('bcc')}
                   placeholder="one@example.com&#10;two@example.com"
                   rows={3}
-                  className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none font-mono"
+                  className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-border-base text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none font-mono"
                 />
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                <p className="mt-1 text-xs text-text-muted">
                   {parseEmails(bccEmails).length + parseEmails(toEmails).length} total recipient(s)
                 </p>
               </div>
@@ -473,7 +473,7 @@ export const AdminHtmlMailer: React.FC = () => {
             <button
               onClick={handleDownloadEml}
               disabled={downloading || !htmlContent}
-              className="flex items-center gap-2 px-4 py-2.5 border border-slate-300 dark:border-slate-600 hover:border-primary text-slate-700 dark:text-slate-300 hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 border border-border-strong hover:border-primary text-text hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium transition-colors"
             >
               {downloading ? (
                 <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
@@ -491,12 +491,12 @@ export const AdminHtmlMailer: React.FC = () => {
         {/* Right: preview */}
         <div className="glass-card rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden flex flex-col" style={{ minHeight: '600px' }}>
           <div className="px-4 py-3 border-b border-slate-200 dark:border-white/10 flex items-center justify-between shrink-0">
-            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-text flex items-center gap-2">
               <span className="material-symbols-outlined text-base text-primary">preview</span>
               Preview
             </h2>
             {htmlContent && (
-              <span className="text-xs text-slate-500 dark:text-slate-400">{fileName}</span>
+              <span className="text-xs text-text-muted">{fileName}</span>
             )}
           </div>
           {htmlContent && previewUrl ? (

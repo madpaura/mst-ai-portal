@@ -34,7 +34,7 @@ export const Howto: React.FC = () => {
   ];
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+    <div className="bg-background-light dark:bg-background-dark text-text-strong min-h-screen flex flex-col">
       <IgniteHeader />
 
       <div className="flex flex-1 overflow-hidden">
@@ -55,7 +55,7 @@ export const Howto: React.FC = () => {
                 </span>
               </div>
               <h1 className="text-4xl font-bold text-slate-900 dark:text-white leading-tight">Getting Started with the Coding Agent</h1>
-              <p className="text-slate-500 dark:text-slate-400 max-w-2xl">
+              <p className="text-text-muted max-w-2xl">
                 A comprehensive guide to configuring and deploying our internal LLM-powered assistant, specifically tuned
                 for hardware description languages and firmware C/C++.
               </p>
@@ -186,7 +186,7 @@ export const Howto: React.FC = () => {
                         <span className="material-symbols-outlined text-yellow-400 mt-0.5">{pitfall.icon}</span>
                         <div>
                           <h4 className="text-slate-900 dark:text-white font-bold text-[15px] mb-1.5">{pitfall.title}</h4>
-                          <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">{pitfall.text}</p>
+                          <p className="text-text-muted text-sm leading-relaxed">{pitfall.text}</p>
                         </div>
                       </div>
                     ))}

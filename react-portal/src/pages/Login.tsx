@@ -134,7 +134,7 @@ export const Login: React.FC = () => {
               </div>
               <span className="text-xl font-bold text-slate-900 dark:text-white">MST AI</span>
             </div>
-            <p className="text-slate-500 dark:text-slate-400 text-sm">Sign in to access the portal</p>
+            <p className="text-text-muted text-sm">Sign in to access the portal</p>
           </div>
 
           {error && (

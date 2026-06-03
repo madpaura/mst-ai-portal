@@ -323,7 +323,7 @@ export const Ignite: React.FC = () => {
   const handleFormatList = () => {};
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col font-sans">
+    <div className="bg-background-light dark:bg-background-dark text-text-strong min-h-screen flex flex-col font-sans">
       <Navbar variant="solutions" />
 
       <div className="flex flex-1 overflow-hidden pt-16">
@@ -367,7 +367,7 @@ export const Ignite: React.FC = () => {
                     <span className="material-symbols-outlined text-primary text-xl">volunteer_activism</span>
                     <div>
                       <p className="text-sm font-bold text-slate-900 dark:text-white">Interested in contributing?</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                      <p className="text-xs text-text-muted">
                         {!!!user
                           ? guestEmailSent
                             ? 'Thanks! We\'ll be in touch soon.'
@@ -437,8 +437,8 @@ export const Ignite: React.FC = () => {
             {!activeVideo && (
               <div className="flex flex-col items-center justify-center py-24">
                 <span className="material-symbols-outlined text-6xl text-slate-300 dark:text-slate-600 mb-4">video_library</span>
-                <h2 className="text-xl font-bold text-slate-400 dark:text-slate-500 mb-2">No Content Available</h2>
-                <p className="text-sm text-slate-400 dark:text-slate-500">Training videos will appear here once published by an admin.</p>
+                <h2 className="text-xl font-bold text-text-faint mb-2">No Content Available</h2>
+                <p className="text-sm text-text-faint">Training videos will appear here once published by an admin.</p>
               </div>
             )}
 
@@ -510,7 +510,7 @@ export const Ignite: React.FC = () => {
                 >
                   <span className="material-symbols-outlined text-xl text-slate-400 group-hover:text-primary transition-colors shrink-0">arrow_back</span>
                   <div className="min-w-0">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Previous</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-text-faint mb-0.5">Previous</p>
                     <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{prevVideo?.title ?? ''}</p>
                   </div>
                 </button>
@@ -524,7 +524,7 @@ export const Ignite: React.FC = () => {
                   }`}
                 >
                   <div className="min-w-0">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">Next</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-text-faint mb-0.5">Next</p>
                     <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{nextVideo?.title ?? ''}</p>
                   </div>
                   <span className="material-symbols-outlined text-xl text-slate-400 group-hover:text-primary transition-colors shrink-0">arrow_forward</span>
@@ -542,7 +542,7 @@ export const Ignite: React.FC = () => {
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
                     <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">{activeVideo.title}</h1>
-                    <p className="text-slate-500 dark:text-slate-400 text-sm">
+                    <p className="text-text-muted text-sm">
                       Learn how to properly configure your environment for the {activeVideo.category} AI assistant.
                     </p>
                   </div>
@@ -565,7 +565,7 @@ export const Ignite: React.FC = () => {
                     </button>
                     <button
                       onClick={handleShare}
-                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 hover:bg-primary/10 hover:border-primary/30 hover:text-primary transition-all duration-200 group"
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-slate-800/50 text-text-muted hover:bg-primary/10 hover:border-primary/30 hover:text-primary transition-all duration-200 group"
                     >
                       <span className="material-symbols-outlined text-xl group-hover:scale-110 transition-transform duration-200">share</span>
                       <span className="text-sm font-bold">{shareCopied ? 'Copied!' : 'Share'}</span>

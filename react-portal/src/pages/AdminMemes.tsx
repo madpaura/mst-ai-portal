@@ -295,7 +295,7 @@ export const AdminMemes: React.FC = () => {
         ) : (
           <div className="flex-1 overflow-y-auto">
             {groups.length === 0 ? (
-              <p className="text-center text-sm text-slate-500 dark:text-slate-400 py-8">No groups yet.</p>
+              <p className="text-center text-sm text-text-muted py-8">No groups yet.</p>
             ) : (
               groups.map((g) => (
                 <div
@@ -316,7 +316,7 @@ export const AdminMemes: React.FC = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-800 dark:text-white truncate">{g.title}</p>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400">{g.category} · {g.meme_count} images</p>
+                    <p className="text-[10px] text-text-muted">{g.category} · {g.meme_count} images</p>
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
                     <button onClick={() => openEditGroup(g)} className="p-1 text-slate-400 hover:text-primary transition-colors">
@@ -338,7 +338,7 @@ export const AdminMemes: React.FC = () => {
         {!selectedGroup ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <span className="material-symbols-outlined text-5xl text-slate-300 dark:text-slate-700 mb-3">collections</span>
-            <p className="text-slate-500 dark:text-slate-400">Select a meme group to manage its images.</p>
+            <p className="text-text-muted">Select a meme group to manage its images.</p>
           </div>
         ) : (
           <>
@@ -346,7 +346,7 @@ export const AdminMemes: React.FC = () => {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-lg font-bold text-slate-900 dark:text-white">{selectedGroup.title}</h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{selectedGroup.category} · {selectedGroup.meme_count} images</p>
+                <p className="text-xs text-text-muted">{selectedGroup.category} · {selectedGroup.meme_count} images</p>
               </div>
               <button
                 onClick={() => openEditGroup(selectedGroup)}
@@ -371,7 +371,7 @@ export const AdminMemes: React.FC = () => {
             >
               <span className="material-symbols-outlined text-3xl text-slate-400" style={{ fontVariationSettings: "'FILL' 1" }}>add_photo_alternate</span>
               <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Drop images here or click to pick</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">JPG, PNG, GIF, WebP · up to 20 MB each · multiple files at once</p>
+              <p className="text-xs text-text-muted">JPG, PNG, GIF, WebP · up to 20 MB each · multiple files at once</p>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -386,7 +386,7 @@ export const AdminMemes: React.FC = () => {
             {pendingUploads.length > 0 && (
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                  <p className="text-xs font-bold text-text uppercase tracking-wider">
                     {uploadingCount > 0 ? `Uploading ${uploadingCount}…` : `${readyCount} ready`}
                   </p>
                   <div className="flex items-center gap-2">
@@ -395,7 +395,7 @@ export const AdminMemes: React.FC = () => {
                         pendingUploads.forEach((p) => URL.revokeObjectURL(p.objectUrl));
                         setPendingUploads([]);
                       }}
-                      className="text-xs text-slate-500 dark:text-slate-400 hover:text-red-400 transition-colors"
+                      className="text-xs text-text-muted hover:text-red-400 transition-colors"
                     >
                       Clear all
                     </button>
@@ -452,7 +452,7 @@ export const AdminMemes: React.FC = () => {
                             prev.map((x) => (x.uid === p.uid ? { ...x, linkUrl: e.target.value } : x)),
                           )
                         }
-                        className="w-full bg-input-light dark:bg-input-dark border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-[10px] text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:ring-1 focus:ring-primary focus:border-primary"
+                        className="w-full bg-input-light dark:bg-input-dark border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-[10px] text-text placeholder-slate-400 focus:ring-1 focus:ring-primary focus:border-primary"
                       />
                     </div>
                   ))}
@@ -467,11 +467,11 @@ export const AdminMemes: React.FC = () => {
               </div>
             ) : memes.length === 0 && pendingUploads.length === 0 ? (
               <div className="text-center py-16">
-                <p className="text-sm text-slate-500 dark:text-slate-400">No images yet — drop some above.</p>
+                <p className="text-sm text-text-muted">No images yet — drop some above.</p>
               </div>
             ) : memes.length > 0 ? (
               <>
-                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Saved images</p>
+                <p className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">Saved images</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                   {memes.map((meme, i) => (
                     <div key={meme.id} className="group relative rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900">
@@ -492,7 +492,7 @@ export const AdminMemes: React.FC = () => {
                           />
                         ) : (
                           <div className="flex items-center gap-1">
-                            <span className="text-[10px] text-slate-500 dark:text-slate-400">#{i + 1}</span>
+                            <span className="text-[10px] text-text-muted">#{i + 1}</span>
                             <button
                               onClick={() => openEditLink(meme)}
                               className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 text-slate-400 hover:text-primary"
@@ -583,7 +583,7 @@ export const AdminMemes: React.FC = () => {
               <button onClick={saveGroup} disabled={saving} className="flex-1 py-2 text-sm font-bold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors">
                 {saving ? 'Saving…' : (editingGroup ? 'Save Changes' : 'Create Group')}
               </button>
-              <button onClick={() => setShowGroupForm(false)} className="px-4 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
+              <button onClick={() => setShowGroupForm(false)} className="px-4 text-sm text-slate-500 hover:text-text transition-colors">
                 Cancel
               </button>
             </div>
