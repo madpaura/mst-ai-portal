@@ -7,23 +7,28 @@ Browser
   │
   ▼
 Nginx (port 80/443)
-  ├── /          → React frontend (static files)
-  ├── /api/      → FastAPI backend (port 8000)
-  └── /streams/  → HLS video files (served from disk)
+  ├── /           → React frontend (static files)
+  ├── /api/       → FastAPI backend (port 8000) — legacy path prefix
+  ├── /backend/   → FastAPI backend (catch-all proxy; use VITE_API_URL=/backend for CORS-free same-origin access)
+  ├── /assistant/ → FastAPI backend (SSE streaming, longer timeout)
+  └── /streams/   → HLS video files (served from disk)
 
 FastAPI backend
-  ├── auth/          JWT (httpOnly cookie), LDAP, SAML 2.0
-  ├── video/         Ignite video + course CRUD, notes, progress
+  ├── auth/          JWT (httpOnly cookie), LDAP, SAML 2.0; contributor request actions
+  ├── video/         Ignite video + course CRUD, notes, progress; per-creator isolation
   ├── solutions/     Solution cards + news feed
   ├── articles/      Knowledge articles
-  ├── marketplace/   Agent/skill/MCP registry
+  ├── marketplace/   Agent/skill/MCP registry (forge_components)
   ├── forge/         Digest scheduler, RSS ingest
-  ├── analytics/     Page-view tracking
-  └── settings/      Admin SMTP, portal config
+  ├── assistant/     AI chat: SSE streaming, 21 role-gated tools, multi-provider LLM
+  ├── publish/       Submit-for-review workflow; approve/decline via email action tokens
+  ├── search/        Full-text + fuzzy trigram search (pg_trgm) across all content types
+  ├── analytics/     Page-view tracking; meme click totals and per-meme breakdown
+  └── settings/      Admin SMTP, portal config, assistant enable/disable, system prompt
 
 Workers (separate containers)
   ├── transcoder      — Polls transcode_jobs, runs FFmpeg HLS pipeline
-  └── auto-processor  — Transcript → metadata/chapters/howto via Ollama
+  └── auto-processor  — Transcript → metadata/chapters/howto via Ollama; sends ready-to-publish email
 
 Transcript service (separate container)
   └── Whisper inference over SSE, job queue
@@ -52,6 +57,19 @@ Redis      — cache + rate limiting
 3. Transcript JSON stored at /data/videos/{uuid}/transcript.json
 4. LLM jobs run sequentially: metadata → chapters → howto
 5. Each result persisted back to DB / filesystem
+6. When all jobs finish, auto_processor sends "ready to publish" email to the creator
+   (guarded by videos.auto_ready_notified — sent at most once per video)
+```
+
+## Data flow: publish authority
+
+```
+1. Content creator submits publish request (video or marketplace item) via portal UI
+2. publish_requests row created; Publish Authority admins notified by email
+3. Admin reviews via portal or one-click approve/decline in the email
+   (signed action tokens — idempotent, GET /auth/contribute-request/action)
+4. Creator notified by email on approve or decline
+5. On approval: item status updated to published
 ```
 
 ## Directory layout
@@ -78,13 +96,13 @@ Redis      — cache + rate limiting
 | Frontend | React 19 + Vite | Fast builds, lazy-loaded chunks, TypeScript |
 | Video | FFmpeg + HLS | Browser-compatible adaptive bitrate, GPU via NVENC |
 | Transcription | Whisper (faster-whisper) | Offline, accurate, SSE streaming progress |
-| LLM | Ollama (local) | No cloud dependency, model-agnostic |
+| LLM | Ollama / OpenAI / Anthropic | Multi-provider; auto-mode uses Ollama; assistant supports all three |
 | Auth | JWT httpOnly cookie | XSS-safe; SAML/LDAP for enterprise SSO |
 | Cache | Redis | Per-namespace versioned cache, TTL-based invalidation |
 
 ## Database schema highlights
 
-- `videos` — core video metadata, status, hls_path, thumbnail
+- `videos` — core video metadata, status, hls_path, thumbnail; `created_by` (owner UUID), `auto_ready_notified`
 - `courses` + `video_chapters` — course structure, chapter timestamps
 - `transcode_jobs` — worker queue with SKIP LOCKED
 - `auto_jobs` — auto-processor queue (transcript/metadata/chapters/howto)
@@ -93,7 +111,9 @@ Redis      — cache + rate limiting
 - `articles` — knowledge base
 - `solutions` + `news_items` — solutions showcase + feed
 - `forge_components` — marketplace registry
-- `app_settings` — key/value admin config (SMTP, feature flags)
+- `publish_requests` — submit-for-review records (target_type, target_id, status, reviewer)
+- `meme_clicks` — per-meme click log for redirect analytics (`/r/{meme_id}`)
+- `app_settings` — key/value admin config (SMTP, feature flags, assistant system prompt, `assistant_enabled`)
 
 ## Security model
 

@@ -16,8 +16,11 @@ Edit `.env` — at minimum set:
 | `POSTGRES_PASSWORD` | Yes | Strong DB password |
 | `ADMIN_PASSWORD` | Yes | Initial admin password |
 | `PORTAL_URL` | Yes | Public URL e.g. `https://ai.example.com` |
+| `PORTAL_BASE_URL` | No | Override "View on Portal" base in emails; defaults to `PORTAL_URL` |
 | `AUTH_MODE` | No | `open` (default) \| `ldap` \| `saml` |
 | `SMTP_SERVER` | No | Required for email features |
+| `EMAIL_SUBJECT_PREFIX` | No | Prepended to every outgoing email subject (default `MSTAI-TF`; blank to disable) |
+| `LOG_LEVEL` | No | `DEBUG` \| `INFO` (default) \| `WARNING` \| `ERROR` — applies to all services |
 
 ### 2. Deploy
 
@@ -44,6 +47,12 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 With Whisper transcript service:
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.transcript.yml up -d --build
+```
+
+With host networking (Linux only — use when the Docker bridge causes Ollama/LDAP connectivity issues):
+```bash
+docker compose -f docker-compose.yml -f docker-compose.hostnet.yml up -d --build
+# or set HOST_NETWORK=true in .env and let setup.sh pick it up automatically
 ```
 
 ### 3. Verify
@@ -74,7 +83,7 @@ server {
 }
 ```
 
-Set `PORTAL_URL=https://ai.example.com` in `.env` so SAML callbacks and email links work correctly.
+Set `PORTAL_URL=https://ai.example.com` in `.env` so SAML callbacks and email links work correctly. Set `PORTAL_BASE_URL` separately if you want "View on Portal" links in notification emails to point to a different origin.
 
 ## Updating
 

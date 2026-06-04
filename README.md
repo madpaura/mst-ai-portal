@@ -6,14 +6,16 @@ Corporate AI learning and tools portal — video courses, solutions showcase, co
 
 ## Features at a glance
 
-- **Ignite** — HLS video library with courses, chapters, AI-generated transcripts, closed captions, and auto-metadata pipeline
+- **Ignite** — HLS video library with courses, chapters, AI-generated transcripts, closed captions, auto-metadata pipeline, and per-creator content isolation
 - **Solutions** — filterable solution card showcase (SW / HW / Other)
 - **Marketplace** — agent, skill, and MCP server registry with GitHub sync, how-to guides, and zip download
-- **Discover** — Articles, Memes, News feed with RSS/ingest support
-- **Search** — site-wide full-text search across all content types
+- **Discover** — Articles, Memes (with click analytics), News feed with RSS/ingest support
+- **Search** — site-wide full-text + fuzzy typo-tolerant search across all content types
+- **AI Assistant** — floating chat widget with 21 portal-aware tools, multi-provider LLM (Ollama/OpenAI/Anthropic), admin-configurable system prompt
+- **Publish Authority** — content creator submit-for-review workflow with email approve/decline
 - **Admin panel** — content management, analytics, digest scheduling, SMTP, and portal settings
 - **Auth** — local (`open`), LDAP, or SAML 2.0 / ADFS
-- **Themes** — Default (glass/neon) and Simple (GitHub-inspired flat), admin-controlled
+- **Themes** — Default (glass/neon) and Simple (GitHub-inspired flat), token-driven CSS variable system
 
 See [features.md](features.md) for a detailed feature breakdown.
 
@@ -81,13 +83,14 @@ mst-ai-portal/
 │   ├── database.py         # asyncpg pool helpers
 │   ├── alembic/versions/   # Incremental DB migrations (run on startup)
 │   ├── auth/               # JWT + SAML + LDAP
-│   ├── video/              # Ignite video CRUD, auto-mode pipeline
+│   ├── video/              # Ignite video CRUD, auto-mode pipeline, creator isolation
 │   ├── worker/             # transcoder.py, auto_processor.py
 │   ├── solutions/          # Solution card CRUD
 │   ├── articles/           # Knowledge articles
-│   ├── forge/              # Marketplace components + GitHub sync
-│   ├── search/             # Site-wide full-text search
 │   ├── forge/              # Marketplace / Forge CRUD + GitHub sync worker
+│   ├── search/             # Site-wide full-text + fuzzy trigram search
+│   ├── assistant/          # AI chat widget: SSE streaming, 21 tools, multi-provider LLM
+│   ├── publish/            # Publish Authority submit/review workflow
 │   ├── settings/           # SMTP, admin settings, probe endpoint
 │   ├── analytics/          # Page-view tracking
 │   └── email_utils/        # SMTP helpers, digest templates
@@ -100,11 +103,13 @@ mst-ai-portal/
 ├── transcript-service/     # Standalone FastAPI — Whisper inference over SSE
 ├── db/init.sql             # Schema for fresh installs
 ├── scripts/                # Backup, restore, migrate, nginx, watcher helpers
-├── docker-compose.yml      # Core stack (db, redis, backend, worker, auto-processor, frontend)
-├── docker-compose.gpu.yml  # GPU override for worker (NVENC)
+├── docker-compose.yml          # Core stack (db, redis, backend, worker, auto-processor, frontend)
+├── docker-compose.gpu.yml      # GPU override for worker (NVENC)
+├── docker-compose.hostnet.yml  # Host networking override (Linux, no Docker bridge)
+├── docker-compose.prod.yml     # Production hardening overrides
 ├── docker-compose.transcript.yml     # CPU Whisper service
 ├── docker-compose.transcript.gpu.yml # GPU Whisper service
-└── .env.example            # All environment variables with comments
+└── .env.example                # All environment variables with comments
 ```
 
 ### Docker services
@@ -130,10 +135,15 @@ See [.env.example](.env.example) for the full annotated list. Critical variables
 | `JWT_SECRET` | *(insecure default)* | **Must change in production** |
 | `POSTGRES_PASSWORD` | `portal123` | **Must change in production** |
 | `AUTH_MODE` | `open` | `open` \| `ldap` \| `saml` |
-| `VITE_API_URL` | `http://localhost:9800` | Baked into the frontend build |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | For LLM auto-mode |
+| `PORTAL_URL` | `http://localhost:9810` | Public portal URL (SAML callbacks, email links) |
+| `PORTAL_BASE_URL` | *(falls back to `PORTAL_URL`)* | Override for "View on Portal" links in emails |
+| `EMAIL_SUBJECT_PREFIX` | `MSTAI-TF` | Prepended to every outgoing email subject; blank to disable |
+| `VITE_API_URL` | `http://localhost:9800` | Baked into the frontend build; set to `/backend` for same-origin proxy |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | For LLM auto-mode and AI assistant |
 | `FFMPEG_HWACCEL` | `auto` | `auto` detects NVIDIA, `none` forces CPU |
 | `TRANSCRIPT_MOCK` | `false` | `true` skips Whisper for testing |
+| `LOG_LEVEL` | `INFO` | `DEBUG` \| `INFO` \| `WARNING` \| `ERROR` — applied to all services |
+| `HOST_NETWORK` | `false` | `true` enables host networking (Linux only; use when Docker bridge causes issues) |
 | `REDIS_ENABLED` | `true` | Set `false` for local dev without Redis |
 
 ---
