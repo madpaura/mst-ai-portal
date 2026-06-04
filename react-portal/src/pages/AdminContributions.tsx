@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { api, toApiError } from '../api/client';
+import { api, toApiError, ApiError } from '../api/client';
 import { useAuth } from '../api/auth';
 
 interface GuestInterest {
@@ -138,7 +138,19 @@ export const AdminContributions: React.FC = () => {
       showMsg('success', `User "${u.username}" deleted`);
       fetchUsers();
     } catch (err: unknown) {
-      showMsg('error', toApiError(err) || 'Failed to delete user');
+      if (err instanceof ApiError && err.status === 409) {
+        if (confirm(err.message)) {
+          try {
+            await api.delete(`/auth/admin/users/${u.id}?force=true`);
+            showMsg('success', `User "${u.username}" deleted and their content reassigned`);
+            fetchUsers();
+          } catch (forceErr: unknown) {
+            showMsg('error', toApiError(forceErr) || 'Failed to delete user');
+          }
+        }
+      } else {
+        showMsg('error', toApiError(err) || 'Failed to delete user');
+      }
     } finally {
       setDeletingId(null);
     }

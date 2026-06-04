@@ -610,16 +610,29 @@ async def reset_user_password(request: Request, user_id: str, body: ResetPasswor
 
 
 @router.delete("/admin/users/{user_id}")
-async def delete_user(request: Request, user_id: str, admin: dict = Depends(require_admin)):
+async def delete_user(request: Request, user_id: str, force: bool = False, admin: dict = Depends(require_admin)):
     if str(admin["id"]) == user_id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     db = await get_db()
     target = await db.fetchrow("SELECT username FROM users WHERE id = $1", user_id)
-    if target and target["username"] == "admin":
-        raise HTTPException(status_code=403, detail="System admin account cannot be deleted")
-    result = await db.execute("DELETE FROM users WHERE id = $1", user_id)
-    if result == "DELETE 0":
+    if not target:
         raise HTTPException(status_code=404, detail="User not found")
+    if target["username"] == "admin":
+        raise HTTPException(status_code=403, detail="System admin account cannot be deleted")
+    video_count = await db.fetchval(
+        "SELECT COUNT(*) FROM videos WHERE created_by = $1", user_id
+    )
+    if video_count:
+        if not force:
+            raise HTTPException(
+                status_code=409,
+                detail=f"This user owns {video_count} video(s). Reassign all their content to you and delete this user?"
+            )
+        await db.execute(
+            "UPDATE videos SET created_by = $1 WHERE created_by = $2",
+            str(admin["id"]), user_id,
+        )
+    await db.execute("DELETE FROM users WHERE id = $1", user_id)
     await audit(request, admin, "user.delete", "user", user_id)
     return {"message": "User deleted"}
 
