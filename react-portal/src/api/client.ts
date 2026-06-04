@@ -1,5 +1,12 @@
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 // Token is now stored as an httpOnly cookie set by the backend on login.
 // We keep a lightweight in-memory flag so the frontend can know whether
 // the user is logged in without reading the cookie (which is inaccessible
@@ -56,7 +63,7 @@ async function request<T>(
     } else {
       message = `HTTP ${res.status}`;
     }
-    throw new Error(message);
+    throw new ApiError(message, res.status);
   }
 
   if (res.status === 204 || res.headers.get('content-length') === '0') {
