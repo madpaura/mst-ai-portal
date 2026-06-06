@@ -40,6 +40,8 @@ class ArtifactSubmissionCreate(BaseModel):
     instructions: Optional[str] = None
     files: list[ArtifactFile] = []
     tags: list[str] = []
+    parent_slug: Optional[str] = None
+    version_tag: Optional[str] = None
 
     @field_validator("name")
     @classmethod
@@ -88,6 +90,7 @@ class ArtifactSubmissionUpdate(BaseModel):
     instructions: Optional[str] = None
     files: Optional[list[ArtifactFile]] = None
     tags: Optional[list[str]] = None
+    version_tag: Optional[str] = None
 
 
 class ValidationIssue(BaseModel):
@@ -120,5 +123,7 @@ class ArtifactSubmissionResponse(BaseModel):
     reviewed_by_id: Optional[str]
     github_url: Optional[str]
     reject_reason: Optional[str]
+    parent_slug: Optional[str] = None
+    version_tag: Optional[str] = None
     created_at: datetime
     updated_at: datetime

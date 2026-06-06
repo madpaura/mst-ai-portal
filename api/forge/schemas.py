@@ -26,6 +26,7 @@ class ForgeComponentResponse(BaseModel):
     git_repo_url: Optional[str] = None
     git_ref: Optional[str] = None
     last_synced_at: Optional[datetime] = None
+    creator_user_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

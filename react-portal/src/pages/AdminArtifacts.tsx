@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, type DragEvent } from 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import JSZip from 'jszip';
+import { useSearchParams } from 'react-router-dom';
 import { api, toApiError } from '../api/client';
 import { useAuth } from '../api/auth';
 
@@ -44,6 +45,8 @@ interface Artifact {
   submitted_by_name: string | null;
   github_url: string | null;
   reject_reason: string | null;
+  parent_slug: string | null;
+  version_tag: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -103,7 +106,10 @@ function slugify(v: string) {
 
 export const AdminArtifacts: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
   const { user, isAdmin } = useAuth();
-  const [tab, setTab] = useState<'list' | 'new' | 'config'>('list');
+  const [urlParams] = useSearchParams();
+  const initialParentSlug = urlParams.get('parent_slug') || '';
+  const initialParentType = (urlParams.get('parent_type') || 'skill') as ArtifactType;
+  const [tab, setTab] = useState<'list' | 'new' | 'config'>(initialParentSlug ? 'new' : 'list');
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [selected, setSelected] = useState<Artifact | null>(null);
   const [loading, setLoading] = useState(true);
@@ -235,7 +241,12 @@ export const AdminArtifacts: React.FC<{ embedded?: boolean }> = ({ embedded = fa
         {tab === 'config' && isAdmin ? (
           <GithubConfigPanel />
         ) : tab === 'new' ? (
-          <NewArtifactForm onCreated={handleCreated} onCancel={() => setTab('list')} />
+          <NewArtifactForm
+            onCreated={handleCreated}
+            onCancel={() => setTab('list')}
+            initialParentSlug={initialParentSlug}
+            initialParentType={initialParentType}
+          />
         ) : selected ? (
           <ArtifactDetail
             artifact={selected}
@@ -597,6 +608,18 @@ const ArtifactDetail: React.FC<{
               <span className="block font-medium text-slate-400 mb-0.5">Last updated</span>
               {new Date(artifact.updated_at).toLocaleString()}
             </div>
+            {artifact.parent_slug && (
+              <div>
+                <span className="block font-medium text-slate-400 mb-0.5">Updating component</span>
+                <span className="font-mono text-primary">{artifact.parent_slug}</span>
+              </div>
+            )}
+            {artifact.version_tag && (
+              <div>
+                <span className="block font-medium text-slate-400 mb-0.5">Version</span>
+                <span className="font-mono text-emerald-400">v{artifact.version_tag}</span>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1000,14 +1023,19 @@ function zipNameToTitle(name: string): string {
 const NewArtifactForm: React.FC<{
   onCreated: (a: Artifact) => void;
   onCancel: () => void;
-}> = ({ onCreated, onCancel }) => {
+  initialParentSlug?: string;
+  initialParentType?: ArtifactType;
+}> = ({ onCreated, onCancel, initialParentSlug = '', initialParentType = 'skill' }) => {
+  const isUpdateMode = !!initialParentSlug;
   const [form, setForm] = useState({
-    name: '',
+    name: initialParentSlug || '',
     display_name: '',
-    artifact_type: 'agent' as ArtifactType,
+    artifact_type: (initialParentSlug ? initialParentType : 'agent') as ArtifactType,
     description: '',
     instructions: '',
     tags: '',
+    parent_slug: initialParentSlug,
+    version_tag: '',
   });
   const [files, setFiles] = useState<ArtifactFile[]>([]);
   const [saving, setSaving] = useState(false);
@@ -1047,6 +1075,7 @@ const NewArtifactForm: React.FC<{
     e.preventDefault();
     if (!form.display_name.trim()) { setError('Display name is required'); return; }
     if (!form.name.trim()) { setError('Name (slug) is required'); return; }
+    if (isUpdateMode && !form.version_tag.trim()) { setError('Version tag is required for updates'); return; }
     setSaving(true);
     setError('');
     try {
@@ -1058,6 +1087,8 @@ const NewArtifactForm: React.FC<{
         instructions: form.instructions.trim() || null,
         tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
         files,
+        parent_slug: form.parent_slug.trim() || null,
+        version_tag: form.version_tag.trim() || null,
       });
       onCreated(artifact);
     } catch (e: unknown) {
@@ -1068,7 +1099,16 @@ const NewArtifactForm: React.FC<{
   return (
     <form onSubmit={handleSubmit} className="p-6 max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-slate-900 dark:text-white">New Artifact Submission</h2>
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+            {isUpdateMode ? 'Submit Update' : 'New Artifact Submission'}
+          </h2>
+          {isUpdateMode && (
+            <p className="text-xs text-slate-500 mt-0.5">
+              Updating <span className="font-mono text-primary">{initialParentSlug}</span> — admins skip the approval queue
+            </p>
+          )}
+        </div>
         <button type="button" onClick={onCancel} className="text-text-muted hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
           <span className="material-symbols-outlined">close</span>
         </button>
@@ -1104,8 +1144,9 @@ const NewArtifactForm: React.FC<{
               <button
                 key={t}
                 type="button"
+                disabled={isUpdateMode}
                 onClick={() => set('artifact_type', t)}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border text-sm font-medium transition-colors ${form.artifact_type === t ? `${TYPE_COLORS[t]} border-current` : 'border-white/10 text-slate-500 hover:border-white/20 hover:text-slate-300'}`}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border text-sm font-medium transition-colors ${form.artifact_type === t ? `${TYPE_COLORS[t]} border-current` : 'border-white/10 text-slate-500 hover:border-white/20 hover:text-slate-300'} ${isUpdateMode ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
                 <span className="material-symbols-outlined text-base">{TYPE_ICONS[t]}</span>
                 {TYPE_LABELS[t]}
@@ -1125,7 +1166,7 @@ const NewArtifactForm: React.FC<{
             value={form.display_name}
             onChange={e => {
               set('display_name', e.target.value);
-              if (!form.name) set('name', slugify(e.target.value));
+              if (!form.name && !isUpdateMode) set('name', slugify(e.target.value));
             }}
             placeholder="My Awesome Agent"
           />
@@ -1135,9 +1176,10 @@ const NewArtifactForm: React.FC<{
         <div>
           <label className="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">Folder Name (slug) *</label>
           <input
-            className="w-full bg-slate-100 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 font-mono focus:outline-none focus:border-primary/50"
+            className={`w-full bg-slate-100 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 font-mono focus:outline-none focus:border-primary/50 ${isUpdateMode ? 'opacity-60 cursor-not-allowed' : ''}`}
             value={form.name}
-            onChange={e => set('name', slugify(e.target.value))}
+            readOnly={isUpdateMode}
+            onChange={e => !isUpdateMode && set('name', slugify(e.target.value))}
             placeholder="my-awesome-agent"
           />
           <p className="text-xs text-slate-600 mt-1">Used as the folder name in GitHub. Lowercase, hyphens only.</p>
@@ -1159,7 +1201,7 @@ const NewArtifactForm: React.FC<{
         </div>
 
         {/* Tags */}
-        <div className="col-span-2">
+        <div className={isUpdateMode ? '' : 'col-span-2'}>
           <label className="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">Tags</label>
           <input
             className="w-full bg-slate-100 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded px-3 py-2 text-sm text-slate-900 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:border-primary/50"
@@ -1168,6 +1210,22 @@ const NewArtifactForm: React.FC<{
             placeholder="llm, automation, productivity"
           />
         </div>
+
+        {/* Version tag — only shown for updates */}
+        {isUpdateMode && (
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">
+              Version Tag *
+            </label>
+            <input
+              className="w-full bg-slate-100 dark:bg-white/5 border border-primary/40 rounded px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 font-mono focus:outline-none focus:border-primary/70"
+              value={form.version_tag}
+              onChange={e => set('version_tag', e.target.value)}
+              placeholder="1.2.0"
+            />
+            <p className="text-xs text-slate-600 mt-1">e.g. 1.0.0, 2.1.3 — used in the GitHub commit message</p>
+          </div>
+        )}
       </div>
 
       {/* Instructions */}
@@ -1192,7 +1250,7 @@ const NewArtifactForm: React.FC<{
           disabled={saving}
           className="px-6 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
-          {saving ? 'Creating…' : 'Create Draft'}
+          {saving ? (isUpdateMode ? 'Submitting…' : 'Creating…') : (isUpdateMode ? 'Submit Update' : 'Create Draft')}
         </button>
         <button
           type="button"

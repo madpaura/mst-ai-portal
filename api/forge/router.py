@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from typing import Optional
 
 from forge.schemas import ForgeComponentResponse, ForgeCategoryResponse
-from auth.dependencies import get_optional_user
+from auth.dependencies import get_optional_user, get_current_user
 from database import get_db
 import cache
 from config import settings
@@ -250,6 +250,30 @@ async def download_component(slug: str, user: Optional[dict] = Depends(get_optio
         )
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+@router.delete("/components/{slug}")
+async def delete_component(slug: str, user: dict = Depends(get_current_user)):
+    """Soft-delete a component. Allowed by the component's creator or any admin."""
+    db = await get_db()
+    row = await db.fetchrow(
+        "SELECT id, creator_user_id FROM forge_components WHERE slug = $1",
+        slug,
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Component not found")
+
+    is_admin = user["role"] == "admin"
+    is_creator = row.get("creator_user_id") and str(row["creator_user_id"]) == str(user["id"])
+    if not is_admin and not is_creator:
+        raise HTTPException(status_code=403, detail="Only the creator or an admin can remove this component")
+
+    await db.execute(
+        "UPDATE forge_components SET is_active = false, updated_at = now() WHERE slug = $1",
+        slug,
+    )
+    await cache.bump_version(cache.NS_FORGE)
+    return {"message": "Component removed from marketplace"}
 
 
 @router.get("/components/{slug}/instructions")

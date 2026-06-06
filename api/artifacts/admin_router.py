@@ -98,6 +98,8 @@ def _row_to_response(row, submitter_name: Optional[str] = None) -> ArtifactSubmi
         reviewed_by_id=str(row["reviewed_by"]) if row.get("reviewed_by") else None,
         github_url=row.get("github_url"),
         reject_reason=row.get("reject_reason"),
+        parent_slug=row.get("parent_slug"),
+        version_tag=row.get("version_tag"),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
@@ -321,12 +323,27 @@ async def list_artifacts(
 @router.post("/artifacts", response_model=ArtifactSubmissionResponse)
 async def create_artifact(req: ArtifactSubmissionCreate, user: dict = Depends(require_content)):
     db = await get_db()
-    existing = await db.fetchval(
-        "SELECT id FROM artifact_submissions WHERE name = $1 AND artifact_type = $2 AND status != 'rejected'",
-        req.name, req.artifact_type,
-    )
-    if existing:
-        raise HTTPException(400, f"An artifact named '{req.name}' of type '{req.artifact_type}' already exists")
+
+    is_update = bool(req.parent_slug)
+    is_admin = user["role"] == "admin"
+
+    if is_update:
+        parent = await db.fetchval(
+            "SELECT id FROM forge_components WHERE slug = $1",
+            req.parent_slug,
+        )
+        if not parent:
+            raise HTTPException(400, f"No published component found with slug '{req.parent_slug}'")
+    else:
+        existing = await db.fetchval(
+            "SELECT id FROM artifact_submissions WHERE name = $1 AND artifact_type = $2 AND status != 'rejected'",
+            req.name, req.artifact_type,
+        )
+        if existing:
+            raise HTTPException(400, f"An artifact named '{req.name}' of type '{req.artifact_type}' already exists")
+
+    # Admins submitting updates skip the approval queue — start at 'approved'
+    initial_status = "approved" if (is_admin and is_update) else "draft"
 
     # Auto-generate instructions if the creator didn't provide them (Issue #167)
     instructions = req.instructions
@@ -340,14 +357,17 @@ async def create_artifact(req: ArtifactSubmissionCreate, user: dict = Depends(re
     row = await db.fetchrow(
         """
         INSERT INTO artifact_submissions
-            (name, display_name, artifact_type, description, instructions, files, tags, submitted_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            (name, display_name, artifact_type, description, instructions, files, tags,
+             submitted_by, parent_slug, version_tag, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *
         """,
         req.name, req.display_name, req.artifact_type,
         req.description, instructions,
         files_json, req.tags or [],
         user["id"],
+        req.parent_slug, req.version_tag,
+        initial_status,
     )
     submitter_name = user.get("display_name")
     return _row_to_response(row, submitter_name)
@@ -403,6 +423,8 @@ async def update_artifact(
         updates["files"] = json.dumps([f.model_dump() for f in req.files])
     if req.tags is not None:
         updates["tags"] = req.tags
+    if req.version_tag is not None:
+        updates["version_tag"] = req.version_tag
 
     if updates:
         set_parts = [f"{k} = ${i+1}" for i, k in enumerate(updates.keys())]
@@ -662,8 +684,9 @@ async def publish_artifact(artifact_id: str, admin: dict = Depends(require_admin
 
     files_raw = row["files"] if isinstance(row["files"], list) else json.loads(row["files"] or "[]")
 
+    version = row.get("version_tag") or None
     try:
-        github_url = await push_artifact(type_config, row["name"], files_raw)
+        github_url = await push_artifact(type_config, row["name"], files_raw, version=version)
     except ValueError as exc:
         raise HTTPException(502, f"GitHub push failed: {exc}")
 
@@ -675,4 +698,28 @@ async def publish_artifact(artifact_id: str, admin: dict = Depends(require_admin
         """,
         github_url, artifact_id,
     )
+
+    # When this is an update to an existing marketplace component, reflect the
+    # changes immediately (version, description, howto_guide).
+    parent_slug = row.get("parent_slug")
+    if parent_slug:
+        await db.execute(
+            """
+            UPDATE forge_components SET
+                version     = COALESCE($1, version),
+                description = COALESCE($2, description),
+                howto_guide = COALESCE($3, howto_guide),
+                creator_user_id = COALESCE(creator_user_id, $4),
+                updated_at  = now()
+            WHERE slug = $5
+            """,
+            version,
+            row.get("description"),
+            row.get("instructions"),
+            row.get("submitted_by"),
+            parent_slug,
+        )
+        import cache as _cache
+        await _cache.bump_version(_cache.NS_FORGE)
+
     return {"message": "Published", "github_url": github_url}

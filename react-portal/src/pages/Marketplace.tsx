@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from '../components/Navbar';
+import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -8,6 +9,7 @@ import 'highlight.js/styles/github-dark.css';
 import '../styles/howto-markdown.css';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
+import { useAuth } from '../api/auth';
 import { usePageView } from '../hooks/usePageView';
 
 interface ForgeComponent {
@@ -31,6 +33,7 @@ interface ForgeComponent {
   video_url: string | null;
   git_repo_url: string | null;
   git_ref: string | null;
+  creator_user_id: string | null;
 }
 
 const SIDEBAR_CATEGORIES = [
@@ -66,6 +69,8 @@ interface ContributingGuide {
 
 export const Marketplace: React.FC = () => {
   usePageView('/marketplace');
+  const { user, isAdmin } = useAuth();
+  const navigate = useNavigate();
   const [urlParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(urlParams.get('q') || '');
   const [activeCategory, setActiveCategory] = useState('all');
@@ -78,6 +83,7 @@ export const Marketplace: React.FC = () => {
   const [drawerTab, setDrawerTab] = useState<'overview' | 'guide'>('overview');
   const [instructions, setInstructions] = useState<Record<string, string>>({});
   const [downloading, setDownloading] = useState<Record<string, boolean>>({});
+  const [deleting, setDeleting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [installTab, setInstallTab] = useState<'skills' | 'manual'>('skills');
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
@@ -156,6 +162,27 @@ export const Marketplace: React.FC = () => {
   };
 
   const handleSort = () => {};
+
+  const handleDeleteComponent = async (card: ForgeComponent) => {
+    if (!confirm(`Remove "${card.name}" from the marketplace? This cannot be undone without admin action.`)) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/forge/components/${card.slug}`);
+      setComponents(prev => prev.filter(c => c.id !== card.id));
+      setSelectedCard(null);
+    } catch (e: unknown) {
+      alert((e as Error)?.message || 'Failed to remove component');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleSubmitUpdate = (card: ForgeComponent) => {
+    // Map component_type to artifact_type
+    const typeMap: Record<string, string> = { agent: 'agent', skill: 'skill', mcp_server: 'mcp' };
+    const artifactType = typeMap[card.component_type] || 'skill';
+    navigate(`/admin/artifacts?parent_slug=${card.slug}&parent_type=${artifactType}`);
+  };
 
   const filteredCards = components.filter((c) => {
     const matchesSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase()) || (c.description || '').toLowerCase().includes(searchQuery.toLowerCase());
@@ -657,6 +684,27 @@ export const Marketplace: React.FC = () => {
                       </span>
                     )}
                   </div>
+
+                  {/* Creator / admin controls */}
+                  {user && (isAdmin || selectedCard.creator_user_id === user.id) && (
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={() => handleSubmitUpdate(selectedCard)}
+                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-primary/40 bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">upgrade</span>
+                        Submit Update
+                      </button>
+                      <button
+                        onClick={() => handleDeleteComponent(selectedCard)}
+                        disabled={deleting}
+                        className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-red-500/30 bg-red-500/10 text-red-400 text-xs font-semibold hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">delete</span>
+                        {deleting ? '…' : 'Remove'}
+                      </button>
+                    </div>
+                  )}
 
                   {/* GitHub repo info */}
                   {selectedCard.git_repo_url && (
