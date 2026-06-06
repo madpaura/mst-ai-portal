@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
+from typing import Optional
 
 from forge.schemas import ForgeComponentResponse, ForgeComponentCreate, ForgeComponentUpdate
 from auth.dependencies import require_content as require_admin
@@ -36,6 +37,7 @@ def _row_to_component(r) -> ForgeComponentResponse:
         howto_guide_url=r.get("howto_guide_url"),
         video_url=r.get("video_url"),
         manual_install=r.get("manual_install"),
+        creator_user_id=str(r["creator_user_id"]) if r.get("creator_user_id") else None,
         created_at=r["created_at"],
         updated_at=r["updated_at"],
     )
@@ -65,15 +67,15 @@ async def admin_create_component(req: ForgeComponentCreate, admin: dict = Depend
         INSERT INTO forge_components
             (slug, name, component_type, description, long_description, icon, icon_color,
              version, install_command, badge, author, tags, howto_guide, howto_guide_url, video_url,
-             manual_install)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+             manual_install, creator_user_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
         RETURNING *
         """,
         req.slug, req.name, req.component_type, req.description,
         req.long_description, req.icon, req.icon_color, req.version,
         req.install_command, req.badge, req.author, req.tags,
         howto_guide, req.howto_guide_url, req.video_url,
-        req.manual_install,
+        req.manual_install, admin["id"],
     )
     await cache.bump_version(cache.NS_FORGE)
     return _row_to_component(row)

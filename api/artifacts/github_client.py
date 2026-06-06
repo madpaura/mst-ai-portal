@@ -1,6 +1,7 @@
 import re
 import base64
 import httpx
+from typing import Optional
 from loguru import logger as log
 
 
@@ -127,6 +128,7 @@ async def push_artifact(
     config: dict,
     artifact_name: str,
     files: list[dict],
+    version: Optional[str] = None,
 ) -> str:
     """
     Creates/updates files under {folder}/{artifact_name}/ in the configured repo.
@@ -169,8 +171,10 @@ async def push_artifact(
             if check.status_code == 200:
                 sha = check.json().get("sha")
 
+            version_suffix = f" (v{version})" if version else ""
+            action = "update" if sha else "add"
             payload: dict = {
-                "message": f"feat(artifacts): add {artifact_name}/{fname}",
+                "message": f"feat(artifacts): {action} {artifact_name}/{fname}{version_suffix}",
                 "content": content_b64,
                 "branch": branch,
             }
