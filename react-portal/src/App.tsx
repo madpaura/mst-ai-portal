@@ -11,6 +11,7 @@ import { AssistantWidget } from './components/AssistantWidget';
 const Solutions        = React.lazy(() => import('./pages/Solutions').then(m => ({ default: m.Solutions })));
 const Marketplace      = React.lazy(() => import('./pages/Marketplace').then(m => ({ default: m.Marketplace })));
 const Ignite           = React.lazy(() => import('./pages/Ignite').then(m => ({ default: m.Ignite })));
+const IgniteBrowse     = React.lazy(() => import('./pages/IgniteBrowse').then(m => ({ default: m.IgniteBrowse })));
 const Howto            = React.lazy(() => import('./pages/Howto').then(m => ({ default: m.Howto })));
 const Login            = React.lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
 const AdminVideos      = React.lazy(() => import('./pages/AdminVideos').then(m => ({ default: m.AdminVideos })));
@@ -61,7 +62,7 @@ function App() {
           {/* Public pages */}
           <Route path="/" element={<Solutions />} />
           <Route path="/marketplace" element={<Marketplace />} />
-          <Route path="/ignite" element={<Ignite />} />
+          <Route path="/ignite" element={<IgniteBrowse />} />
           <Route path="/ignite/:videoSlug" element={<Ignite />} />
           <Route path="/howto" element={<Howto />} />
           <Route path="/solutions/:cardId" element={<SolutionDetail />} />

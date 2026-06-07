@@ -18,6 +18,7 @@
     "@types/react-virtualized-auto-sizer": "^1.0.4",
     "@types/react-window": "^1.8.8",
     "dompurify": "^3.4.1",
+    "fuse.js": "^7.4.2",
     "highlight.js": "^11.11.1",
     "hls.js": "^1.6.15",
     "html2pdf.js": "^0.14.0",

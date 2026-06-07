@@ -41,6 +41,7 @@ interface Course {
   description: string | null;
   sort_order: number;
   video_count: number;
+  is_featured?: boolean;
 }
 
 interface SeedNote {
@@ -227,7 +228,7 @@ export const AdminVideos: React.FC = () => {
 
   // Course edit modal
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
-  const [courseEditForm, setCourseEditForm] = useState({ title: '', slug: '', description: '', sort_order: 0 });
+  const [courseEditForm, setCourseEditForm] = useState({ title: '', slug: '', description: '', sort_order: 0, is_featured: false });
 
   // Course delete modal
   type CourseDeleteMode = 'migrate' | 'delete_videos';
@@ -442,7 +443,7 @@ export const AdminVideos: React.FC = () => {
 
   const openEditCourse = (course: Course, e: React.MouseEvent) => {
     e.stopPropagation();
-    setCourseEditForm({ title: course.title, slug: course.slug, description: course.description || '', sort_order: course.sort_order });
+    setCourseEditForm({ title: course.title, slug: course.slug, description: course.description || '', sort_order: course.sort_order, is_featured: !!course.is_featured });
     setEditingCourse(course);
   };
 
@@ -455,6 +456,7 @@ export const AdminVideos: React.FC = () => {
         slug,
         description: courseEditForm.description.trim() || null,
         sort_order: courseEditForm.sort_order,
+        is_featured: courseEditForm.is_featured,
       });
       setEditingCourse(null);
       await fetchCourses();
@@ -1287,6 +1289,19 @@ export const AdminVideos: React.FC = () => {
                 className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
               />
             </div>
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={courseEditForm.is_featured}
+                onChange={(e) => setCourseEditForm(f => ({ ...f, is_featured: e.target.checked }))}
+                className="w-4 h-4 accent-primary"
+              />
+              <span className="text-sm text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[18px] text-primary">auto_awesome</span>
+                Feature this series in the Ignite hero
+                <span className="text-xs text-text-muted">(only one at a time)</span>
+              </span>
+            </label>
             <div className="flex gap-3 pt-2">
               <button onClick={handleSaveCourse} className="px-6 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
                 Save Changes
