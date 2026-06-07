@@ -32,6 +32,20 @@ class ArtifactGithubConfig(BaseModel):
     mcp: ArtifactGithubTypeConfig = ArtifactGithubTypeConfig()
 
 
+class ArtifactAllowedTypes(BaseModel):
+    allowed: list[str] = ["agent", "skill", "mcp"]
+
+    @field_validator("allowed")
+    @classmethod
+    def valid_types(cls, v: list) -> list:
+        valid = {"agent", "skill", "mcp"}
+        cleaned = [t for t in v if t in valid]
+        if not cleaned:
+            raise ValueError("At least one artifact type must be allowed")
+        # preserve canonical order and de-dupe
+        return [t for t in ("agent", "skill", "mcp") if t in cleaned]
+
+
 class ArtifactSubmissionCreate(BaseModel):
     name: str
     display_name: str

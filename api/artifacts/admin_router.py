@@ -14,6 +14,7 @@ from artifacts.schemas import (
     ArtifactGithubTypeConfig,
     ArtifactAnalyzeRequest,
     ArtifactAnalyzeResponse,
+    ArtifactAllowedTypes,
 )
 from artifacts.validator import validate_files
 from artifacts.github_client import push_artifact, test_connection
@@ -27,6 +28,8 @@ from loguru import logger as log
 router = APIRouter()
 
 _SETTINGS_KEY = "artifact_github_config"
+_ALLOWED_TYPES_KEY = "artifact_allowed_types"
+_ALL_TYPES = ["agent", "skill", "mcp"]
 
 
 # ── Install-instruction helpers (Issue #167) ──────────────────────────────────
@@ -131,6 +134,30 @@ def _mask_config(config: dict) -> dict:
     return masked
 
 
+async def _load_allowed_types(db) -> list:
+    row = await db.fetchrow("SELECT value FROM app_settings WHERE key = $1", _ALLOWED_TYPES_KEY)
+    if not row:
+        return list(_ALL_TYPES)
+    try:
+        allowed = json.loads(row["value"]).get("allowed", _ALL_TYPES)
+    except (json.JSONDecodeError, AttributeError):
+        return list(_ALL_TYPES)
+    cleaned = [t for t in _ALL_TYPES if t in allowed]
+    return cleaned or list(_ALL_TYPES)
+
+
+async def _save_allowed_types(db, allowed: list):
+    await db.execute(
+        """
+        INSERT INTO app_settings (key, value)
+        VALUES ($1, $2)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        """,
+        _ALLOWED_TYPES_KEY,
+        json.dumps({"allowed": allowed}),
+    )
+
+
 # ── GitHub Config (admin only) ────────────────────────────────────────────────
 
 @router.get("/artifacts/github-config")
@@ -138,6 +165,20 @@ async def get_github_config(admin: dict = Depends(require_admin)):
     db = await get_db()
     config = await _load_github_config(db)
     return _mask_config(config)
+
+
+@router.get("/artifacts/allowed-types", response_model=ArtifactAllowedTypes)
+async def get_allowed_types(user: dict = Depends(require_content)):
+    """Which artifact types contributors are allowed to submit. Used by the New form."""
+    db = await get_db()
+    return ArtifactAllowedTypes(allowed=await _load_allowed_types(db))
+
+
+@router.put("/artifacts/allowed-types", response_model=ArtifactAllowedTypes)
+async def put_allowed_types(req: ArtifactAllowedTypes, admin: dict = Depends(require_admin)):
+    db = await get_db()
+    await _save_allowed_types(db, req.allowed)
+    return ArtifactAllowedTypes(allowed=req.allowed)
 
 
 @router.post("/artifacts/analyze", response_model=ArtifactAnalyzeResponse)
@@ -335,6 +376,13 @@ async def create_artifact(req: ArtifactSubmissionCreate, user: dict = Depends(re
         if not parent:
             raise HTTPException(400, f"No published component found with slug '{req.parent_slug}'")
     else:
+        allowed = await _load_allowed_types(db)
+        if req.artifact_type not in allowed:
+            raise HTTPException(
+                400,
+                f"Artifact type '{req.artifact_type}' is not currently accepted. "
+                f"Allowed types: {', '.join(allowed)}",
+            )
         existing = await db.fetchval(
             "SELECT id FROM artifact_submissions WHERE name = $1 AND artifact_type = $2 AND status != 'rejected'",
             req.name, req.artifact_type,
