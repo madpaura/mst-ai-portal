@@ -1027,7 +1027,7 @@ export const AdminMarketplace: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Install Command <span className="text-slate-400 normal-case font-normal">(skills.sh tab)</span></label>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Install Command <span className="text-slate-400 normal-case font-normal">(CMD tab)</span></label>
                 <input value={compForm.install_command} onChange={e => setCompForm(f => ({ ...f, install_command: e.target.value }))}
                   placeholder="forge install my-agent"
                   className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none font-mono" />

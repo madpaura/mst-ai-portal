@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navbar } from '../components/Navbar';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
@@ -109,6 +109,25 @@ export const Marketplace: React.FC = () => {
   };
 
 
+  // Install events already recorded this session, so repeated copies don't inflate the counter.
+  const recordedInstalls = useRef<Set<string>>(new Set());
+
+  // Optimistically reflect a new install/download in the visible counter.
+  const bumpDownloadsLocal = (slug: string) => {
+    setComponents((prev) => prev.map((c) => (c.slug === slug ? { ...c, downloads: c.downloads + 1 } : c)));
+    setSelectedCard((prev) => (prev && prev.slug === slug ? { ...prev, downloads: prev.downloads + 1 } : prev));
+  };
+
+  const recordInstall = (slug: string) => {
+    if (recordedInstalls.current.has(slug)) return;
+    recordedInstalls.current.add(slug);
+    bumpDownloadsLocal(slug);
+    // Fire-and-forget — the counter is non-critical, so ignore failures.
+    api.post(`/forge/components/${slug}/install`, {}).catch(() => {
+      recordedInstalls.current.delete(slug);
+    });
+  };
+
   const handleDownload = async (slug: string) => {
     setDownloading((d) => ({ ...d, [slug]: true }));
     try {
@@ -127,6 +146,9 @@ export const Marketplace: React.FC = () => {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      // The download endpoint records the event server-side; mirror it in the UI.
+      recordedInstalls.current.add(slug);
+      bumpDownloadsLocal(slug);
     } catch {
       alert('Download failed. Please try again.');
     } finally {
@@ -154,11 +176,13 @@ export const Marketplace: React.FC = () => {
     }
   };
 
-  const handleCopyInstall = (cmd: string) => {
+  const handleCopyInstall = (cmd: string, slug?: string) => {
     navigator.clipboard.writeText(cmd).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+    // Copying the install command is the de-facto "install" — count it.
+    if (slug) recordInstall(slug);
   };
 
   const handleSort = () => {};
@@ -738,7 +762,7 @@ export const Marketplace: React.FC = () => {
                     const activeCmd = installTab === 'manual' && selectedCard.manual_install
                       ? selectedCard.manual_install
                       : selectedCard.install_command || selectedCard.manual_install || '';
-                    const activeLabel = installTab === 'manual' && selectedCard.manual_install ? 'Manual' : 'skills.sh';
+                    const activeLabel = installTab === 'manual' && selectedCard.manual_install ? 'Manual' : 'CMD';
                     return (
                       <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
                         <div className="bg-slate-800 dark:bg-slate-900 px-4 py-2 flex items-center justify-between border-b border-slate-700">
@@ -754,7 +778,7 @@ export const Marketplace: React.FC = () => {
                                       : 'text-slate-500 hover:text-slate-300'
                                   }`}
                                 >
-                                  {tab === 'skills' ? 'skills.sh' : 'manual'}
+                                  {tab === 'skills' ? 'CMD' : 'manual'}
                                 </button>
                               ))}
                             </div>
@@ -769,7 +793,7 @@ export const Marketplace: React.FC = () => {
                             {activeCmd}
                           </code>
                           <button
-                            onClick={() => handleCopyInstall(activeCmd)}
+                            onClick={() => handleCopyInstall(activeCmd, selectedCard.slug)}
                             className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${copied ? 'text-emerald-400 bg-emerald-400/10' : 'text-slate-500 hover:text-white hover:bg-white/10'}`}
                             title="Copy"
                           >

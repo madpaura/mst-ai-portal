@@ -111,11 +111,13 @@ async def install_component(slug: str, user: Optional[dict] = Depends(get_option
         "INSERT INTO forge_install_events (component_id, user_id) VALUES ($1, $2)",
         comp["id"], user_id,
     )
-    await db.execute(
-        "UPDATE forge_components SET downloads = downloads + 1 WHERE id = $1",
+    new_count = await db.fetchval(
+        "UPDATE forge_components SET downloads = downloads + 1 WHERE id = $1 RETURNING downloads",
         comp["id"],
     )
-    return {"message": "Install event recorded"}
+    # Invalidate the cached component list so the new count is reflected on reload.
+    await cache.bump_version(cache.NS_FORGE)
+    return {"message": "Install event recorded", "downloads": new_count}
 
 
 @router.get("/contributing-guide")
@@ -242,6 +244,7 @@ async def download_component(slug: str, user: Optional[dict] = Depends(get_optio
             "UPDATE forge_components SET downloads = downloads + 1 WHERE id = $1",
             row["id"],
         )
+        await cache.bump_version(cache.NS_FORGE)
 
         return StreamingResponse(
             buf,

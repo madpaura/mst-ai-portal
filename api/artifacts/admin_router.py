@@ -15,9 +15,12 @@ from artifacts.schemas import (
     ArtifactAnalyzeRequest,
     ArtifactAnalyzeResponse,
     ArtifactAllowedTypes,
+    ArtifactVersionResponse,
+    ArtifactVersionInfo,
 )
 from artifacts.validator import validate_files
-from artifacts.github_client import push_artifact, test_connection
+from artifacts.github_client import push_artifact, test_connection, delete_artifact as gh_delete_artifact
+from howto_guides import generate_howto_guide, build_about_prompt, clamp_words, about_source_hash
 from auth.dependencies import require_admin, require_content, get_current_user
 from database import get_db
 from publish.router import _notify_reviewers
@@ -47,22 +50,27 @@ def _extract_owner_repo_url(git_url: str) -> Optional[str]:
     return None
 
 
-def _generate_skill_instructions(display_name: str, slug: str, owner_repo: str) -> str:
-    """Return standard installation instructions markdown for an artifact."""
-    return (
-        f"## Installation\n\n"
-        f"```bash\nnpx skills add {owner_repo} --skill {slug} --agent claude-code --global --yes\n```\n\n"
-        f"**Install the CLI globally for faster repeated use:**\n\n"
-        f"```bash\nnpm install -g skills\nskills add {owner_repo} --skill {slug} --agent claude-code --global --yes\n```\n\n"
-        f"## Verify\n\n"
-        f"```bash\nnpx skills list --agent claude-code\n```\n\n"
-        f"## Usage\n\n"
-        f"Once installed, **{display_name}** is available in Claude Code automatically.\n\n"
-        f"## Update\n\n"
-        f"```bash\nnpx skills update {slug}\n```\n\n"
-        f"## Remove\n\n"
-        f"```bash\nnpx skills remove {slug}\n```\n"
-    )
+def _generate_skill_instructions(
+    display_name: str, slug: str, owner_repo: str, artifact_type: str = "skill",
+) -> str:
+    """Type-aware install how-to guide for an artifact (delegates to the shared module)."""
+    return generate_howto_guide(slug, display_name, artifact_type, owner_repo)
+
+
+async def _make_about(name: str, artifact_type: str, source_text: str) -> Optional[str]:
+    """LLM-polished, ≤200-word About text. Falls back to trimmed source on any failure."""
+    source = (source_text or "").strip()
+    if not source:
+        return None
+    try:
+        from articles.llm import call_llm
+        raw = await call_llm(build_about_prompt(name, artifact_type, source))
+        about = clamp_words(raw)
+        if about:
+            return about
+    except Exception as e:  # LLM unavailable / misconfigured — degrade gracefully
+        log.warning("About LLM generation failed for {}: {}", name, e)
+    return clamp_words(source)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -127,6 +135,30 @@ async def _save_github_config(db, config: dict):
     )
 
 
+def _bump_version(current: Optional[str], level: str) -> str:
+    parts = (current or "0.0.0").lstrip("vV").split(".")
+    try:
+        major, minor, patch = int(parts[0]), int(parts[1]), int(parts[2])
+    except (IndexError, ValueError):
+        major, minor, patch = 0, 0, 0
+    if level == "major":
+        return f"{major + 1}.0.0"
+    if level == "minor":
+        return f"{major}.{minor + 1}.0"
+    return f"{major}.{minor}.{patch + 1}"
+
+
+async def _latest_version(db, name: str, artifact_type: str) -> Optional[str]:
+    return await db.fetchval(
+        """
+        SELECT version FROM artifact_versions
+        WHERE name = $1 AND artifact_type = $2
+        ORDER BY published_at DESC LIMIT 1
+        """,
+        name, artifact_type,
+    )
+
+
 def _mask_config(config: dict) -> dict:
     masked = {}
     for atype, cfg in config.items():
@@ -179,6 +211,23 @@ async def put_allowed_types(req: ArtifactAllowedTypes, admin: dict = Depends(req
     db = await get_db()
     await _save_allowed_types(db, req.allowed)
     return ArtifactAllowedTypes(allowed=req.allowed)
+
+
+@router.get("/artifacts/version-info", response_model=ArtifactVersionInfo)
+async def get_version_info(
+    name: str = Query(...),
+    artifact_type: str = Query(...),
+    user: dict = Depends(require_content),
+):
+    """Latest published version for a lineage — lets the update form preview the next bump."""
+    db = await get_db()
+    current = await _latest_version(db, name, artifact_type)
+    if current is None:
+        # Fall back to the marketplace component's version if it was published before history existed.
+        current = await db.fetchval(
+            "SELECT version FROM forge_components WHERE slug = $1", name
+        )
+    return ArtifactVersionInfo(current=current)
 
 
 @router.post("/artifacts/analyze", response_model=ArtifactAnalyzeResponse)
@@ -399,15 +448,17 @@ async def create_artifact(req: ArtifactSubmissionCreate, user: dict = Depends(re
         github_config = await _load_github_config(db)
         type_repo_url = github_config.get(req.artifact_type, {}).get("url", "")
         owner_repo = _extract_owner_repo_url(type_repo_url) or "madpaura/skills"
-        instructions = _generate_skill_instructions(req.display_name, req.name, owner_repo)
+        instructions = _generate_skill_instructions(
+            req.display_name, req.name, owner_repo, req.artifact_type
+        )
 
     files_json = json.dumps([f.model_dump() for f in req.files])
     row = await db.fetchrow(
         """
         INSERT INTO artifact_submissions
             (name, display_name, artifact_type, description, instructions, files, tags,
-             submitted_by, parent_slug, version_tag, status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             submitted_by, parent_slug, version_tag, version_bump, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *
         """,
         req.name, req.display_name, req.artifact_type,
@@ -415,6 +466,7 @@ async def create_artifact(req: ArtifactSubmissionCreate, user: dict = Depends(re
         files_json, req.tags or [],
         user["id"],
         req.parent_slug, req.version_tag,
+        (req.version_bump or "patch") if is_update else req.version_bump,
         initial_status,
     )
     submitter_name = user.get("display_name")
@@ -442,6 +494,50 @@ async def get_artifact(artifact_id: str, user: dict = Depends(require_content)):
     if not is_admin and not is_owner:
         raise HTTPException(403, "Access denied")
     return _row_to_response(row, row.get("submitter_name"))
+
+
+@router.get("/artifacts/{artifact_id}/versions", response_model=list[ArtifactVersionResponse])
+async def list_artifact_versions(artifact_id: str, user: dict = Depends(require_content)):
+    """Read-only published-version history for an artifact's lineage (name + type)."""
+    db = await get_db()
+    row = await db.fetchrow(
+        "SELECT name, artifact_type, submitted_by FROM artifact_submissions WHERE id = $1",
+        artifact_id,
+    )
+    if not row:
+        raise HTTPException(404, "Artifact not found")
+    is_admin = user["role"] == "admin"
+    is_owner = str(row["submitted_by"]) == str(user["id"])
+    if not is_admin and not is_owner:
+        raise HTTPException(403, "Access denied")
+
+    versions = await db.fetch(
+        """
+        SELECT v.*, u.display_name AS publisher_name
+        FROM artifact_versions v
+        LEFT JOIN users u ON v.published_by = u.id
+        WHERE v.name = $1 AND v.artifact_type = $2
+        ORDER BY v.published_at DESC
+        """,
+        row["name"], row["artifact_type"],
+    )
+    out = []
+    for v in versions:
+        files_raw = v["files"] if isinstance(v["files"], list) else json.loads(v["files"] or "[]")
+        out.append(ArtifactVersionResponse(
+            id=str(v["id"]),
+            name=v["name"],
+            artifact_type=v["artifact_type"],
+            version=v["version"],
+            description=v["description"],
+            instructions=v["instructions"],
+            files=files_raw,
+            tags=list(v["tags"] or []),
+            github_url=v["github_url"],
+            published_by_name=v.get("publisher_name"),
+            published_at=v["published_at"],
+        ))
+    return out
 
 
 @router.put("/artifacts/{artifact_id}", response_model=ArtifactSubmissionResponse)
@@ -496,7 +592,11 @@ async def update_artifact(
 
 
 @router.delete("/artifacts/{artifact_id}")
-async def delete_artifact(artifact_id: str, user: dict = Depends(require_content)):
+async def delete_artifact(
+    artifact_id: str,
+    force: bool = Query(False, description="Delete the portal record even if GitHub cleanup fails"),
+    user: dict = Depends(require_content),
+):
     db = await get_db()
     row = await db.fetchrow("SELECT * FROM artifact_submissions WHERE id = $1", artifact_id)
     if not row:
@@ -509,8 +609,34 @@ async def delete_artifact(artifact_id: str, user: dict = Depends(require_content
     if row["status"] == "published" and not is_admin:
         raise HTTPException(400, "Published artifacts can only be deleted by admins")
 
+    github_cleaned = False
+    # If this was ever pushed, remove it from GitHub (folder + MANIFEST.json + README.md).
+    if row["status"] == "published" or row.get("github_url"):
+        config = await _load_github_config(db)
+        type_config = config.get(row["artifact_type"], {})
+        if type_config.get("url") and type_config.get("token"):
+            try:
+                await gh_delete_artifact(type_config, row["artifact_type"], row["name"])
+                github_cleaned = True
+            except ValueError as exc:
+                if not force:
+                    raise HTTPException(
+                        502,
+                        f"GitHub cleanup failed: {exc}. Re-try, or pass force=true to delete "
+                        "the portal record only.",
+                    )
+
+    # Deactivate the linked marketplace card so it stops showing in the marketplace.
+    slug = row.get("parent_slug") or row["name"]
+    await db.execute("UPDATE forge_components SET is_active = false, updated_at = now() WHERE slug = $1", slug)
+    try:
+        import cache as _cache
+        await _cache.bump_version(_cache.NS_FORGE)
+    except Exception:  # cache is best-effort
+        pass
+
     await db.execute("DELETE FROM artifact_submissions WHERE id = $1", artifact_id)
-    return {"message": "Deleted"}
+    return {"message": "Deleted", "github_cleaned": github_cleaned}
 
 
 # ── Workflow actions ──────────────────────────────────────────────────────────
@@ -732,38 +858,82 @@ async def publish_artifact(artifact_id: str, admin: dict = Depends(require_admin
 
     files_raw = row["files"] if isinstance(row["files"], list) else json.loads(row["files"] or "[]")
 
-    version = row.get("version_tag") or None
+    # Resolve the semantic version: first publish → 1.0.0, otherwise auto-bump the
+    # latest published version by the requested level (defaults to patch).
+    current = await _latest_version(db, row["name"], row["artifact_type"])
+    if current is None and row.get("parent_slug"):
+        current = await db.fetchval(
+            "SELECT version FROM forge_components WHERE slug = $1", row["parent_slug"]
+        )
+    if current is None:
+        version = "1.0.0"
+    else:
+        version = _bump_version(current, row.get("version_bump") or "patch")
+
+    author = await db.fetchval("SELECT display_name FROM users WHERE id = $1", row.get("submitted_by"))
+
     try:
-        github_url = await push_artifact(type_config, row["name"], files_raw, version=version)
+        github_url = await push_artifact(
+            type_config, row["name"], files_raw,
+            version=version,
+            description=row.get("description"),
+            tags=list(row.get("tags") or []),
+            author=author,
+            artifact_type=row["artifact_type"],
+        )
     except ValueError as exc:
         raise HTTPException(502, f"GitHub push failed: {exc}")
 
     await db.execute(
         """
         UPDATE artifact_submissions
-        SET status = 'published', github_url = $1, updated_at = now()
-        WHERE id = $2
+        SET status = 'published', github_url = $1, version_tag = $2, updated_at = now()
+        WHERE id = $3
         """,
-        github_url, artifact_id,
+        github_url, version, artifact_id,
+    )
+
+    # Snapshot this published version into the read-only history.
+    await db.execute(
+        """
+        INSERT INTO artifact_versions
+            (submission_id, name, artifact_type, version, description, instructions,
+             files, tags, github_url, published_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        """,
+        artifact_id, row["name"], row["artifact_type"], version,
+        row.get("description"), row.get("instructions"),
+        json.dumps(files_raw), list(row.get("tags") or []),
+        github_url, row.get("submitted_by"),
     )
 
     # When this is an update to an existing marketplace component, reflect the
-    # changes immediately (version, description, howto_guide).
+    # changes immediately (version, description, howto_guide, About).
     parent_slug = row.get("parent_slug")
     if parent_slug:
+        # Refresh the About section (long_description) with an LLM-polished,
+        # ≤200-word blurb drawn from the artifact's instructions/description.
+        about_source = row.get("instructions") or row.get("description") or ""
+        about = await _make_about(row["display_name"], row["artifact_type"], about_source)
+        about_hash = about_source_hash(about_source) if about_source else None
+
         await db.execute(
             """
             UPDATE forge_components SET
                 version     = COALESCE($1, version),
                 description = COALESCE($2, description),
                 howto_guide = COALESCE($3, howto_guide),
-                creator_user_id = COALESCE(creator_user_id, $4),
+                long_description = COALESCE($4, long_description),
+                source_hash = COALESCE($5, source_hash),
+                creator_user_id = COALESCE(creator_user_id, $6),
                 updated_at  = now()
-            WHERE slug = $5
+            WHERE slug = $7
             """,
             version,
             row.get("description"),
             row.get("instructions"),
+            about,
+            about_hash,
             row.get("submitted_by"),
             parent_slug,
         )
