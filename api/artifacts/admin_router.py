@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
 
@@ -26,6 +27,42 @@ from loguru import logger as log
 router = APIRouter()
 
 _SETTINGS_KEY = "artifact_github_config"
+
+
+# ── Install-instruction helpers (Issue #167) ──────────────────────────────────
+
+def _extract_owner_repo_url(git_url: str) -> Optional[str]:
+    """Return 'owner/repo' from a GitHub/GitLab remote URL, or None."""
+    if not git_url:
+        return None
+    m = re.search(r'(?:github|gitlab)\.com[:/]([^/]+/[^/.]+?)(?:\.git)?/?$', git_url)
+    if m:
+        return m.group(1)
+    parts = git_url.rstrip('/').removesuffix('.git').rsplit('/', 2)
+    if len(parts) >= 2 and parts[-2] and parts[-1]:
+        return f"{parts[-2]}/{parts[-1]}"
+    return None
+
+
+def _generate_skill_instructions(display_name: str, slug: str, owner_repo: str) -> str:
+    """Return standard installation instructions markdown for an artifact."""
+    return (
+        f"## Installation\n\n"
+        f"```bash\nnpx skills add {owner_repo} --skill {slug} --agent claude-code --global --yes\n```\n\n"
+        f"**Install the CLI globally for faster repeated use:**\n\n"
+        f"```bash\nnpm install -g skills\nskills add {owner_repo} --skill {slug} --agent claude-code --global --yes\n```\n\n"
+        f"## Verify\n\n"
+        f"```bash\nnpx skills list --agent claude-code\n```\n\n"
+        f"## Usage\n\n"
+        f"Once installed, **{display_name}** is available in Claude Code automatically.\n\n"
+        f"## Update\n\n"
+        f"```bash\nnpx skills update {slug}\n```\n\n"
+        f"## Remove\n\n"
+        f"```bash\nnpx skills remove {slug}\n```\n"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -135,32 +172,43 @@ async def analyze_artifact_files(
         if chars >= MAX_CONTEXT_CHARS:
             break
 
-    # Suggested display name from the ZIP filename
+    # Suggested display name and slug from the ZIP filename
     raw_name = zip_name.removesuffix(".zip").replace("_", " ").replace("-", " ")
     suggested_name = " ".join(w.capitalize() for w in raw_name.split()) if raw_name else "My Artifact"
+    suggested_slug = re.sub(r'[^a-z0-9]+', '-', raw_name.lower()).strip('-') or "my-artifact"
+
+    # ── Look up the configured skill repo to build the exact install command ──
+    db = await get_db()
+    github_config = await _load_github_config(db)
+    skill_repo_url = github_config.get("skill", {}).get("url", "")
+    owner_repo = _extract_owner_repo_url(skill_repo_url) or "madpaura/skills"
+    install_cmd_example = f"npx skills add {owner_repo} --skill {suggested_slug} --agent claude-code --global --yes"
 
     # ── Build LLM prompt ──────────────────────────────────────────────────────
     file_list = ", ".join(f.name for f in files[:15])
-    instructions_field = (
-        '"instructions": null'
-        if howto_content
-        else '"instructions": "<short Markdown guide with ## Installation and ## Usage sections>"'
+    if howto_content:
+        instructions_field = '"instructions": null'
+    else:
+        instructions_field = (
+            f'"instructions": "<Markdown how-to guide. Start with a ## Installation section '
+            f'that contains the exact command: `{install_cmd_example}` (replace {suggested_slug} '
+            f'with the actual slug if different). Then add ## Usage and ## Update sections.>"'
+        )
+    # Pre-build context blocks to avoid backslashes inside f-string expressions (Python 3.11)
+    readme_block = ("--- skill.md / README content ---\n" + howto_content[:3000]) if howto_content else ""
+    code_block = ("--- Code file previews ---\n" + "\n".join(code_snippets)) if code_snippets else ""
+    prompt = (
+        f'You are analyzing an AI artifact (agent, skill, or MCP server) to generate metadata.\n\n'
+        f'Artifact name hint: "{suggested_name}"\n'
+        f'Files included: {file_list}\n\n'
+        f'{readme_block}\n\n'
+        f'{code_block}\n\n'
+        f'Return ONLY a JSON object with these exact fields:\n'
+        f'- "display_name": clean title-case name (use the name hint as a starting point)\n'
+        f'- "description": 1-2 sentences describing what this artifact does and its primary use case\n'
+        f'- {instructions_field}\n\n'
+        f'Return ONLY the JSON object, no markdown, no explanation.'
     )
-    prompt = f"""You are analyzing an AI artifact (agent, skill, or MCP server) to generate metadata.
-
-Artifact name hint: "{suggested_name}"
-Files included: {file_list}
-
-{"--- skill.md / README content ---\n" + howto_content[:3000] if howto_content else ""}
-
-{"--- Code file previews ---\n" + chr(10).join(code_snippets) if code_snippets else ""}
-
-Return ONLY a JSON object with these exact fields:
-- "display_name": clean title-case name (use the name hint as a starting point)
-- "description": 1-2 sentences describing what this artifact does and its primary use case
-- {instructions_field}
-
-Return ONLY the JSON object, no markdown, no explanation."""
 
     try:
         raw = await call_llm(prompt)
@@ -178,6 +226,11 @@ Return ONLY the JSON object, no markdown, no explanation."""
         display_name = suggested_name
         description = ""
         instructions = howto_content
+
+    # If instructions are still empty (LLM failed or returned null with no howto file),
+    # fall back to the generated template so the field is never left blank.
+    if not instructions:
+        instructions = _generate_skill_instructions(display_name, suggested_slug, owner_repo)
 
     return ArtifactAnalyzeResponse(
         display_name=display_name,
@@ -275,6 +328,14 @@ async def create_artifact(req: ArtifactSubmissionCreate, user: dict = Depends(re
     if existing:
         raise HTTPException(400, f"An artifact named '{req.name}' of type '{req.artifact_type}' already exists")
 
+    # Auto-generate instructions if the creator didn't provide them (Issue #167)
+    instructions = req.instructions
+    if not instructions:
+        github_config = await _load_github_config(db)
+        type_repo_url = github_config.get(req.artifact_type, {}).get("url", "")
+        owner_repo = _extract_owner_repo_url(type_repo_url) or "madpaura/skills"
+        instructions = _generate_skill_instructions(req.display_name, req.name, owner_repo)
+
     files_json = json.dumps([f.model_dump() for f in req.files])
     row = await db.fetchrow(
         """
@@ -284,7 +345,7 @@ async def create_artifact(req: ArtifactSubmissionCreate, user: dict = Depends(re
         RETURNING *
         """,
         req.name, req.display_name, req.artifact_type,
-        req.description, req.instructions,
+        req.description, instructions,
         files_json, req.tags or [],
         user["id"],
     )
