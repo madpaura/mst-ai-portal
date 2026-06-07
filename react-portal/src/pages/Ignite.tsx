@@ -135,8 +135,6 @@ export const Ignite: React.FC = () => {
       api.get<Note[]>(`/video/videos/${video.slug}/notes`)
         .then(setNotes).catch(() => setNotes([]));
     }
-    // Track page view
-    api.post('/analytics/pageview', { path: `/ignite/${video.slug}` }).catch(() => {});
   }, []);
 
   // If URL has a videoSlug, try to load that video
@@ -157,6 +155,18 @@ export const Ignite: React.FC = () => {
   useEffect(() => {
     if (activeVideo?.slug) loadVideoData(activeVideo);
   }, [activeVideo, loadVideoData]);
+
+  // Record exactly one page view for the video the URL actually targets.
+  // (Guards against crediting a view to the transient default video that
+  // activeVideo briefly holds before the URL slug resolves.)
+  const lastViewedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const slug = activeVideo?.slug;
+    if (!slug || slug !== videoSlug) return;
+    if (lastViewedRef.current === slug) return;
+    lastViewedRef.current = slug;
+    api.post('/analytics/pageview', { path: `/ignite/${slug}` }).catch(() => {});
+  }, [activeVideo?.slug, videoSlug]);
 
   // Resume from ?t= param or local cached position when video changes
   useEffect(() => {
@@ -323,7 +333,7 @@ export const Ignite: React.FC = () => {
   const handleFormatList = () => {};
 
   return (
-    <div className="bg-background-light dark:bg-background-dark text-text-strong min-h-screen flex flex-col font-sans">
+    <div className="bg-background-light dark:bg-background-dark text-text-strong h-screen overflow-hidden flex flex-col font-sans">
       <Navbar variant="solutions" />
 
       <div className="flex flex-1 overflow-hidden pt-16">

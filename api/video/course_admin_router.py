@@ -25,7 +25,7 @@ async def admin_list_courses(admin: dict = Depends(require_admin)):
         CourseResponse(
             id=str(r["id"]), title=r["title"], slug=r["slug"],
             description=r.get("description"), sort_order=r["sort_order"],
-            video_count=r["video_count"],
+            video_count=r["video_count"], is_featured=r.get("is_featured", False),
         )
         for r in rows
     ]
@@ -38,15 +38,19 @@ async def admin_create_course(req: CourseCreate, admin: dict = Depends(require_a
     if existing:
         raise HTTPException(status_code=409, detail="Slug already exists")
 
+    # Only one course can be featured at a time — clear others first.
+    if req.is_featured:
+        await db.execute("UPDATE courses SET is_featured = FALSE WHERE is_featured = TRUE")
+
     row = await db.fetchrow(
-        "INSERT INTO courses (title, slug, description, sort_order) VALUES ($1,$2,$3,$4) RETURNING *",
-        req.title, req.slug, req.description, req.sort_order,
+        "INSERT INTO courses (title, slug, description, sort_order, is_featured) VALUES ($1,$2,$3,$4,$5) RETURNING *",
+        req.title, req.slug, req.description, req.sort_order, req.is_featured,
     )
     await cache.bump_version(cache.NS_VIDEO)
     return CourseResponse(
         id=str(row["id"]), title=row["title"], slug=row["slug"],
         description=row.get("description"), sort_order=row["sort_order"],
-        video_count=0,
+        video_count=0, is_featured=row.get("is_featured", False),
     )
 
 
@@ -60,10 +64,17 @@ async def admin_update_course(
         raise HTTPException(status_code=404, detail="Course not found")
 
     fields = {}
-    for field in ["title", "slug", "description", "sort_order"]:
+    for field in ["title", "slug", "description", "sort_order", "is_featured"]:
         val = getattr(req, field, None)
         if val is not None:
             fields[field] = val
+
+    # Only one course can be featured at a time — clear others before setting.
+    if fields.get("is_featured") is True:
+        await db.execute(
+            "UPDATE courses SET is_featured = FALSE WHERE is_featured = TRUE AND id <> $1",
+            course_id,
+        )
 
     if fields:
         set_parts = []
@@ -90,7 +101,7 @@ async def admin_update_course(
     return CourseResponse(
         id=str(row["id"]), title=row["title"], slug=row["slug"],
         description=row.get("description"), sort_order=row["sort_order"],
-        video_count=row["video_count"],
+        video_count=row["video_count"], is_featured=row.get("is_featured", False),
     )
 
 

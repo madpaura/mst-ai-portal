@@ -3,6 +3,26 @@ from typing import Optional
 from datetime import datetime
 
 
+class PlaylistResponse(BaseModel):
+    id: str
+    name: str
+    video_count: int = 0
+    video_slugs: list[str] = []
+    created_at: datetime
+
+
+class PlaylistCreate(BaseModel):
+    name: str
+
+
+class PlaylistUpdate(BaseModel):
+    name: str
+
+
+class PlaylistVideoAdd(BaseModel):
+    slug: str
+
+
 class CourseResponse(BaseModel):
     id: str
     title: str
@@ -11,6 +31,7 @@ class CourseResponse(BaseModel):
     sort_order: int
     video_count: int = 0
     thumbnail: Optional[str] = None
+    is_featured: bool = False
 
 
 class CourseCreate(BaseModel):
@@ -18,6 +39,7 @@ class CourseCreate(BaseModel):
     slug: str
     description: Optional[str] = None
     sort_order: int = 0
+    is_featured: bool = False
 
 
 class CourseUpdate(BaseModel):
@@ -25,6 +47,7 @@ class CourseUpdate(BaseModel):
     slug: Optional[str] = None
     description: Optional[str] = None
     sort_order: Optional[int] = None
+    is_featured: Optional[bool] = None
 
 
 class VideoResponse(BaseModel):
@@ -42,6 +65,7 @@ class VideoResponse(BaseModel):
     sort_order: int
     created_at: datetime
     transcript_status: Optional[str] = None
+    author_name: Optional[str] = None
 
 
 class VideoCreate(BaseModel):

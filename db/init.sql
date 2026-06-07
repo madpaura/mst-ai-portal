@@ -41,6 +41,7 @@ CREATE TABLE courses (
     slug        TEXT UNIQUE NOT NULL,
     description TEXT,
     is_active   BOOLEAN DEFAULT true,
+    is_featured BOOLEAN DEFAULT false,
     sort_order  INTEGER DEFAULT 0,
     created_at  TIMESTAMPTZ DEFAULT now()
 );
@@ -373,6 +374,33 @@ CREATE TABLE video_likes (
 );
 
 CREATE INDEX idx_video_likes_video ON video_likes(video_id);
+
+-- Saved / bookmarks (Ignite browse "Saved")
+CREATE TABLE video_bookmarks (
+    user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
+    video_id    UUID REFERENCES videos(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (user_id, video_id)
+);
+
+CREATE INDEX idx_video_bookmarks_user ON video_bookmarks(user_id);
+
+-- Custom user playlists (Ignite "My Playlists")
+CREATE TABLE playlists (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE playlist_videos (
+    playlist_id UUID REFERENCES playlists(id) ON DELETE CASCADE,
+    video_id    UUID REFERENCES videos(id) ON DELETE CASCADE,
+    added_at    TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (playlist_id, video_id)
+);
+
+CREATE INDEX idx_playlists_user ON playlists(user_id);
 
 ---------------------------------------------------
 -- PAGE VIEWS / VISITOR TRAFFIC

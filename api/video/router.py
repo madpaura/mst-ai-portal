@@ -11,6 +11,7 @@ from video.schemas import (
     CourseResponse, VideoResponse, ChapterResponse, ProgressResponse,
     ProgressUpdate, OverallProgressResponse, NoteResponse, NoteCreate,
     NoteUpdate, HowtoResponse, VideoLikeResponse, AttachmentResponse,
+    PlaylistResponse, PlaylistCreate, PlaylistUpdate, PlaylistVideoAdd,
 )
 from auth.dependencies import get_current_user, get_optional_user
 from database import get_db
@@ -90,6 +91,7 @@ async def list_courses():
                 id=str(r["id"]), title=r["title"], slug=r["slug"],
                 description=r.get("description"), sort_order=r["sort_order"],
                 video_count=r["video_count"], thumbnail=r.get("thumbnail"),
+                is_featured=r.get("is_featured", False),
             ).model_dump(mode="json")
             for r in rows
         ]
@@ -111,7 +113,7 @@ async def get_course(slug: str):
             "course": CourseResponse(
                 id=str(course["id"]), title=course["title"], slug=course["slug"],
                 description=course.get("description"), sort_order=course["sort_order"],
-                video_count=len(videos),
+                video_count=len(videos), is_featured=course.get("is_featured", False),
             ).model_dump(mode="json"),
             "videos": [
                 VideoResponse(
@@ -138,7 +140,13 @@ async def list_all_videos():
     async def _fetch():
         db = await get_db()
         rows = await db.fetch(
-            "SELECT * FROM videos WHERE is_published = true AND is_active = true ORDER BY sort_order",
+            """
+            SELECT v.*, u.display_name AS author_name
+            FROM videos v
+            LEFT JOIN users u ON u.id = v.created_by
+            WHERE v.is_published = true AND v.is_active = true
+            ORDER BY v.sort_order
+            """,
         )
         return [
             VideoResponse(
@@ -149,17 +157,69 @@ async def list_all_videos():
                 thumbnail=r.get("thumbnail"), is_published=r["is_published"],
                 sort_order=r["sort_order"], created_at=r["created_at"],
                 transcript_status=r.get("transcript_status"),
+                author_name=r.get("author_name"),
             ).model_dump(mode="json")
             for r in rows
         ]
     return await cache.get_or_set(cache.NS_VIDEO, "list", "videos", None, settings.REDIS_DEFAULT_TTL, _fetch)
 
 
+@router.get("/videos/stats")
+async def video_view_stats() -> dict[str, int]:
+    """Public per-video view counts keyed by slug, derived from page_views.
+
+    The player records a pageview at `/ignite/<slug>`; we aggregate those.
+    Lightly cached (short TTL) since exact real-time counts aren't required.
+    """
+    async def _fetch():
+        db = await get_db()
+        rows = await db.fetch(
+            """
+            SELECT path, COUNT(*) AS views
+            FROM page_views
+            WHERE section = 'ignite' AND path LIKE '/ignite/%'
+            GROUP BY path
+            """,
+        )
+        prefix = "/ignite/"
+        out: dict[str, int] = {}
+        for r in rows:
+            slug = r["path"][len(prefix):]
+            if slug:
+                out[slug] = out.get(slug, 0) + r["views"]
+        return out
+    return await cache.get_or_set(cache.NS_VIDEO, "stats", "views", None, 120, _fetch)
+
+
+@router.get("/videos/like-counts")
+async def video_like_counts() -> dict[str, int]:
+    """Public per-video like counts keyed by slug — powers the Top Rated view
+    (likes proxy until dedicated ratings land). Short-TTL cached."""
+    async def _fetch():
+        db = await get_db()
+        rows = await db.fetch(
+            """
+            SELECT v.slug, COUNT(l.user_id) AS likes
+            FROM videos v
+            JOIN video_likes l ON l.video_id = v.id
+            WHERE v.is_published = true AND v.is_active = true
+            GROUP BY v.slug
+            """,
+        )
+        return {r["slug"]: r["likes"] for r in rows}
+    return await cache.get_or_set(cache.NS_VIDEO, "stats", "likes", None, 120, _fetch)
+
+
 @router.get("/videos/{slug}", response_model=VideoResponse)
 async def get_video(slug: str):
     db = await get_db()
     row = await db.fetchrow(
-        "SELECT * FROM videos WHERE slug = $1 AND is_published = true AND is_active = true",
+        """
+        SELECT v.*, u.display_name AS author_name
+        FROM videos v
+        LEFT JOIN users u ON u.id = v.created_by
+        WHERE v.slug = $1 AND v.is_published = true AND v.is_active = true
+        """,
         slug,
     )
     if not row:
@@ -172,6 +232,7 @@ async def get_video(slug: str):
         thumbnail=row.get("thumbnail"), is_published=row["is_published"],
         sort_order=row["sort_order"], created_at=row["created_at"],
         transcript_status=row.get("transcript_status"),
+        author_name=row.get("author_name"),
     )
 
 
@@ -486,6 +547,164 @@ async def unlike_video(slug: str, user: dict = Depends(get_current_user)):
         "SELECT COUNT(*) FROM video_likes WHERE video_id = $1", video["id"]
     )
     return VideoLikeResponse(video_id=str(video["id"]), like_count=count, user_liked=False)
+
+
+# ── Video Bookmarks (Saved) ───────────────────────────────
+
+@router.get("/bookmarks")
+async def list_bookmarks(user: dict = Depends(get_current_user)) -> list[str]:
+    """Return slugs of the current user's saved (published) videos."""
+    db = await get_db()
+    rows = await db.fetch(
+        """
+        SELECT v.slug
+        FROM video_bookmarks b
+        JOIN videos v ON v.id = b.video_id
+        WHERE b.user_id = $1 AND v.is_published = true AND v.is_active = true
+        ORDER BY b.created_at DESC
+        """,
+        user["id"],
+    )
+    return [r["slug"] for r in rows]
+
+
+@router.post("/videos/{slug}/bookmark")
+async def add_bookmark(slug: str, user: dict = Depends(get_current_user)) -> dict:
+    db = await get_db()
+    video = await db.fetchrow(
+        "SELECT id FROM videos WHERE slug = $1 AND is_published = true AND is_active = true", slug
+    )
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    await db.execute(
+        "INSERT INTO video_bookmarks (user_id, video_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        user["id"], video["id"],
+    )
+    return {"video_id": str(video["id"]), "bookmarked": True}
+
+
+@router.delete("/videos/{slug}/bookmark")
+async def remove_bookmark(slug: str, user: dict = Depends(get_current_user)) -> dict:
+    db = await get_db()
+    video = await db.fetchrow(
+        "SELECT id FROM videos WHERE slug = $1 AND is_published = true AND is_active = true", slug
+    )
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    await db.execute(
+        "DELETE FROM video_bookmarks WHERE user_id = $1 AND video_id = $2",
+        user["id"], video["id"],
+    )
+    return {"video_id": str(video["id"]), "bookmarked": False}
+
+
+# ── Playlists (My Playlists) ──────────────────────────────
+
+async def _playlist_with_slugs(db, row) -> PlaylistResponse:
+    slugs = await db.fetch(
+        """
+        SELECT v.slug
+        FROM playlist_videos pv
+        JOIN videos v ON v.id = pv.video_id
+        WHERE pv.playlist_id = $1 AND v.is_published = true AND v.is_active = true
+        ORDER BY pv.added_at
+        """,
+        row["id"],
+    )
+    slug_list = [s["slug"] for s in slugs]
+    return PlaylistResponse(
+        id=str(row["id"]), name=row["name"], video_count=len(slug_list),
+        video_slugs=slug_list, created_at=row["created_at"],
+    )
+
+
+async def _owned_playlist(db, playlist_id: str, user_id):
+    row = await db.fetchrow(
+        "SELECT * FROM playlists WHERE id = $1 AND user_id = $2", playlist_id, user_id
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+    return row
+
+
+@router.get("/playlists", response_model=list[PlaylistResponse])
+async def list_playlists(user: dict = Depends(get_current_user)):
+    """Return the current user's custom playlists with their video slugs."""
+    db = await get_db()
+    rows = await db.fetch(
+        "SELECT * FROM playlists WHERE user_id = $1 ORDER BY created_at", user["id"]
+    )
+    return [await _playlist_with_slugs(db, r) for r in rows]
+
+
+@router.post("/playlists", response_model=PlaylistResponse)
+async def create_playlist(req: PlaylistCreate, user: dict = Depends(get_current_user)):
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    db = await get_db()
+    row = await db.fetchrow(
+        "INSERT INTO playlists (user_id, name) VALUES ($1, $2) RETURNING *",
+        user["id"], name,
+    )
+    return await _playlist_with_slugs(db, row)
+
+
+@router.put("/playlists/{playlist_id}", response_model=PlaylistResponse)
+async def rename_playlist(
+    playlist_id: UUIDPath, req: PlaylistUpdate, user: dict = Depends(get_current_user)
+):
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    db = await get_db()
+    await _owned_playlist(db, playlist_id, user["id"])
+    row = await db.fetchrow(
+        "UPDATE playlists SET name = $2 WHERE id = $1 RETURNING *", playlist_id, name
+    )
+    return await _playlist_with_slugs(db, row)
+
+
+@router.delete("/playlists/{playlist_id}")
+async def delete_playlist(playlist_id: UUIDPath, user: dict = Depends(get_current_user)) -> dict:
+    db = await get_db()
+    await _owned_playlist(db, playlist_id, user["id"])
+    await db.execute("DELETE FROM playlists WHERE id = $1", playlist_id)
+    return {"deleted": True}
+
+
+@router.post("/playlists/{playlist_id}/videos", response_model=PlaylistResponse)
+async def add_to_playlist(
+    playlist_id: UUIDPath, req: PlaylistVideoAdd, user: dict = Depends(get_current_user)
+):
+    db = await get_db()
+    row = await _owned_playlist(db, playlist_id, user["id"])
+    video = await db.fetchrow(
+        "SELECT id FROM videos WHERE slug = $1 AND is_published = true AND is_active = true",
+        req.slug,
+    )
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    await db.execute(
+        "INSERT INTO playlist_videos (playlist_id, video_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        playlist_id, video["id"],
+    )
+    return await _playlist_with_slugs(db, row)
+
+
+@router.delete("/playlists/{playlist_id}/videos/{slug}", response_model=PlaylistResponse)
+async def remove_from_playlist(
+    playlist_id: UUIDPath, slug: str, user: dict = Depends(get_current_user)
+):
+    db = await get_db()
+    row = await _owned_playlist(db, playlist_id, user["id"])
+    video = await db.fetchrow("SELECT id FROM videos WHERE slug = $1", slug)
+    if video:
+        await db.execute(
+            "DELETE FROM playlist_videos WHERE playlist_id = $1 AND video_id = $2",
+            playlist_id, video["id"],
+        )
+    return await _playlist_with_slugs(db, row)
 
 
 # ── Course Enrollment & Progress ──────────────────────────
