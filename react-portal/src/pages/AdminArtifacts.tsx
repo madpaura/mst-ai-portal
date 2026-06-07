@@ -109,13 +109,21 @@ export const AdminArtifacts: React.FC<{ embedded?: boolean }> = ({ embedded = fa
   const [urlParams] = useSearchParams();
   const initialParentSlug = urlParams.get('parent_slug') || '';
   const initialParentType = (urlParams.get('parent_type') || 'skill') as ArtifactType;
-  const [tab, setTab] = useState<'list' | 'new' | 'config'>(initialParentSlug ? 'new' : 'list');
+  const [tab, setTab] = useState<'list' | 'pick' | 'new' | 'config'>(initialParentSlug ? 'new' : 'list');
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [selected, setSelected] = useState<Artifact | null>(null);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [isEditing, setIsEditing] = useState(false);
+  const [allowedTypes, setAllowedTypes] = useState<ArtifactType[]>(['agent', 'skill', 'mcp']);
+  const [pickedType, setPickedType] = useState<ArtifactType>('agent');
+
+  useEffect(() => {
+    api.get<{ allowed: ArtifactType[] }>('/admin/artifacts/allowed-types')
+      .then(d => { if (d.allowed?.length) setAllowedTypes(d.allowed); })
+      .catch(() => {});
+  }, []);
 
   const fetchArtifacts = useCallback(async () => {
     setLoading(true);
@@ -159,8 +167,14 @@ export const AdminArtifacts: React.FC<{ embedded?: boolean }> = ({ embedded = fa
                 onClick={() => {
                   if (isEditing && !confirm('Discard unsaved changes?')) return;
                   setIsEditing(false);
-                  setTab('new');
                   setSelected(null);
+                  // One allowed type → skip the picker; otherwise confirm the type first
+                  if (allowedTypes.length === 1) {
+                    setPickedType(allowedTypes[0]);
+                    setTab('new');
+                  } else {
+                    setTab('pick');
+                  }
                 }}
                 className="flex items-center gap-1 px-2 py-1 rounded bg-primary/20 text-primary text-xs font-medium hover:bg-primary/30 transition-colors"
               >
@@ -240,12 +254,21 @@ export const AdminArtifacts: React.FC<{ embedded?: boolean }> = ({ embedded = fa
       <div className="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark">
         {tab === 'config' && isAdmin ? (
           <GithubConfigPanel />
+        ) : tab === 'pick' ? (
+          <TypePicker
+            allowed={allowedTypes}
+            onPick={(t) => { setPickedType(t); setTab('new'); }}
+            onCancel={() => setTab('list')}
+          />
         ) : tab === 'new' ? (
           <NewArtifactForm
             onCreated={handleCreated}
             onCancel={() => setTab('list')}
+            onChangeType={() => setTab('pick')}
             initialParentSlug={initialParentSlug}
             initialParentType={initialParentType}
+            initialType={pickedType}
+            canChangeType={allowedTypes.length > 1}
           />
         ) : selected ? (
           <ArtifactDetail
@@ -1009,6 +1032,49 @@ const FilesEditor: React.FC<{
   );
 };
 
+// ── Type picker (confirm step before the New form) ────────────────────────────
+
+const TYPE_BLURBS: Record<ArtifactType, string> = {
+  agent: 'A pre-configured AI agent with a defined role and toolset.',
+  skill: 'A reusable skill that extends an agent with new capabilities.',
+  mcp: 'A Model Context Protocol server exposing tools and data.',
+};
+
+const TypePicker: React.FC<{
+  allowed: ArtifactType[];
+  onPick: (t: ArtifactType) => void;
+  onCancel: () => void;
+}> = ({ allowed, onPick, onCancel }) => (
+  <div className="p-6 max-w-3xl">
+    <div className="flex items-center justify-between mb-1">
+      <h2 className="text-lg font-bold text-slate-900 dark:text-white">What are you contributing?</h2>
+      <button type="button" onClick={onCancel} className="text-text-muted hover:text-slate-900 dark:hover:text-white transition-colors">
+        <span className="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <p className="text-sm text-slate-500 mb-6">Pick a type to continue to the submission form.</p>
+
+    <div className="grid sm:grid-cols-3 gap-4">
+      {allowed.map(t => (
+        <button
+          key={t}
+          type="button"
+          onClick={() => onPick(t)}
+          className={`group flex flex-col items-start gap-3 p-5 rounded-xl border text-left transition-all hover:scale-[1.02] ${TYPE_COLORS[t]} hover:border-current`}
+        >
+          <span className="material-symbols-outlined text-3xl">{TYPE_ICONS[t]}</span>
+          <span className="text-base font-bold text-slate-900 dark:text-white">{TYPE_LABELS[t]}</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">{TYPE_BLURBS[t]}</span>
+          <span className="mt-auto pt-2 text-xs font-medium flex items-center gap-1">
+            Continue
+            <span className="material-symbols-outlined text-sm transition-transform group-hover:translate-x-0.5">arrow_forward</span>
+          </span>
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
 // ── New artifact form ─────────────────────────────────────────────────────────
 
 function zipNameToSlug(name: string): string {
@@ -1023,14 +1089,17 @@ function zipNameToTitle(name: string): string {
 const NewArtifactForm: React.FC<{
   onCreated: (a: Artifact) => void;
   onCancel: () => void;
+  onChangeType?: () => void;
   initialParentSlug?: string;
   initialParentType?: ArtifactType;
-}> = ({ onCreated, onCancel, initialParentSlug = '', initialParentType = 'skill' }) => {
+  initialType?: ArtifactType;
+  canChangeType?: boolean;
+}> = ({ onCreated, onCancel, onChangeType, initialParentSlug = '', initialParentType = 'skill', initialType = 'agent', canChangeType = false }) => {
   const isUpdateMode = !!initialParentSlug;
   const [form, setForm] = useState({
     name: initialParentSlug || '',
     display_name: '',
-    artifact_type: (initialParentSlug ? initialParentType : 'agent') as ArtifactType,
+    artifact_type: (initialParentSlug ? initialParentType : initialType) as ArtifactType,
     description: '',
     instructions: '',
     tags: '',
@@ -1136,22 +1205,24 @@ const NewArtifactForm: React.FC<{
       )}
 
       <div className="grid grid-cols-2 gap-4">
-        {/* Type */}
+        {/* Type — confirmed in the picker step */}
         <div className="col-span-2">
           <label className="block text-xs font-medium text-slate-400 mb-2 uppercase tracking-wider">Artifact Type</label>
-          <div className="flex gap-2">
-            {(['agent', 'skill', 'mcp'] as ArtifactType[]).map(t => (
+          <div className="flex items-center justify-between gap-2 py-3 px-4 rounded-lg border border-slate-300 dark:border-white/10">
+            <span className={`flex items-center gap-2 text-sm font-medium ${TYPE_COLORS[form.artifact_type].split(' ')[0]}`}>
+              <span className="material-symbols-outlined text-base">{TYPE_ICONS[form.artifact_type]}</span>
+              {TYPE_LABELS[form.artifact_type]}
+            </span>
+            {!isUpdateMode && canChangeType && onChangeType && (
               <button
-                key={t}
                 type="button"
-                disabled={isUpdateMode}
-                onClick={() => set('artifact_type', t)}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border text-sm font-medium transition-colors ${form.artifact_type === t ? `${TYPE_COLORS[t]} border-current` : 'border-white/10 text-slate-500 hover:border-white/20 hover:text-slate-300'} ${isUpdateMode ? 'opacity-60 cursor-not-allowed' : ''}`}
+                onClick={onChangeType}
+                className="text-xs font-medium text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1"
               >
-                <span className="material-symbols-outlined text-base">{TYPE_ICONS[t]}</span>
-                {TYPE_LABELS[t]}
+                <span className="material-symbols-outlined text-sm">swap_horiz</span>
+                Change
               </button>
-            ))}
+            )}
           </div>
         </div>
 
@@ -1287,13 +1358,27 @@ export const GithubConfigPanel: React.FC = () => {
   const [activeType, setActiveType] = useState<ArtifactType>('agent');
   const [testing, setTesting] = useState(false);
   const [connResult, setConnResult] = useState<ConnCheckResult | null>(null);
+  const [allowedTypes, setAllowedTypes] = useState<ArtifactType[]>(['agent', 'skill', 'mcp']);
 
   useEffect(() => {
-    api.get<GithubConfig>('/admin/artifacts/github-config')
-      .then(data => setConfig(data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.get<GithubConfig>('/admin/artifacts/github-config').then(setConfig).catch(() => {}),
+      api.get<{ allowed: ArtifactType[] }>('/admin/artifacts/allowed-types')
+        .then(d => { if (d.allowed?.length) setAllowedTypes(d.allowed); })
+        .catch(() => {}),
+    ]).finally(() => setLoading(false));
   }, []);
+
+  const toggleAllowed = (t: ArtifactType) => {
+    setAllowedTypes(prev => {
+      if (prev.includes(t)) {
+        if (prev.length === 1) return prev; // keep at least one
+        return prev.filter(x => x !== t);
+      }
+      // preserve canonical order
+      return (['agent', 'skill', 'mcp'] as ArtifactType[]).filter(x => x === t || prev.includes(x));
+    });
+  };
 
   const updateTypeConfig = (type: ArtifactType, field: keyof GithubTypeConfig, value: string) => {
     setConfig(c => ({ ...c, [type]: { ...c[type], [field]: value } }));
@@ -1316,7 +1401,10 @@ export const GithubConfigPanel: React.FC = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.put('/admin/artifacts/github-config', config);
+      await Promise.all([
+        api.put('/admin/artifacts/github-config', config),
+        api.put('/admin/artifacts/allowed-types', { allowed: allowedTypes }),
+      ]);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch { /* ignore */ } finally { setSaving(false); }
@@ -1339,6 +1427,30 @@ export const GithubConfigPanel: React.FC = () => {
           Each artifact type (Agent, Skill, MCP) can be published to a separate folder or repository.
           A GitHub Personal Access Token with <code className="bg-black/30 px-1 rounded">repo</code> scope is required.
         </p>
+      </div>
+
+      {/* Allowed submission types */}
+      <div className="mb-6">
+        <label className="block text-xs font-medium text-slate-400 mb-2 uppercase tracking-wider">Allowed Submission Types</label>
+        <p className="text-xs text-slate-500 mb-3">
+          Contributors can only submit the types you enable here. The “+ New” flow asks which of these to create.
+        </p>
+        <div className="flex gap-2">
+          {(['agent', 'skill', 'mcp'] as ArtifactType[]).map(t => {
+            const on = allowedTypes.includes(t);
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => toggleAllowed(t)}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-medium transition-colors ${on ? `${TYPE_COLORS[t]} border-current` : 'border-white/10 text-slate-500 hover:border-white/20 hover:text-slate-300'}`}
+              >
+                <span className="material-symbols-outlined text-base">{on ? 'check_circle' : TYPE_ICONS[t]}</span>
+                {TYPE_LABELS[t]}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Type tabs */}
