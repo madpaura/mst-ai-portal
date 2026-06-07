@@ -15,4 +15,4 @@ alembic==1.18.4
 psycopg2-binary==2.9.12
 redis[hiredis]==5.0.8
 slowapi==0.1.9
-bleach==6.2.0
+bleach==6.4.0
