@@ -1,8 +1,8 @@
 """skill version ownership — creator_user_id on forge_components, parent_slug+version_tag on artifact_submissions"""
 from alembic import op
 
-revision = '0022'
-down_revision = '0021'
+revision = '0023'
+down_revision = '0022'
 branch_labels = None
 depends_on = None
 
