@@ -8,6 +8,20 @@ import cache
 router = APIRouter()
 
 
+def _generate_howto_from_install_cmd(name: str, slug: str, install_command: str) -> str:
+    """Return a minimal how-to guide when none was provided, based on the install command."""
+    return (
+        f"## How to Install {name}\n\n"
+        f"```bash\n{install_command}\n```\n\n"
+        f"### Verify\n\n"
+        f"```bash\nnpx skills list --agent claude-code\n```\n\n"
+        f"### Update\n\n"
+        f"```bash\nnpx skills update {slug}\n```\n\n"
+        f"### Remove\n\n"
+        f"```bash\nnpx skills remove {slug}\n```\n"
+    )
+
+
 def _row_to_component(r) -> ForgeComponentResponse:
     return ForgeComponentResponse(
         id=str(r["id"]), slug=r["slug"], name=r["name"],
@@ -41,6 +55,11 @@ async def admin_create_component(req: ForgeComponentCreate, admin: dict = Depend
     if existing:
         raise HTTPException(status_code=409, detail="Slug already exists")
 
+    # Auto-generate howto_guide if not provided (Issue #167)
+    howto_guide = req.howto_guide
+    if not howto_guide:
+        howto_guide = _generate_howto_from_install_cmd(req.name, req.slug, req.install_command)
+
     row = await db.fetchrow(
         """
         INSERT INTO forge_components
@@ -53,7 +72,7 @@ async def admin_create_component(req: ForgeComponentCreate, admin: dict = Depend
         req.slug, req.name, req.component_type, req.description,
         req.long_description, req.icon, req.icon_color, req.version,
         req.install_command, req.badge, req.author, req.tags,
-        req.howto_guide, req.howto_guide_url, req.video_url,
+        howto_guide, req.howto_guide_url, req.video_url,
         req.manual_install,
     )
     await cache.bump_version(cache.NS_FORGE)

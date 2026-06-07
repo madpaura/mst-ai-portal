@@ -20,6 +20,56 @@ import asyncpg
 from loguru import logger as log
 
 
+# ── Install-command & howto helpers ──────────────────────────────────────────
+
+def _extract_owner_repo(git_url: str) -> Optional[str]:
+    """Return 'owner/repo' from a GitHub/GitLab URL, or None if unparseable."""
+    if not git_url:
+        return None
+    m = re.search(r'(?:github|gitlab)\.com[:/]([^/]+/[^/.]+?)(?:\.git)?/?$', git_url)
+    if m:
+        return m.group(1)
+    parts = git_url.rstrip('/').removesuffix('.git').rsplit('/', 2)
+    if len(parts) >= 2 and parts[-2] and parts[-1]:
+        return f"{parts[-2]}/{parts[-1]}"
+    return None
+
+
+def _generate_install_command(slug: str, git_repo_url: str, component_type: str = "skill") -> str:
+    """Return the canonical npx skills add install command for a component."""
+    owner_repo = _extract_owner_repo(git_repo_url)
+    repo_ref = owner_repo if owner_repo else "<owner/repo>"
+    return f"npx skills add {repo_ref} --skill {slug} --agent claude-code --global --yes"
+
+
+def _is_placeholder_install_command(cmd: Optional[str]) -> bool:
+    """True if the stored command is the old auto-generated placeholder."""
+    return not cmd or cmd.strip().startswith("forge install ")
+
+
+def _generate_howto_template(slug: str, name: str, git_repo_url: str, component_type: str = "skill") -> str:
+    """Return a standard how-to guide following the skills installation guide."""
+    owner_repo = _extract_owner_repo(git_repo_url) or "<owner/repo>"
+    return (
+        f"## How to Install {name}\n\n"
+        f"### Prerequisites\n\n"
+        f"Node.js 16+ required — verify with:\n\n"
+        f"```bash\nnode --version\n```\n\n"
+        f"### Install\n\n"
+        f"```bash\nnpx skills add {owner_repo} --skill {slug} --agent claude-code --global --yes\n```\n\n"
+        f"**Global CLI (faster for repeat use):**\n\n"
+        f"```bash\nnpm install -g skills\nskills add {owner_repo} --skill {slug} --agent claude-code --global --yes\n```\n\n"
+        f"### Verify\n\n"
+        f"```bash\nnpx skills list --agent claude-code\n```\n\n"
+        f"### Update\n\n"
+        f"```bash\nnpx skills update {slug}\n```\n\n"
+        f"### Remove\n\n"
+        f"```bash\nnpx skills remove {slug}\n```\n"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+
 async def _append_log(pool, job_id: int, message: str):
     """Append a timestamped line to the sync job log."""
     ts = datetime.utcnow().strftime("%H:%M:%S")
@@ -112,6 +162,15 @@ async def run_sync_job(job_id: int, db_url: str):
                     comp["git_repo_url"] = git_url
                     comp["git_ref"] = latest_tag or git_branch
 
+                    # Compute canonical install command and howto (Issue #167)
+                    install_cmd = _generate_install_command(
+                        comp["slug"], git_url, comp["component_type"]
+                    )
+                    howto_template = _generate_howto_template(
+                        comp["slug"], comp["name"], git_url, comp["component_type"]
+                    )
+                    extracted_howto = comp.get("howto_guide")  # from file; None if not found
+
                     # Check if component already exists
                     existing = await pool.fetchrow(
                         "SELECT id FROM forge_components WHERE slug = $1",
@@ -119,22 +178,38 @@ async def run_sync_job(job_id: int, db_url: str):
                     )
 
                     if existing:
-                        # Update existing
+                        # Update existing — conditionally refresh install_command and howto_guide:
+                        # • howto_guide: use file-extracted content if present; otherwise fill
+                        #   the template only when the DB currently has nothing.
+                        # • install_command: replace old 'forge install ...' placeholders.
                         await pool.execute(
                             """UPDATE forge_components SET
                                 name=$1, description=$2, long_description=$3, version=$4,
                                 git_repo_url=$5, git_ref=$6, last_synced_at=now(),
-                                howto_guide=$7, updated_at=now()
-                            WHERE slug=$8""",
+                                howto_guide = CASE
+                                    WHEN $7::text IS NOT NULL THEN $7
+                                    WHEN howto_guide IS NULL OR howto_guide = '' THEN $8
+                                    ELSE howto_guide
+                                END,
+                                install_command = CASE
+                                    WHEN install_command IS NULL OR install_command = ''
+                                         OR install_command LIKE 'forge install %' THEN $9
+                                    ELSE install_command
+                                END,
+                                updated_at=now()
+                            WHERE slug=$10""",
                             comp["name"], comp["description"], comp.get("long_description"),
                             comp.get("version", latest_tag or "v0.0.0"),
-                            git_url, comp["git_ref"], comp.get("howto_guide"),
+                            git_url, comp["git_ref"],
+                            extracted_howto, howto_template, install_cmd,
                             comp["slug"],
                         )
                         components_updated += 1
                         await _append_log(pool, job_id, f"  Updated: {comp['name']} ({comp['slug']})")
                     else:
-                        # Create new
+                        # Create new — always use generated install command; prefer extracted
+                        # howto from file, fall back to template.
+                        howto = extracted_howto or howto_template
                         await pool.execute(
                             """INSERT INTO forge_components
                                 (slug, name, component_type, description, long_description,
@@ -145,10 +220,10 @@ async def run_sync_job(job_id: int, db_url: str):
                             comp["description"], comp.get("long_description"),
                             comp.get("icon", "smart_toy"), comp.get("icon_color", "text-primary"),
                             comp.get("version", latest_tag or "v0.0.0"),
-                            comp.get("install_command", f"forge install {comp['slug']}"),
+                            install_cmd,
                             comp.get("author", "Auto-discovered"),
                             comp.get("tags", []),
-                            git_url, comp["git_ref"], comp.get("howto_guide"),
+                            git_url, comp["git_ref"], howto,
                         )
                         components_created += 1
                         await _append_log(pool, job_id, f"  Created: {comp['name']} ({comp['slug']})")
