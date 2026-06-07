@@ -56,6 +56,14 @@ class ArtifactSubmissionCreate(BaseModel):
     tags: list[str] = []
     parent_slug: Optional[str] = None
     version_tag: Optional[str] = None
+    version_bump: Optional[str] = None
+
+    @field_validator("version_bump")
+    @classmethod
+    def valid_bump(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in ("major", "minor", "patch"):
+            raise ValueError("version_bump must be major, minor, or patch")
+        return v
 
     @field_validator("name")
     @classmethod
@@ -105,6 +113,24 @@ class ArtifactSubmissionUpdate(BaseModel):
     files: Optional[list[ArtifactFile]] = None
     tags: Optional[list[str]] = None
     version_tag: Optional[str] = None
+
+
+class ArtifactVersionResponse(BaseModel):
+    id: str
+    name: str
+    artifact_type: str
+    version: str
+    description: Optional[str]
+    instructions: Optional[str]
+    files: list[ArtifactFile]
+    tags: list[str]
+    github_url: Optional[str]
+    published_by_name: Optional[str]
+    published_at: datetime
+
+
+class ArtifactVersionInfo(BaseModel):
+    current: Optional[str] = None
 
 
 class ValidationIssue(BaseModel):

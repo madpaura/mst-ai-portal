@@ -19,6 +19,8 @@ from typing import Optional
 import asyncpg
 from loguru import logger as log
 
+from howto_guides import generate_howto_guide, build_about_prompt, clamp_words, about_source_hash
+
 
 # ── Install-command & howto helpers ──────────────────────────────────────────
 
@@ -35,10 +37,26 @@ def _extract_owner_repo(git_url: str) -> Optional[str]:
     return None
 
 
+def _clean_repo_url(git_url: str) -> Optional[str]:
+    """Return a clean, browsable HTTPS repo URL (no credentials, no trailing .git)."""
+    if not git_url:
+        return None
+    url = git_url.strip()
+    # Normalise SSH form: git@host:owner/repo(.git) → https://host/owner/repo
+    m = re.match(r'git@([^:]+):(.+)', url)
+    if m:
+        url = f"https://{m.group(1)}/{m.group(2)}"
+    # Strip any embedded credentials (https://user:token@host/…)
+    url = re.sub(r'^(https?://)[^@/]+@', r'\1', url)
+    url = url.rstrip('/')
+    if url.endswith('.git'):
+        url = url[:-4]
+    return url or None
+
+
 def _generate_install_command(slug: str, git_repo_url: str, component_type: str = "skill") -> str:
-    """Return the canonical npx skills add install command for a component."""
-    owner_repo = _extract_owner_repo(git_repo_url)
-    repo_ref = owner_repo if owner_repo else "<owner/repo>"
+    """Return the canonical `npx skills add` install command using the full repo URL."""
+    repo_ref = _clean_repo_url(git_repo_url) or "<repo-url>"
     return f"npx skills add {repo_ref} --skill {slug} --agent claude-code --global --yes"
 
 
@@ -47,28 +65,28 @@ def _is_placeholder_install_command(cmd: Optional[str]) -> bool:
     return not cmd or cmd.strip().startswith("forge install ")
 
 
-def _generate_howto_template(slug: str, name: str, git_repo_url: str, component_type: str = "skill") -> str:
-    """Return a standard how-to guide following the skills installation guide."""
-    owner_repo = _extract_owner_repo(git_repo_url) or "<owner/repo>"
-    return (
-        f"## How to Install {name}\n\n"
-        f"### Prerequisites\n\n"
-        f"Node.js 16+ required — verify with:\n\n"
-        f"```bash\nnode --version\n```\n\n"
-        f"### Install\n\n"
-        f"```bash\nnpx skills add {owner_repo} --skill {slug} --agent claude-code --global --yes\n```\n\n"
-        f"**Global CLI (faster for repeat use):**\n\n"
-        f"```bash\nnpm install -g skills\nskills add {owner_repo} --skill {slug} --agent claude-code --global --yes\n```\n\n"
-        f"### Verify\n\n"
-        f"```bash\nnpx skills list --agent claude-code\n```\n\n"
-        f"### Update\n\n"
-        f"```bash\nnpx skills update {slug}\n```\n\n"
-        f"### Remove\n\n"
-        f"```bash\nnpx skills remove {slug}\n```\n"
-    )
+# Type-aware how-to guides now live in `howto_guides.generate_howto_guide`.
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+
+async def _make_about(name: str, component_type: str, source_text: str) -> str:
+    """LLM-polished, word-capped About text. Falls back to trimmed source on any failure."""
+    source = (source_text or "").strip()
+    if not source:
+        return ""
+    try:
+        # call_llm uses the app's global DB pool for settings; the sync worker runs
+        # in-process, so the pool is available.
+        from articles.llm import call_llm
+        raw = await call_llm(build_about_prompt(name, component_type, source))
+        about = clamp_words(raw)
+        if about:
+            return about
+    except Exception as e:  # LLM unavailable / misconfigured — degrade gracefully
+        log.warning(f"About LLM generation failed for {name}: {e}")
+    return clamp_words(source)
+
 
 async def _append_log(pool, job_id: int, message: str):
     """Append a timestamped line to the sync job log."""
@@ -162,62 +180,64 @@ async def run_sync_job(job_id: int, db_url: str):
                     comp["git_repo_url"] = git_url
                     comp["git_ref"] = latest_tag or git_branch
 
-                    # Compute canonical install command and howto (Issue #167)
+                    # Canonical install one-liner (Issue #167).
                     install_cmd = _generate_install_command(
                         comp["slug"], git_url, comp["component_type"]
                     )
-                    howto_template = _generate_howto_template(
-                        comp["slug"], comp["name"], git_url, comp["component_type"]
+                    # How-to guide: a type-aware install guide tailored to this artifact
+                    # (skill = npx skills, agent = ~/.claude/agents, mcp = claude mcp add).
+                    owner_repo = _extract_owner_repo(git_url)
+                    howto = generate_howto_guide(
+                        comp["slug"], comp["name"], comp["component_type"], owner_repo
                     )
-                    extracted_howto = comp.get("howto_guide")  # from file; None if not found
 
-                    # Check if component already exists
+                    # About text: LLM-polished (≤200 words), regenerated only when the
+                    # source README changed since the last sync.
+                    raw_source = comp.get("long_description") or comp.get("description") or ""
+                    new_hash = about_source_hash(raw_source)
+
                     existing = await pool.fetchrow(
-                        "SELECT id FROM forge_components WHERE slug = $1",
+                        "SELECT id, source_hash, long_description FROM forge_components WHERE slug = $1",
                         comp["slug"],
                     )
 
                     if existing:
-                        # Update existing — conditionally refresh install_command and howto_guide:
-                        # • howto_guide: use file-extracted content if present; otherwise fill
-                        #   the template only when the DB currently has nothing.
-                        # • install_command: replace old 'forge install ...' placeholders.
+                        unchanged = (
+                            existing["source_hash"] == new_hash
+                            and (existing["long_description"] or "").strip()
+                        )
+                        about = existing["long_description"] if unchanged else \
+                            await _make_about(comp["name"], comp["component_type"], raw_source)
                         await pool.execute(
                             """UPDATE forge_components SET
-                                name=$1, description=$2, long_description=$3, version=$4,
-                                git_repo_url=$5, git_ref=$6, last_synced_at=now(),
-                                howto_guide = CASE
-                                    WHEN $7::text IS NOT NULL THEN $7
-                                    WHEN howto_guide IS NULL OR howto_guide = '' THEN $8
-                                    ELSE howto_guide
-                                END,
+                                name=$1, description=$2, long_description=$3, source_hash=$4,
+                                version=$5, git_repo_url=$6, git_ref=$7, last_synced_at=now(),
+                                howto_guide=$8,
                                 install_command = CASE
                                     WHEN install_command IS NULL OR install_command = ''
-                                         OR install_command LIKE 'forge install %' THEN $9
+                                         OR install_command LIKE 'forge install %'
+                                         OR install_command LIKE 'npx skills add %' THEN $9
                                     ELSE install_command
                                 END,
                                 updated_at=now()
                             WHERE slug=$10""",
-                            comp["name"], comp["description"], comp.get("long_description"),
+                            comp["name"], comp["description"], about, new_hash,
                             comp.get("version", latest_tag or "v0.0.0"),
-                            git_url, comp["git_ref"],
-                            extracted_howto, howto_template, install_cmd,
+                            git_url, comp["git_ref"], howto, install_cmd,
                             comp["slug"],
                         )
                         components_updated += 1
                         await _append_log(pool, job_id, f"  Updated: {comp['name']} ({comp['slug']})")
                     else:
-                        # Create new — always use generated install command; prefer extracted
-                        # howto from file, fall back to template.
-                        howto = extracted_howto or howto_template
+                        about = await _make_about(comp["name"], comp["component_type"], raw_source)
                         await pool.execute(
                             """INSERT INTO forge_components
-                                (slug, name, component_type, description, long_description,
+                                (slug, name, component_type, description, long_description, source_hash,
                                  icon, icon_color, version, install_command, author, tags,
                                  git_repo_url, git_ref, last_synced_at, howto_guide)
-                            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now(),$14)""",
+                            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,now(),$15)""",
                             comp["slug"], comp["name"], comp["component_type"],
-                            comp["description"], comp.get("long_description"),
+                            comp["description"], about, new_hash,
                             comp.get("icon", "smart_toy"), comp.get("icon_color", "text-primary"),
                             comp.get("version", latest_tag or "v0.0.0"),
                             install_cmd,
@@ -326,6 +346,50 @@ def _find_readme(directory: str) -> Optional[str]:
     return None
 
 
+def _parse_frontmatter(fm_text: str) -> dict:
+    """
+    Minimal YAML frontmatter parser that also handles block scalars
+    (`key: >` folded and `key: |` literal) and indented continuation lines.
+
+    The previous line-by-line `key: value` regex captured a folded
+    `description: >` as just ">", losing the actual multi-line text.
+    """
+    fm: dict = {}
+    lines = fm_text.split("\n")
+    i = 0
+    while i < len(lines):
+        m = re.match(r'^([A-Za-z_][\w-]*)\s*:\s*(.*)$', lines[i])
+        if not m:
+            i += 1
+            continue
+        key = m.group(1).strip()
+        val = m.group(2).strip()
+
+        # Block scalar (`>`, `|`, with optional chomping +/-) or an empty value
+        # followed by indented lines → gather the continuation block.
+        if val in ("", ">", "|", ">-", "|-", ">+", "|+"):
+            block: list[str] = []
+            j = i + 1
+            while j < len(lines):
+                nxt = lines[j]
+                if nxt.strip() == "":
+                    block.append("")
+                    j += 1
+                    continue
+                if len(nxt) - len(nxt.lstrip()) == 0:  # next top-level key
+                    break
+                block.append(nxt.strip())
+                j += 1
+            text = " ".join(s for s in block if s).strip()  # fold to a single line
+            if text or val == "":
+                fm[key] = text
+            i = j
+        else:
+            fm[key] = val.strip('"').strip("'")
+            i += 1
+    return fm
+
+
 def _parse_component_from_readme(dirname: str, readme: str, dirpath: str) -> Optional[dict]:
     """Parse component metadata from a README or SKILL.md file."""
     # Parse YAML frontmatter if present (---\n...\n---)
@@ -335,10 +399,7 @@ def _parse_component_from_readme(dirname: str, readme: str, dirpath: str) -> Opt
     if fm_match:
         fm_text = fm_match.group(1)
         body = fm_match.group(2)
-        for line in fm_text.split("\n"):
-            m = re.match(r'^(\w[\w-]*)\s*:\s*(.+)$', line.strip())
-            if m:
-                frontmatter[m.group(1).strip()] = m.group(2).strip()
+        frontmatter = _parse_frontmatter(fm_text)
 
     # Try to determine component type from directory name or content
     component_type = "skill"

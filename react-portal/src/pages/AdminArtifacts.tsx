@@ -51,6 +51,20 @@ interface Artifact {
   updated_at: string;
 }
 
+interface ArtifactVersion {
+  id: string;
+  name: string;
+  artifact_type: ArtifactType;
+  version: string;
+  description: string | null;
+  instructions: string | null;
+  files: ArtifactFile[];
+  tags: string[];
+  github_url: string | null;
+  published_by_name: string | null;
+  published_at: string;
+}
+
 interface GithubTypeConfig {
   url: string;
   branch: string;
@@ -304,7 +318,8 @@ const ArtifactDetail: React.FC<{
   onRefresh: () => Promise<void>;
   onDelete: () => void;
 }> = ({ artifact, isAdmin, currentUserId, onEditModeChange, onRefresh, onDelete }) => {
-  const [detailTab, setDetailTab] = useState<'overview' | 'files' | 'instructions'>('overview');
+  const [detailTab, setDetailTab] = useState<'overview' | 'files' | 'instructions' | 'history'>('overview');
+  const [versions, setVersions] = useState<ArtifactVersion[] | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [validating, setValidating] = useState(false);
@@ -324,6 +339,17 @@ const ArtifactDetail: React.FC<{
   const canEdit = (isOwner || isAdmin) && ['draft', 'rejected'].includes(artifact.status);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
+
+  // Reset transient tab state when switching to a different artifact.
+  useEffect(() => { setVersions(null); setDetailTab('overview'); }, [artifact.id]);
+
+  // Lazy-load version history the first time the History tab is opened.
+  useEffect(() => {
+    if (detailTab !== 'history' || versions !== null) return;
+    api.get<ArtifactVersion[]>(`/admin/artifacts/${artifact.id}/versions`)
+      .then(setVersions)
+      .catch(() => setVersions([]));
+  }, [detailTab, versions, artifact.id]);
 
   const handleValidate = async () => {
     setValidating(true);
@@ -368,7 +394,11 @@ const ArtifactDetail: React.FC<{
   };
 
   const handleDelete = async () => {
-    if (!confirm('Delete this submission?')) return;
+    const wasPublished = artifact.status === 'published' || !!artifact.github_url;
+    const msg = wasPublished
+      ? `Delete "${artifact.display_name}"?\n\nThis also removes its folder from GitHub (and its MANIFEST.json / README.md entry) and deactivates the marketplace card. This cannot be undone.`
+      : 'Delete this submission?';
+    if (!confirm(msg)) return;
     try {
       await api.delete(`/admin/artifacts/${artifact.id}`);
       onDelete();
@@ -572,7 +602,7 @@ const ArtifactDetail: React.FC<{
 
       {/* Tabs */}
       <div className="flex gap-1 mb-4 border-b border-white/10">
-        {(['overview', 'files', 'instructions'] as const).map(t => (
+        {(['overview', 'files', 'instructions', 'history'] as const).map(t => (
           <button
             key={t}
             onClick={() => setDetailTab(t)}
@@ -580,6 +610,7 @@ const ArtifactDetail: React.FC<{
           >
             {t.charAt(0).toUpperCase() + t.slice(1)}
             {t === 'files' && ` (${artifact.files.length})`}
+            {t === 'history' && versions !== null && ` (${versions.length})`}
           </button>
         ))}
       </div>
@@ -684,6 +715,69 @@ const ArtifactDetail: React.FC<{
           )}
         </div>
       )}
+
+      {/* Tab: History */}
+      {detailTab === 'history' && <VersionHistory versions={versions} />}
+    </div>
+  );
+};
+
+// ── Version history (read-only) ───────────────────────────────────────────────
+
+const VersionHistory: React.FC<{ versions: ArtifactVersion[] | null }> = ({ versions }) => {
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  if (versions === null) {
+    return <div className="py-12 text-center text-slate-500 text-sm">Loading history…</div>;
+  }
+  if (versions.length === 0) {
+    return (
+      <div className="text-center py-12 text-slate-500">
+        <span className="material-symbols-outlined text-4xl mb-2 block">history</span>
+        <p className="text-sm">No published versions yet</p>
+        <p className="text-xs text-slate-600 mt-1">A snapshot is recorded each time this artifact is published.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {versions.map((v, i) => {
+        const isOpen = openId === v.id;
+        return (
+          <div key={v.id} className="border border-slate-200 dark:border-white/10 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setOpenId(isOpen ? null : v.id)}
+              className="w-full flex items-center gap-3 px-4 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 transition-colors text-left"
+            >
+              <span className="font-mono text-sm font-bold text-emerald-400">v{v.version}</span>
+              {i === 0 && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">latest</span>
+              )}
+              <span className="text-xs text-slate-500 flex-1 truncate">
+                {v.published_by_name || 'Unknown'} · {new Date(v.published_at).toLocaleString()}
+              </span>
+              <span className="text-xs text-slate-500">{v.files.length} file{v.files.length === 1 ? '' : 's'}</span>
+              <span className="material-symbols-outlined text-slate-500 text-sm">{isOpen ? 'expand_less' : 'expand_more'}</span>
+            </button>
+            {isOpen && (
+              <div className="p-4 space-y-3 border-t border-slate-200 dark:border-white/10">
+                {v.description && <p className="text-sm text-slate-600 dark:text-slate-300">{v.description}</p>}
+                <div className="flex items-center gap-3">
+                  {v.github_url && (
+                    <a href={v.github_url} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                      <span className="material-symbols-outlined text-sm">open_in_new</span>
+                      View on GitHub
+                    </a>
+                  )}
+                </div>
+                <FilesViewer files={v.files} />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -1086,6 +1180,14 @@ function zipNameToTitle(name: string): string {
   return raw.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
+function bumpSemver(current: string, level: 'major' | 'minor' | 'patch'): string {
+  const p = (current || '0.0.0').replace(/^v/i, '').split('.');
+  const maj = parseInt(p[0], 10) || 0, min = parseInt(p[1], 10) || 0, pat = parseInt(p[2], 10) || 0;
+  if (level === 'major') return `${maj + 1}.0.0`;
+  if (level === 'minor') return `${maj}.${min + 1}.0`;
+  return `${maj}.${min}.${pat + 1}`;
+}
+
 const NewArtifactForm: React.FC<{
   onCreated: (a: Artifact) => void;
   onCancel: () => void;
@@ -1104,14 +1206,27 @@ const NewArtifactForm: React.FC<{
     instructions: '',
     tags: '',
     parent_slug: initialParentSlug,
-    version_tag: '',
+    version_bump: 'patch' as 'major' | 'minor' | 'patch',
   });
   const [files, setFiles] = useState<ArtifactFile[]>([]);
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState('');
+  const [currentVersion, setCurrentVersion] = useState<string | null>(null);
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  // In update mode, look up the latest published version to preview the next bump.
+  useEffect(() => {
+    if (!isUpdateMode) return;
+    api.get<{ current: string | null }>(
+      `/admin/artifacts/version-info?name=${encodeURIComponent(initialParentSlug)}&artifact_type=${initialParentType}`,
+    ).then(d => setCurrentVersion(d.current)).catch(() => {});
+  }, [isUpdateMode, initialParentSlug, initialParentType]);
+
+  const nextVersion = currentVersion === null
+    ? '1.0.0'
+    : bumpSemver(currentVersion, form.version_bump);
 
   const handleZipDrop = async (zipName: string, droppedFiles: ArtifactFile[]) => {
     // Pre-fill name/display_name immediately from ZIP filename
@@ -1144,7 +1259,6 @@ const NewArtifactForm: React.FC<{
     e.preventDefault();
     if (!form.display_name.trim()) { setError('Display name is required'); return; }
     if (!form.name.trim()) { setError('Name (slug) is required'); return; }
-    if (isUpdateMode && !form.version_tag.trim()) { setError('Version tag is required for updates'); return; }
     setSaving(true);
     setError('');
     try {
@@ -1157,7 +1271,7 @@ const NewArtifactForm: React.FC<{
         tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
         files,
         parent_slug: form.parent_slug.trim() || null,
-        version_tag: form.version_tag.trim() || null,
+        version_bump: isUpdateMode ? form.version_bump : null,
       });
       onCreated(artifact);
     } catch (e: unknown) {
@@ -1282,19 +1396,29 @@ const NewArtifactForm: React.FC<{
           />
         </div>
 
-        {/* Version tag — only shown for updates */}
+        {/* Version bump — only shown for updates; resolved version assigned on publish */}
         {isUpdateMode && (
-          <div>
+          <div className="col-span-2">
             <label className="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">
-              Version Tag *
+              Version Bump
             </label>
-            <input
-              className="w-full bg-slate-100 dark:bg-white/5 border border-primary/40 rounded px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 font-mono focus:outline-none focus:border-primary/70"
-              value={form.version_tag}
-              onChange={e => set('version_tag', e.target.value)}
-              placeholder="1.2.0"
-            />
-            <p className="text-xs text-slate-600 mt-1">e.g. 1.0.0, 2.1.3 — used in the GitHub commit message</p>
+            <div className="flex gap-2">
+              {(['major', 'minor', 'patch'] as const).map(level => (
+                <button
+                  key={level}
+                  type="button"
+                  onClick={() => set('version_bump', level)}
+                  className={`flex-1 py-2 rounded-lg border text-sm font-medium capitalize transition-colors ${form.version_bump === level ? 'border-primary text-primary bg-primary/10' : 'border-white/10 text-slate-500 hover:border-white/20 hover:text-slate-300'}`}
+                >
+                  {level}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-slate-600 mt-1.5 font-mono">
+              {currentVersion ? `current v${currentVersion} → ` : 'first publish → '}
+              <span className="text-emerald-400">v{nextVersion}</span>
+              <span className="not-italic font-sans text-slate-500"> · assigned automatically when an admin publishes</span>
+            </p>
           </div>
         )}
       </div>

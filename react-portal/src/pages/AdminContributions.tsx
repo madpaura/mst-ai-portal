@@ -765,12 +765,12 @@ export const AdminContributions: React.FC = () => {
               placeholder="New password"
               className="w-full px-3 py-2 mb-1 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:border-primary outline-none"
             />
-            <p className="text-[11px] text-slate-400 mb-4">Min 6 chars, at least one letter and one number</p>
+            <p className="text-[11px] text-slate-400 mb-4">Min 8 chars, at least one letter and one number</p>
 
             <div className="flex gap-2">
               <button
                 type="submit"
-                disabled={resetting || resetPassword.length < 4}
+                disabled={resetting || resetPassword.length < 8}
                 className="flex-1 flex items-center justify-center gap-2 py-2 bg-primary hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
               >
                 {resetting

@@ -572,14 +572,12 @@ class ResetPasswordRequest(BaseModel):
 
 def _validate_password_strength(password: str) -> None:
     errors = []
-    if len(password) < 12:
-        errors.append("at least 12 characters")
-    has_upper = any(c.isupper() for c in password)
-    has_lower = any(c.islower() for c in password)
-    has_digit = any(c.isdigit() for c in password)
-    has_symbol = any(not c.isalnum() for c in password)
-    if sum([has_upper, has_lower, has_digit, has_symbol]) < 3:
-        errors.append("at least 3 of: uppercase letter, lowercase letter, digit, symbol")
+    if len(password) < 8:
+        errors.append("at least 8 characters")
+    if not any(c.isalpha() for c in password):
+        errors.append("at least one letter")
+    if not any(c.isdigit() for c in password):
+        errors.append("at least one number")
     if errors:
         raise HTTPException(status_code=400, detail=f"Password must contain: {', '.join(errors)}")
 
