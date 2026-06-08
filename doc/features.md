@@ -19,6 +19,26 @@ High-level summary of all major features.
 - **Per-creator isolation** — content creators see and manage only their own videos; admins see everything
 - **Ready-to-publish email** — when auto-mode finishes all jobs, the creator receives an email with review and preview links (sent once per video)
 
+### Browse & Discovery (IgniteBrowse)
+
+`/ignite` is now a full discovery landing page; the player opens at `/ignite/:videoSlug`.
+
+- **Featured-series hero** — admin-pinned featured course displayed prominently at the top
+- **Dynamic category pills** — filter the video grid by category in one click
+- **Discover modes** — Trending (view count), Top Rated (likes), Recently Added, Watch History, Saved
+- **Continue Watching** — cards show playback progress bar; restores your last position from local cache
+- **Playlists & Series row** — browse courses and custom playlists directly on the landing page
+- **Left-panel Library** — Saved, Watch History, Subscribed courses, and custom Playlists; selecting any item scopes the grid exclusively
+- **Fuzzy video search** — powered by Fuse.js; query persisted in the URL (`?q=`) so browser-back restores results; any sidebar selection clears search
+- **Per-card controls** — bookmark (save for later) and add-to-playlist actions on every card
+- **Uploader attribution** — creator name, view counts, and like counts shown on each card
+
+### Custom Playlists
+
+- Create, rename, and delete personal playlists
+- Add / remove individual videos from any playlist
+- Subscribed-courses view shows all enrolled courses alongside playlists
+
 ---
 
 ## Solutions
@@ -33,13 +53,32 @@ High-level summary of all major features.
 ## Marketplace (Forge)
 
 - Registry of agents, skills, and MCP servers
-- GitHub repo sync — scans configured repositories for component directories, reads `skill.md` / `README.md`, extracts how-to guides from `skill.md` first, then HOWTO.md, then README sections
+- GitHub repo sync — scans configured repositories for component directories, reads `skill.md` / `README.md`, extracts how-to guides from `skill.md` first, then HOWTO.md, then README sections; parses YAML folded/literal block scalars correctly
 - Per-component how-to guide — displayed as rendered Markdown in a new tab; admin can also set an external URL that overrides the synced guide
-- Zip download — clones the repo on-the-fly and packages the component directory
+- Zip download — clones the repo on-the-fly and packages the component directory; download counter increments on every ZIP and on install-command copy (deduped per session)
 - Card view (4-column grid) and list view with inline description and action icons
 - Filters by type (Agent / Skill / MCP Server) and verification badge
 - Site-wide search integration (name + description + component type)
+- **Install CMD tab** — shows the full install command for the component; uses `npx skills add <owner/repo> --skill <slug> --agent claude-code --global --yes` for skills, `~/.claude/agents/` path for agents, and `claude mcp add` / `mcp.json` instructions for MCP servers (auto-generated from the configured GitHub repo URL)
 - Admin: create, edit, activate/deactivate, delete individual or all components; set contributing guide video; configure how-to URL
+
+### Artifact Contributions
+
+- Contributors submit new agents, skills, or MCP servers via the **Artifact Hub** submission form
+- **Type picker** — clicking `+New` opens a type-confirm step (Agent / Skill / MCP) before the form; the chosen type is shown as a confirmed chip with a Change action
+- **Admin-controlled allowed types** — admins configure which artifact types contributors may submit from the GitHub config panel; disallowed types are hidden from the picker and rejected server-side
+- Submissions go through the Publish Authority review queue; admins can approve directly without queue
+- **Submit Update** — component owner or admin can submit a version update by linking to the existing component via `parent_slug`; the slug and type fields are locked and a version tag field is required
+- **Soft-delete** — component owner or any admin can remove a published component via a Delete button on the marketplace card
+
+### Artifact Lifecycle & Version History
+
+- **Version tagging** — each publish specifies a bump type (major / minor / patch) with a next-version preview; first publish defaults to `1.0.0`
+- **Version history tab** — every publish snapshots into `artifact_versions`; the artifact detail panel shows a read-only timeline of all past versions with dates
+- **GitHub integration** — publishing writes files to the configured GitHub repo; deleting a published artifact also removes its GitHub folder, drops its entry from the repo-root `MANIFEST.json` + `README.md`, and deactivates the marketplace card (`force=true` escape hatch if GitHub cleanup fails)
+- **MANIFEST.json & README.md** — publishing maintains a repo-root `MANIFEST.json` (keyed by type) and `README.md` Contents list in the madpaura/skills reference format; all entries kept in sync on every publish or delete
+- **LLM-generated About** — the artifact's `long_description` is rewritten via LLM into a friendly Markdown-formatted blurb (≤200 words); regenerated only when the source content changes (tracked by `source_hash` + `ABOUT_PROMPT_VERSION`); falls back to raw text if LLM is unavailable
+- **Type-aware install guides** — `api/howto_guides.py` produces standard Install / Verify / Update / Remove guides tailored to each artifact type; auto-populated when no guide is found in the repo
 
 ---
 
@@ -66,17 +105,18 @@ High-level summary of all major features.
 
 ## Admin Panel
 
-- **Videos** — upload, transcode, manage courses, chapters, transcripts, auto-mode jobs; user search/filter
+- **Videos** — upload, transcode, manage courses, chapters, transcripts, auto-mode jobs; user search/filter; single-featured course toggle
 - **Solutions** — CRUD for solution cards
 - **Articles** — CRUD for knowledge articles; AI beautify button
 - **Memes** — upload and manage meme gallery
 - **News** — manage RSS feeds and individual news items
-- **Marketplace** — component registry management, GitHub sync jobs, contributing guide config
+- **Marketplace** — component registry management, GitHub sync jobs, contributing guide config; configure allowed artifact types per contributor
 - **Forge Settings** — configure GitHub repo URL, token, branch, and scan paths for sync
 - **Analytics** — page-view counts and trends; **Memes tab** with daily click totals and per-meme breakdown
 - **Digest** — schedule and send learning digest emails (curated content newsletter)
 - **Settings** — SMTP configuration (including subject prefix), portal theme, transcript service URL/key, marketplace under-construction toggle, SAML settings path, **AI assistant enable/disable**, **assistant system prompt**
 - **Publish Authority** — review submit-for-publish requests from content creators; one-click approve/decline via portal UI or email action links
+- **Artifact Hub** — manage contributor submissions; approve or reject with version tagging; view per-artifact version history
 
 ---
 
