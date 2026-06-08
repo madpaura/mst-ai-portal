@@ -6,9 +6,9 @@ Corporate AI learning and tools portal — video courses, solutions showcase, co
 
 ## Features at a glance
 
-- **Ignite** — HLS video library with courses, chapters, AI-generated transcripts, closed captions, auto-metadata pipeline, and per-creator content isolation
+- **Ignite** — HLS video library with courses, chapters, AI-generated transcripts, closed captions, auto-metadata pipeline, and per-creator content isolation; **browse/discovery UI** with featured hero, discover modes (Trending, Top Rated, Recently Added), custom playlists, bookmarks, and in-page fuzzy search
 - **Solutions** — filterable solution card showcase (SW / HW / Other)
-- **Marketplace** — agent, skill, and MCP server registry with GitHub sync, how-to guides, and zip download
+- **Marketplace** — agent, skill, and MCP server registry with GitHub sync, type-aware install guides, zip download, contributor submission workflow, version history, and lifecycle management (MANIFEST.json, artifact deletion)
 - **Discover** — Articles, Memes (with click analytics), News feed with RSS/ingest support
 - **Search** — site-wide full-text + fuzzy typo-tolerant search across all content types
 - **AI Assistant** — floating chat widget with 21 portal-aware tools, multi-provider LLM (Ollama/OpenAI/Anthropic), admin-configurable system prompt

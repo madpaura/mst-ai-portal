@@ -21,17 +21,19 @@ mst-ai-portal/
 │   ├── database.py         # asyncpg pool helpers (get_db, init_db)
 │   ├── alembic/versions/   # Migrations — always add a new file, never edit old ones
 │   ├── auth/               # JWT + SAML + LDAP auth
-│   ├── video/              # Ignite video CRUD, auto-mode, course management
+│   ├── video/              # Ignite video CRUD, auto-mode, course management; bookmarks, playlists, stats
 │   ├── worker/             # transcoder.py, auto_processor.py (run as separate containers)
 │   ├── solutions/          # Solution cards + news feed CRUD
 │   ├── articles/           # Knowledge articles
-│   ├── forge/              # Scheduler, digest, sync worker
+│   ├── artifacts/          # Artifact Hub: submission, review, publish, version history, GitHub integration
+│   ├── forge/              # Scheduler, digest, sync worker; marketplace component CRUD
+│   ├── howto_guides.py     # Type-aware install/how-to guide generator (skill/agent/mcp)
 │   ├── settings/           # SMTP, admin settings, probe endpoint
 │   ├── analytics/          # Page-view tracking
 │   └── email_utils/        # SMTP helpers, digest templates
 ├── react-portal/           # Vite + React frontend
 │   └── src/
-│       ├── pages/          # AdminVideos, AdminSolutions, Solutions, Ignite, …
+│       ├── pages/          # AdminVideos, AdminSolutions, Solutions, Ignite, IgniteBrowse, AdminArtifacts, …
 │       ├── components/     # HlsPlayer, Navbar, IgniteSidebar, …
 │       ├── api/client.ts   # Typed fetch wrapper (api.get/post/put/delete)
 │       └── index.css       # Tailwind + custom animations

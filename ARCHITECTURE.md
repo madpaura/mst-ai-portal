@@ -103,17 +103,21 @@ Redis      — cache + rate limiting
 ## Database schema highlights
 
 - `videos` — core video metadata, status, hls_path, thumbnail; `created_by` (owner UUID), `auto_ready_notified`
-- `courses` + `video_chapters` — course structure, chapter timestamps
+- `courses` + `video_chapters` — course structure, chapter timestamps; `courses.is_featured` (single-featured toggle for IgniteBrowse hero)
 - `transcode_jobs` — worker queue with SKIP LOCKED
 - `auto_jobs` — auto-processor queue (transcript/metadata/chapters/howto)
 - `user_video_progress` — per-user watch position and completion
 - `user_notes` — timestamped video notes
+- `video_bookmarks` — per-user saved/bookmarked videos
+- `playlists` + `playlist_videos` — user-created custom playlists with ordered video membership
 - `articles` — knowledge base
 - `solutions` + `news_items` — solutions showcase + feed
-- `forge_components` — marketplace registry
+- `forge_components` — marketplace registry; `creator_user_id` tracks the submitting user for owner-gated controls
+- `artifact_submissions` — contributor submissions pending review; `parent_slug` links updates to an existing component, `version_tag` records the target version
+- `artifact_versions` — immutable snapshot of every published version (version string, timestamp, metadata)
 - `publish_requests` — submit-for-review records (target_type, target_id, status, reviewer)
 - `meme_clicks` — per-meme click log for redirect analytics (`/r/{meme_id}`)
-- `app_settings` — key/value admin config (SMTP, feature flags, assistant system prompt, `assistant_enabled`)
+- `app_settings` — key/value admin config (SMTP, feature flags, assistant system prompt, `assistant_enabled`, `artifact_allowed_types`)
 
 ## Security model
 
