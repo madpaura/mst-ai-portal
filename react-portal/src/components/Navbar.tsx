@@ -4,6 +4,7 @@ import { useAuth } from '../api/auth';
 import { useTheme } from '../context/theme';
 import { PortalLogo } from './PortalLogo';
 import { SearchBar } from './SearchBar';
+import { useVisibleCatalogTypes } from '../hooks/useCatalogTypes';
 const BETA_TAG = import.meta.env.VITE_BETA_TAG as string | undefined;
 
 interface NavbarProps {
@@ -34,6 +35,11 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
   const isDiscoverActive = location.pathname.startsWith('/memes') || location.pathname.startsWith('/news');
+  // The catalog (Agents / Skills / MCP) shares one page, filtered by ?type=.
+  // Sections under construction are dropped from the nav.
+  const catalogTypes = useVisibleCatalogTypes();
+  const catalogType = new URLSearchParams(location.search).get('type') || '';
+  const isCatalog = (type: string) => location.pathname.startsWith('/marketplace') && catalogType === type;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -75,7 +81,7 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
               </span>
             )}
           </div>
-          <div className="hidden md:flex flex-1 items-center justify-center gap-8">
+          <div className="hidden md:flex flex-1 items-center justify-center gap-6">
             <Link
               className={`text-sm font-medium transition-colors ${isActive('/') ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
               to="/"
@@ -88,12 +94,15 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
             >
               Learn
             </Link>
-            <Link
-              className={`text-sm font-medium transition-colors ${isActive('/marketplace') ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
-              to="/marketplace"
-            >
-              Marketplace
-            </Link>
+            {catalogTypes.map(t => (
+              <Link
+                key={t.key}
+                className={`text-sm font-medium transition-colors ${isCatalog(t.key) ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
+                to={`/marketplace?type=${t.key}`}
+              >
+                {t.label}
+              </Link>
+            ))}
             <Link
               className={`text-sm font-medium transition-colors ${isActive('/articles') ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
               to="/articles"
