@@ -92,6 +92,24 @@ class Histogram:
             prev_bound = _BOUNDS[i]
         return self.maxv
 
+    def to_dict(self) -> dict:
+        # sparse buckets to keep the payload small across process boundaries
+        return {"b": {i: c for i, c in enumerate(self.buckets) if c},
+                "count": self.count, "total": self.total,
+                "min": None if self.minv is math.inf else self.minv, "max": self.maxv}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Histogram":
+        h = cls()
+        for i, c in d.get("b", {}).items():
+            h.buckets[int(i)] = c
+        h.count = d.get("count", 0)
+        h.total = d.get("total", 0.0)
+        mn = d.get("min")
+        h.minv = math.inf if mn is None else mn
+        h.maxv = d.get("max", 0.0)
+        return h
+
     @property
     def mean(self) -> float:
         return self.total / self.count if self.count else 0.0
@@ -179,6 +197,35 @@ class LabelStats:
             error_kinds=self.error_kinds,
         )
         return d
+
+    def to_dict(self) -> dict:
+        return {"label": self.label, "hist": self.hist.to_dict(), "ok": self.ok,
+                "errors": self.errors, "bytes": self.bytes,
+                "status_counts": self.status_counts, "error_kinds": self.error_kinds,
+                "first_ts": self.first_ts, "last_ts": self.last_ts}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "LabelStats":
+        ls = cls(d["label"])
+        ls.hist = Histogram.from_dict(d["hist"])
+        ls.ok = d["ok"]; ls.errors = d["errors"]; ls.bytes = d["bytes"]
+        ls.status_counts = {int(k): v for k, v in d["status_counts"].items()}
+        ls.error_kinds = dict(d["error_kinds"])
+        ls.first_ts = d["first_ts"]; ls.last_ts = d["last_ts"]
+        return ls
+
+    def merge(self, other: "LabelStats") -> None:
+        self.hist.merge(other.hist)
+        self.ok += other.ok
+        self.errors += other.errors
+        self.bytes += other.bytes
+        for k, v in other.status_counts.items():
+            self.status_counts[k] = self.status_counts.get(k, 0) + v
+        for k, v in other.error_kinds.items():
+            self.error_kinds[k] = self.error_kinds.get(k, 0) + v
+        if other.first_ts and (self.first_ts == 0.0 or other.first_ts < self.first_ts):
+            self.first_ts = other.first_ts
+        self.last_ts = max(self.last_ts, other.last_ts)
 
 
 @dataclass
@@ -299,6 +346,67 @@ class Aggregator:
             mbytes=round(self.bytes / 1e6, 2),
         )
         return d
+
+    # ── cross-process serialization + merge (for --load-workers) ─────────────
+    def to_dict(self) -> dict:
+        return {
+            "labels": {k: v.to_dict() for k, v in self.labels.items()},
+            "overall": self.overall.to_dict(),
+            "timeline": {t: [b.requests, b.errors, b.latency_sum, b.inflight_max]
+                         for t, b in self.timeline.items()},
+            "ok": self.ok, "errors": self.errors, "bytes": self.bytes,
+            "start_ts": self.start_ts, "end_ts": self.end_ts,
+            "stage_hist": {s: h.to_dict() for s, h in self.stage_hist.items()},
+            "stage_ok": self.stage_ok, "stage_err": self.stage_err,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Aggregator":
+        a = cls()
+        a.labels = {k: LabelStats.from_dict(v) for k, v in d["labels"].items()}
+        a.overall = Histogram.from_dict(d["overall"])
+        for t, vals in d["timeline"].items():
+            ti = int(t)
+            b = SecondBucket(ti)
+            b.requests, b.errors, b.latency_sum, b.inflight_max = vals
+            a.timeline[ti] = b
+        a.ok = d["ok"]; a.errors = d["errors"]; a.bytes = d["bytes"]
+        a.start_ts = d["start_ts"]; a.end_ts = d["end_ts"]
+        a.stage_hist = {int(s): Histogram.from_dict(h) for s, h in d["stage_hist"].items()}
+        a.stage_ok = {int(s): v for s, v in d["stage_ok"].items()}
+        a.stage_err = {int(s): v for s, v in d["stage_err"].items()}
+        return a
+
+    def merge(self, other: "Aggregator") -> None:
+        for k, ls in other.labels.items():
+            if k in self.labels:
+                self.labels[k].merge(ls)
+            else:
+                self.labels[k] = ls
+        self.overall.merge(other.overall)
+        self.ok += other.ok
+        self.errors += other.errors
+        self.bytes += other.bytes
+        for t, b in other.timeline.items():
+            cur = self.timeline.get(t)
+            if cur is None:
+                self.timeline[t] = b
+            else:
+                cur.requests += b.requests
+                cur.errors += b.errors
+                cur.latency_sum += b.latency_sum
+                cur.inflight_max += b.inflight_max  # sum across processes
+        if other.start_ts is not None:
+            self.start_ts = other.start_ts if self.start_ts is None else min(self.start_ts, other.start_ts)
+        if other.end_ts is not None:
+            self.end_ts = other.end_ts if self.end_ts is None else max(self.end_ts, other.end_ts)
+        for s, h in other.stage_hist.items():
+            if s in self.stage_hist:
+                self.stage_hist[s].merge(h)
+            else:
+                self.stage_hist[s] = h
+            self.stage_ok[s] = self.stage_ok.get(s, 0) + other.stage_ok.get(s, 0)
+            self.stage_err[s] = self.stage_err.get(s, 0) + other.stage_err.get(s, 0)
 
     def timeline_rows(self) -> List[dict]:
         if not self.timeline:

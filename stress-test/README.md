@@ -108,15 +108,19 @@ stage is the sustainable load; the first failing stage is the breach.
 
 ## Safety / performance knobs
 
-- `--max-inflight 2000` — ceiling on concurrent in-flight units (protects the
-  load box; work shed at the ceiling is counted and signals saturation).
 - `--max-connections 1000` — HTTP connection-pool size.
 - `--request-timeout 30` · `--insecure` (skip TLS verify) · `--http2`.
+- `--load-workers N` — fork **N generator processes** to bypass Python's GIL
+  (one asyncio process maxes ~one core / a few hundred rps). The virtual users
+  are split across them and the results are merged at the histogram level, so
+  combined percentiles are exact. The live dashboard is disabled in this mode.
 
-> **Driving very high load (≈10k):** raise the file-descriptor limit on the load
-> box (`ulimit -n 65535`), increase `--max-connections`, and consider running
-> several `stressctl` processes across machines against the same target, then
-> merging their JSON reports.
+> **Run the generator on a separate, idle machine** — never on the portal host,
+> or it steals the CPU you're trying to measure. A single process is GIL-bound
+> to one core; use `--load-workers <cores>` to saturate a fast target, and for
+> very high load (≈10k) raise the file-descriptor limit (`ulimit -n 65535`),
+> bump `--max-connections`, and/or run `stressctl` on several machines and merge
+> their JSON reports.
 
 ---
 
