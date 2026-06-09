@@ -2,6 +2,7 @@ import os
 import re
 import uuid
 import bleach
+import asyncpg
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 
 from articles.schemas import (
@@ -17,6 +18,28 @@ import cache
 router = APIRouter()
 
 from articles.router import _sanitize  # shared sanitizer
+
+
+async def _unique_slug(db, base: str, exclude_id: str | None = None) -> str:
+    """Return a slug that is not already taken, appending -2, -3, … on collision.
+
+    Checks all rows (including soft-deleted ones) because the DB unique
+    constraint on articles.slug covers them too.
+    """
+    base = base.strip("-") or "article"
+    slug = base
+    suffix = 1
+    while True:
+        if exclude_id:
+            taken = await db.fetchval(
+                "SELECT id FROM articles WHERE slug = $1 AND id <> $2", slug, exclude_id
+            )
+        else:
+            taken = await db.fetchval("SELECT id FROM articles WHERE slug = $1", slug)
+        if not taken:
+            return slug
+        suffix += 1
+        slug = f"{base}-{suffix}"
 
 _MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024  # 20 MB
 _ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx"}
@@ -88,22 +111,33 @@ async def admin_list_articles(admin: dict = Depends(require_admin)):
 async def admin_create_article(req: ArticleCreate, admin: dict = Depends(require_admin)):
     db = await get_db()
 
-    slug = req.slug.strip() if req.slug else ""
-    if not slug:
-        slug = re.sub(r'[^a-z0-9]+', '-', req.title.lower()).strip('-')
+    base_slug = req.slug.strip() if req.slug else ""
+    if not base_slug:
+        base_slug = re.sub(r'[^a-z0-9]+', '-', req.title.lower()).strip('-')
 
-    existing = await db.fetchval("SELECT id FROM articles WHERE slug = $1", slug)
-    if existing:
-        slug = f"{slug}-{str(existing)[:8]}"
+    slug = await _unique_slug(db, base_slug)
 
-    row = await db.fetchrow(
-        """
-        INSERT INTO articles (title, slug, summary, content, category, author_id, author_name)
-        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *
-        """,
-        req.title, slug, req.summary, _sanitize(req.content), req.category,
-        admin["id"], admin.get("display_name", "Admin"),
-    )
+    try:
+        row = await db.fetchrow(
+            """
+            INSERT INTO articles (title, slug, summary, content, category, author_id, author_name)
+            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *
+            """,
+            req.title, slug, req.summary, _sanitize(req.content), req.category,
+            admin["id"], admin.get("display_name", "Admin"),
+        )
+    except asyncpg.UniqueViolationError:
+        # Lost a race for the slug between the check above and the insert.
+        # Retry once with a freshly computed unique slug.
+        slug = await _unique_slug(db, f"{base_slug}-{uuid.uuid4().hex[:6]}")
+        row = await db.fetchrow(
+            """
+            INSERT INTO articles (title, slug, summary, content, category, author_id, author_name)
+            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *
+            """,
+            req.title, slug, req.summary, _sanitize(req.content), req.category,
+            admin["id"], admin.get("display_name", "Admin"),
+        )
     await cache.bump_version(cache.NS_ARTICLES)
     return _row_to_response(row, [])
 
@@ -153,7 +187,10 @@ async def admin_update_article(
     if req.title is not None:
         updates["title"] = req.title
     if req.slug is not None:
-        updates["slug"] = req.slug
+        new_slug = req.slug.strip()
+        if not new_slug:
+            new_slug = re.sub(r'[^a-z0-9]+', '-', (req.title or row["title"]).lower()).strip('-')
+        updates["slug"] = await _unique_slug(db, new_slug, exclude_id=article_id)
     if req.summary is not None:
         updates["summary"] = req.summary
     if req.content is not None:
@@ -167,10 +204,16 @@ async def admin_update_article(
         set_clauses.append(f"updated_at = now()")
         values = list(updates.values())
         values.append(article_id)
-        await db.execute(
-            f"UPDATE articles SET {', '.join(set_clauses)} WHERE id = ${len(values)}",
-            *values,
-        )
+        try:
+            await db.execute(
+                f"UPDATE articles SET {', '.join(set_clauses)} WHERE id = ${len(values)}",
+                *values,
+            )
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(
+                status_code=409,
+                detail="That slug is already in use. Please choose a different title or slug.",
+            )
 
     row = await db.fetchrow("SELECT * FROM articles WHERE id = $1", article_id)
     attachments = await _get_attachments(db, article_id)
