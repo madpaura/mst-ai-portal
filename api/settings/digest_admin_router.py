@@ -10,6 +10,7 @@ import smtplib
 import socket
 import asyncpg
 import httpx
+from loguru import logger as log
 
 from auth.dependencies import require_admin
 from email_utils.digest import generate_learning_digest
@@ -697,19 +698,46 @@ async def query_inhouse_models(req: InhouseLLMQueryRequest, admin: dict = Depend
     headers = {"Accept": "application/json", **INHOUSE_LLM_HEADERS}
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    target = f"{url}/models"
+    log.info("Inhouse LLM query-models: GET {} (token={})", target, "yes" if token else "none")
     try:
         async with httpx.AsyncClient(timeout=12.0) as client:
-            resp = await client.get(f"{url}/models", headers=headers)
+            resp = await client.get(target, headers=headers)
+        body_snippet = (resp.text or "")[:500]
+        log.info(
+            "Inhouse LLM query-models response: status={} content-type={} body={!r}",
+            resp.status_code, resp.headers.get("content-type", ""), body_snippet,
+        )
         if resp.status_code == 200:
             return {"ok": True, "models": _normalize_model_list(resp.json())}
         if resp.status_code in (401, 403):
             return {"ok": False, "error": "Authentication failed — check the token."}
-        return {"ok": False, "error": f"Endpoint returned HTTP {resp.status_code}"}
-    except httpx.ConnectError:
+        if resp.status_code == 404:
+            log.warning(
+                "Inhouse LLM query-models 404 at {}. The gateway likely expects a versioned "
+                "path — try adding '/v1' to the Base URL (e.g. {}/v1).", target, url,
+            )
+            return {
+                "ok": False,
+                "error": (
+                    f"Endpoint returned HTTP 404 at {target}. "
+                    f"The gateway may expect a '/v1' prefix — try Base URL '{url}/v1'."
+                    + (f" Response: {body_snippet}" if body_snippet else "")
+                ),
+            }
+        return {
+            "ok": False,
+            "error": f"Endpoint returned HTTP {resp.status_code}"
+                     + (f": {body_snippet}" if body_snippet else ""),
+        }
+    except httpx.ConnectError as e:
+        log.warning("Inhouse LLM query-models connect error to {}: {}", target, e)
         return {"ok": False, "error": f"Cannot connect to {url}"}
     except httpx.TimeoutException:
+        log.warning("Inhouse LLM query-models timeout to {}", target)
         return {"ok": False, "error": f"Connection to {url} timed out"}
     except Exception as e:
+        log.exception("Inhouse LLM query-models unexpected error to {}", target)
         return {"ok": False, "error": str(e)[:200]}
 
 
@@ -739,9 +767,19 @@ async def test_inhouse_chat(req: InhouseLLMTestRequest, admin: dict = Depends(re
         "max_tokens": 16,
         "stream": False,
     }
+    target = f"{url}/chat/completions"
+    log.info(
+        "Inhouse LLM test-chat: POST {} model={} (token={})",
+        target, req.model, "yes" if token else "none",
+    )
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(f"{url}/chat/completions", headers=headers, json=body)
+            resp = await client.post(target, headers=headers, json=body)
+        body_snippet = (resp.text or "")[:500]
+        log.info(
+            "Inhouse LLM test-chat response: status={} content-type={} body={!r}",
+            resp.status_code, resp.headers.get("content-type", ""), body_snippet,
+        )
         if resp.status_code == 200:
             try:
                 reply = resp.json()["choices"][0]["message"]["content"]
@@ -750,12 +788,28 @@ async def test_inhouse_chat(req: InhouseLLMTestRequest, admin: dict = Depends(re
             return {"ok": True, "reply": (reply or "").strip()[:200]}
         if resp.status_code in (401, 403):
             return {"ok": False, "error": "Authentication failed — check the token."}
-        return {"ok": False, "error": f"Endpoint returned HTTP {resp.status_code}: {resp.text[:150]}"}
-    except httpx.ConnectError:
+        if resp.status_code == 404:
+            log.warning(
+                "Inhouse LLM test-chat 404 at {}. The gateway likely expects a '/v1' prefix "
+                "(e.g. {}/v1).", target, url,
+            )
+            return {
+                "ok": False,
+                "error": (
+                    f"Endpoint returned HTTP 404 at {target}. "
+                    f"Try Base URL '{url}/v1'."
+                    + (f" Response: {body_snippet}" if body_snippet else "")
+                ),
+            }
+        return {"ok": False, "error": f"Endpoint returned HTTP {resp.status_code}: {body_snippet[:150]}"}
+    except httpx.ConnectError as e:
+        log.warning("Inhouse LLM test-chat connect error to {}: {}", target, e)
         return {"ok": False, "error": f"Cannot connect to {url}"}
     except httpx.TimeoutException:
+        log.warning("Inhouse LLM test-chat timeout to {}", target)
         return {"ok": False, "error": f"Request to {url} timed out"}
     except Exception as e:
+        log.exception("Inhouse LLM test-chat unexpected error to {}", target)
         return {"ok": False, "error": str(e)[:200]}
 
 
