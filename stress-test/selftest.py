@@ -176,11 +176,50 @@ async def check_engine_breakpoint():
           f"{len(results['stages'])} stages, reports OK ({d})")
 
 
+def check_serialization_merge():
+    from loadtest.metrics import Aggregator, Sample
+    # two aggregators, merge, compare against a combined one
+    a = Aggregator(); b = Aggregator(); both = Aggregator()
+    for i in range(500):
+        s = Sample("ep", "GET", 200, True, 5.0 + (i % 50), 100, 1000.0 + i * 0.001, stage=1)
+        a.record(s); both.record(s)
+    for i in range(500):
+        s = Sample("ep", "GET", 500, False, 200.0 + (i % 50), 100, 1000.5 + i * 0.001, stage=1, error="http_500")
+        b.record(s); both.record(s)
+    # round-trip a through dict
+    a2 = Aggregator.from_dict(json.loads(json.dumps(a.to_dict())))
+    assert a2.total == a.total and a2.errors == a.errors
+    a2.merge(b)
+    assert a2.total == both.total == 1000
+    assert a2.errors == both.errors == 500
+    # merged percentiles must match the directly-combined aggregator
+    mp_ = a2.labels["ep"].hist.percentile(95)
+    bp_ = both.labels["ep"].hist.percentile(95)
+    assert abs(mp_ - bp_) < 1.0, (mp_, bp_)
+    print(f"  ✓ aggregator serialize + merge (p95 merged={mp_:.1f} == combined={bp_:.1f})")
+
+
+def check_multi_split():
+    from loadtest.multi import split_counts, total_breakpoint_schedule
+    from loadtest.engine import LoadConfig
+    assert split_counts(100, 4) == [25, 25, 25, 25]
+    assert split_counts(10, 3) == [4, 3, 3] and sum(split_counts(10, 3)) == 10
+    cfg = LoadConfig(base_url="x", start_vus=20, step_vus=20, max_vus=80)
+    assert total_breakpoint_schedule(cfg) == [20, 40, 60, 80]
+    # per-stage split sums back to the total at every stage
+    n = 3
+    for v in total_breakpoint_schedule(cfg):
+        assert sum(split_counts(v, n)) == v
+    print("  ✓ multi-worker VU split + schedule")
+
+
 async def amain():
     print("Running self-tests against in-process mock portal…")
     check_metrics()
     check_auth_roundtrip()
     check_hls_parse()
+    check_serialization_merge()
+    check_multi_split()
     await check_pipeline()
     await check_engine_breakpoint()
     print("\nALL SELF-TESTS PASSED ✅")

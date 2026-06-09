@@ -107,6 +107,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--max-connections", type=int, default=1000)
     s.add_argument("--count-4xx-as-error", action="store_true")
     s.add_argument("--seed", type=int, default=None)
+    s.add_argument("--load-workers", type=int, default=1,
+                   help="Fork N generator processes (bypass the GIL) and merge "
+                        "results. VUs are split across them. >1 disables the live dashboard.")
     o = r.add_argument_group("output")
     o.add_argument("--out-dir", default="reports")
     o.add_argument("--name", default=None, help="Report file prefix (default: timestamp)")
@@ -213,6 +216,18 @@ def _load_cfg(args) -> LoadConfig:
 async def cmd_run(args, console) -> int:
     pool, disc = await _setup(args, console, want_auth=True)
     cfg = _load_cfg(args)
+
+    # Multi-process generation: parent did the setup smoke-check above; children
+    # re-bootstrap and run their share. Runs synchronously (own processes).
+    if args.load_workers and args.load_workers > 1:
+        from loadtest.multi import run_multi
+        console.rule(f"[bold]Load run · {cfg.mode} · {args.load_workers} generator processes[/]")
+        console.print(f"[dim]→ forking {args.load_workers} workers, splitting VUs across them "
+                      f"(live dashboard disabled in multi-process mode)…[/]")
+        auth_dict = None if args.no_auth else _auth_cfg(args).__dict__
+        results = run_multi(cfg, auth_dict, args.load_workers, no_auth=args.no_auth)
+        return _finish_run(results, args, console)
+
     console.rule(f"[bold]Load run · {cfg.mode}[/]")
 
     engine = Engine(cfg, pool, disc)
@@ -233,7 +248,11 @@ async def cmd_run(args, console) -> int:
             if dash:
                 await dash
 
-    # write outputs
+    return _finish_run(results, args, console)
+
+
+def _finish_run(results, args, console) -> int:
+    """Write JSON/CSV/HTML and print the terminal summary."""
     os.makedirs(args.out_dir, exist_ok=True)
     name = args.name or f"stress_{time.strftime('%Y%m%d_%H%M%S')}"
     base = os.path.join(args.out_dir, name)
@@ -244,10 +263,6 @@ async def cmd_run(args, console) -> int:
     console.print()
     rpt.terminal_summary(results, console)
     console.print(f"\n[green]Reports written:[/] {base}.html  ·  {base}.json  ·  {base}.csv")
-    # exit non-zero if the run breached SLOs (useful in CI)
-    bp = results.get("breaking_point")
-    if bp and bp.get("first_breach_rps"):
-        return 0
     return 0
 
 

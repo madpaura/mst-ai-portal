@@ -31,6 +31,9 @@ class LoadConfig:
     step_vus: int = 25
     max_vus: int = 1000
     stage_seconds: float = 30.0
+    # explicit per-stage VU counts; when set, overrides start/step/max (used by
+    # child processes under --load-workers so each runs its share of the ramp)
+    vus_schedule: Optional[List[int]] = None
     # steady / soak / latency
     vus: int = 50
     duration: float = 120.0
@@ -181,6 +184,11 @@ class Engine:
                 pass  # a single failed unit must not kill the VU
             if self.cfg.think > 0 and not stage_stop.is_set():
                 await asyncio.sleep(random.expovariate(1.0 / self.cfg.think))
+            else:
+                # Always yield to the loop so the stage timer and live ticks can
+                # run even when responses return without real I/O (e.g. cached
+                # hits or in-memory transports). Negligible cost under real load.
+                await asyncio.sleep(0)
 
     # ── stage execution ──────────────────────────────────────────────────────
     async def _run_stage(self, vus: int, seconds: float, window: float) -> StageResult:
@@ -247,10 +255,18 @@ class Engine:
     async def _run_breakpoint(self) -> None:
         self.status["phase"] = "breakpoint"
         breaches = 0
-        vus = self.cfg.start_vus
-        idx = 0
-        while vus <= self.cfg.max_vus and not self._stop:
-            idx += 1
+        if self.cfg.vus_schedule:
+            schedule = list(enumerate(self.cfg.vus_schedule, start=1))
+        else:
+            schedule = []
+            vus, idx = self.cfg.start_vus, 0
+            while vus <= self.cfg.max_vus:
+                idx += 1
+                schedule.append((idx, vus))
+                vus += self.cfg.step_vus
+        for idx, vus in schedule:
+            if self._stop:
+                break
             self.stage = idx
             res = await self._run_stage(vus, self.cfg.stage_seconds, self.cfg.stage_seconds)
             self.stage_results.append(res)
@@ -258,37 +274,64 @@ class Engine:
                 breaches += 1
                 if self.cfg.stop_on_breach and breaches > self.cfg.breach_grace_stages:
                     break
-            vus += self.cfg.step_vus
 
     # ── results ──────────────────────────────────────────────────────────────
-    def _breaking_point(self) -> Dict:
-        last_pass = None
-        first_fail = None
-        for r in self.stage_results:
-            if r.passed:
-                last_pass = r
-            elif first_fail is None:
-                first_fail = r
-        return {
-            "sustainable_vus": last_pass.vus if last_pass else None,
-            "sustainable_rps": last_pass.achieved_rps if last_pass else None,
-            "first_breach_vus": first_fail.vus if first_fail else None,
-            "breach_reason": (
-                None if first_fail is None else
-                ("error_rate" if first_fail.error_rate > self.cfg.max_error_rate
-                 else "latency_p95")
-            ),
-        }
-
     def build_results(self) -> Dict:
-        return {
-            "config": self.cfg.__dict__,
-            "overall": self.agg.overall_summary(),
-            "by_label": {k: v.summary() for k, v in sorted(self.agg.labels.items())},
-            "stages": [r.__dict__ for r in self.stage_results],
-            "breaking_point": self._breaking_point() if self.cfg.mode == "breakpoint" else None,
-            "timeline": self.agg.timeline_rows(),
-            "identities": len(self.pool) if self.pool else 0,
-            "hls_videos": len(self.hls_masters),
-            "endpoints_active": [e.key for e in self.endpoints],
-        }
+        stage_vus = {r.index: r.vus for r in self.stage_results}
+        return assemble_results(
+            self.cfg, self.agg, stage_vus,
+            identities=len(self.pool) if self.pool else 0,
+            hls_videos=len(self.hls_masters),
+            endpoints_active=[e.key for e in self.endpoints],
+        )
+
+
+def breaking_point_from(stages: List[dict], cfg: LoadConfig) -> Dict:
+    last_pass = first_fail = None
+    for r in stages:
+        if r["passed"]:
+            last_pass = r
+        elif first_fail is None:
+            first_fail = r
+    return {
+        "sustainable_vus": last_pass["vus"] if last_pass else None,
+        "sustainable_rps": last_pass["achieved_rps"] if last_pass else None,
+        "first_breach_vus": first_fail["vus"] if first_fail else None,
+        "breach_reason": (
+            None if first_fail is None else
+            ("error_rate" if first_fail["error_rate"] > cfg.max_error_rate else "latency_p95")
+        ),
+    }
+
+
+def assemble_results(cfg: LoadConfig, agg, stage_vus: Dict[int, int], *,
+                     identities: int = 0, hls_videos: int = 0,
+                     endpoints_active: Optional[List[str]] = None) -> Dict:
+    """Build the results dict from an aggregator + a stage→VUs map.
+
+    Shared by the single-process engine and the multi-process merge so both
+    compute identical SLO/breaking-point logic over true (merged) histograms.
+    """
+    window = cfg.stage_seconds if cfg.mode == "breakpoint" else cfg.duration
+    stages = []
+    for idx in sorted(agg.stage_hist.keys()):
+        s = agg.stage_summary(idx)
+        passed = (s["error_rate"] <= cfg.max_error_rate and s["p95_ms"] <= cfg.max_p95_ms)
+        achieved = s["requests"] / window if window else 0.0
+        stages.append({
+            "index": idx, "vus": stage_vus.get(idx, 0), "requests": s["requests"],
+            "errors": s["errors"], "error_rate": s["error_rate"], "p50_ms": s["p50_ms"],
+            "p95_ms": s["p95_ms"], "p99_ms": s["p99_ms"],
+            "achieved_rps": round(achieved, 1), "passed": passed,
+        })
+    return {
+        "config": cfg.__dict__,
+        "overall": agg.overall_summary(),
+        "by_label": {k: v.summary() for k, v in sorted(agg.labels.items())},
+        "stages": stages,
+        "breaking_point": breaking_point_from(stages, cfg) if cfg.mode == "breakpoint" else None,
+        "timeline": agg.timeline_rows(),
+        "identities": identities,
+        "hls_videos": hls_videos,
+        "endpoints_active": endpoints_active or [],
+    }
