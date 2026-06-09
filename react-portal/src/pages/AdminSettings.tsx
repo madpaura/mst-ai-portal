@@ -15,6 +15,25 @@ export const AdminSettings: React.FC = () => {
   const [ollamaTesting, setOllamaTesting] = useState(false);
   const [ollamaTestResult, setOllamaTestResult] = useState<{ ok: boolean; models?: string[]; error?: string } | null>(null);
 
+  // In-house OpenAI-compatible LLM
+  type InhouseModel = { id: string; title: string; model: string; provider: string };
+  const [inhouse, setInhouse] = useState({
+    enabled: false,
+    base_url: '',
+    api_key: '',
+    model: '',
+    context_size: '',
+    max_output_tokens: '',
+    temperature: '0.3',
+  });
+  const [inhouseHasKey, setInhouseHasKey] = useState(false);
+  const [inhouseModels, setInhouseModels] = useState<InhouseModel[]>([]);
+  const [inhouseSaving, setInhouseSaving] = useState(false);
+  const [inhouseQuerying, setInhouseQuerying] = useState(false);
+  const [inhouseTesting, setInhouseTesting] = useState(false);
+  const [inhouseQueryResult, setInhouseQueryResult] = useState<{ ok: boolean; count?: number; error?: string } | null>(null);
+  const [inhouseTestResult, setInhouseTestResult] = useState<{ ok: boolean; reply?: string; error?: string } | null>(null);
+
   // Transcript service
   const [transcriptForm, setTranscriptForm] = useState({ url: '', api_key: '', model: 'large-v3' });
   const [transcriptTesting, setTranscriptTesting] = useState(false);
@@ -125,6 +144,27 @@ export const AdminSettings: React.FC = () => {
     } catch { }
   }, []);
 
+  const fetchInhouseConfig = useCallback(async () => {
+    try {
+      const data = await api.get<{
+        enabled?: boolean; base_url?: string; api_key?: string; model?: string;
+        context_size?: number; max_output_tokens?: number; temperature?: number;
+      } | null>('/settings/inhouse_llm_config');
+      if (data) {
+        setInhouse({
+          enabled: !!data.enabled,
+          base_url: data.base_url || '',
+          api_key: '',
+          model: data.model || '',
+          context_size: data.context_size != null ? String(data.context_size) : '',
+          max_output_tokens: data.max_output_tokens != null ? String(data.max_output_tokens) : '',
+          temperature: data.temperature != null ? String(data.temperature) : '0.3',
+        });
+        setInhouseHasKey(!!data.api_key);
+      }
+    } catch { }
+  }, []);
+
   const fetchAssistantConfig = useCallback(async () => {
     try {
       const data = await api.get<{ system_prompt: string; enabled?: boolean }>('/admin/assistant-config');
@@ -139,8 +179,9 @@ export const AdminSettings: React.FC = () => {
     fetchContactEmail();
     fetchCacheStats();
     fetchOllamaConfig();
+    fetchInhouseConfig();
     fetchAssistantConfig();
-  }, [fetchSmtpSettings, fetchTranscriptConfig, fetchContactEmail, fetchCacheStats, fetchOllamaConfig, fetchAssistantConfig]);
+  }, [fetchSmtpSettings, fetchTranscriptConfig, fetchContactEmail, fetchCacheStats, fetchOllamaConfig, fetchInhouseConfig, fetchAssistantConfig]);
 
   const handleOllamaSave = async () => {
     setOllamaSaving(true);
@@ -174,6 +215,74 @@ export const AdminSettings: React.FC = () => {
       setOllamaTestResult({ ok: false, error: toApiError(err) });
     } finally {
       setOllamaTesting(false);
+    }
+  };
+
+  const handleInhouseQuery = async () => {
+    setInhouseQuerying(true);
+    setInhouseQueryResult(null);
+    setInhouseTestResult(null);
+    try {
+      const res = await api.post<{ ok: boolean; models?: InhouseModel[]; error?: string }>('/admin/llm/query-models', {
+        base_url: inhouse.base_url.trim(),
+        api_key: inhouse.api_key || null,
+      });
+      if (res.ok && res.models) {
+        setInhouseModels(res.models);
+        setInhouseQueryResult({ ok: true, count: res.models.length });
+        if (!inhouse.model || !res.models.some(m => m.id === inhouse.model)) {
+          setInhouse(s => ({ ...s, model: res.models![0]?.id || '' }));
+        }
+      } else {
+        setInhouseQueryResult({ ok: false, error: res.error || 'Query failed' });
+      }
+    } catch (err: unknown) {
+      setInhouseQueryResult({ ok: false, error: toApiError(err) });
+    } finally {
+      setInhouseQuerying(false);
+    }
+  };
+
+  const handleInhouseTest = async () => {
+    setInhouseTesting(true);
+    setInhouseTestResult(null);
+    try {
+      const res = await api.post<{ ok: boolean; reply?: string; error?: string }>('/admin/llm/test-chat', {
+        base_url: inhouse.base_url.trim(),
+        api_key: inhouse.api_key || null,
+        model: inhouse.model,
+      });
+      setInhouseTestResult(res);
+    } catch (err: unknown) {
+      setInhouseTestResult({ ok: false, error: toApiError(err) });
+    } finally {
+      setInhouseTesting(false);
+    }
+  };
+
+  const handleInhouseSave = async () => {
+    setInhouseSaving(true);
+    try {
+      const value: Record<string, any> = {
+        enabled: inhouse.enabled,
+        base_url: inhouse.base_url.trim(),
+        model: inhouse.model,
+        context_size: inhouse.context_size ? Number(inhouse.context_size) : null,
+        max_output_tokens: inhouse.max_output_tokens ? Number(inhouse.max_output_tokens) : null,
+        temperature: inhouse.temperature ? Number(inhouse.temperature) : 0.3,
+      };
+      // Only send api_key when the admin typed a new one; blank preserves the stored token.
+      if (inhouse.api_key) value.api_key = inhouse.api_key;
+      await api.put('/settings/admin/inhouse_llm_config', { value });
+      if (inhouse.api_key) setInhouseHasKey(true);
+      setInhouse(s => ({ ...s, api_key: '' }));
+      showMsg('success', inhouse.enabled
+        ? 'In-house LLM saved — now the default for AI features'
+        : 'In-house LLM saved');
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
+    } finally {
+      setInhouseSaving(false);
     }
   };
 
@@ -339,6 +448,200 @@ export const AdminSettings: React.FC = () => {
                 <span className="font-mono text-slate-400">{ollamaSaved.url}</span>
                 {ollamaSaved.model && <span className="ml-1 text-slate-500">· {ollamaSaved.model}</span>}
               </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── In-House LLM (OpenAI-compatible) ────────────────────────── */}
+      <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-100 dark:border-white/5 p-6 mb-8">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-primary">hub</span>
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">In-House LLM</h2>
+              <p className="text-xs text-text-muted mt-0.5">
+                OpenAI-compatible endpoint (e.g. your org's gateway). When enabled, it becomes the default
+                LLM for the assistant, article AI, video Auto&nbsp;Mode and digests.
+              </p>
+            </div>
+          </div>
+          {/* Enable as default toggle */}
+          <label className="flex items-center gap-2 cursor-pointer shrink-0 pt-0.5">
+            <span className="text-xs font-bold text-text-muted uppercase tracking-wider">Default</span>
+            <button
+              type="button"
+              onClick={() => setInhouse(s => ({ ...s, enabled: !s.enabled }))}
+              className={`relative w-11 h-6 rounded-full transition-colors ${inhouse.enabled ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${inhouse.enabled ? 'translate-x-5' : ''}`} />
+            </button>
+          </label>
+        </div>
+        <div className="space-y-4">
+          {/* Base URL + Query */}
+          <div>
+            <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Base URL</label>
+            <div className="flex gap-3">
+              <input
+                type="url"
+                value={inhouse.base_url}
+                onChange={e => { setInhouse(s => ({ ...s, base_url: e.target.value })); setInhouseQueryResult(null); setInhouseModels([]); }}
+                placeholder="https://my-org.net/v1/roo"
+                className="flex-1 px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm font-mono focus:border-primary outline-none"
+              />
+              <button
+                onClick={handleInhouseQuery}
+                disabled={inhouseQuerying || !inhouse.base_url.trim()}
+                className="flex items-center gap-2 px-4 py-2 bg-muted-light dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-40 text-slate-700 dark:text-slate-200 text-sm font-bold rounded-lg transition-colors border border-slate-300 dark:border-white/10"
+              >
+                <span className={`material-symbols-outlined text-sm ${inhouseQuerying ? 'animate-spin' : ''}`}>
+                  {inhouseQuerying ? 'progress_activity' : 'cloud_sync'}
+                </span>
+                {inhouseQuerying ? 'Querying…' : 'Query Models'}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Full base path — we call <span className="font-mono">{'{base}/models'}</span> and <span className="font-mono">{'{base}/chat/completions'}</span>.
+            </p>
+          </div>
+
+          {/* Token */}
+          <div>
+            <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Token</label>
+            <input
+              type="password"
+              value={inhouse.api_key}
+              onChange={e => setInhouse(s => ({ ...s, api_key: e.target.value }))}
+              placeholder={inhouseHasKey ? '•••••••• (saved — leave blank to keep)' : 'Bearer token'}
+              className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm font-mono focus:border-primary outline-none"
+            />
+          </div>
+
+          {/* Query result */}
+          {inhouseQueryResult && (
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${inhouseQueryResult.ok
+              ? 'bg-green-500/10 text-green-400 border-green-500/30'
+              : 'bg-red-500/10 text-red-400 border-red-500/30'
+            }`}>
+              <span className="material-symbols-outlined text-base">{inhouseQueryResult.ok ? 'check_circle' : 'error'}</span>
+              {inhouseQueryResult.ok ? `Found ${inhouseQueryResult.count ?? 0} model(s)` : inhouseQueryResult.error}
+            </div>
+          )}
+
+          {/* Model selection */}
+          <div>
+            <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Model</label>
+            {inhouseModels.length > 0 ? (
+              <select
+                value={inhouse.model}
+                onChange={e => setInhouse(s => ({ ...s, model: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
+              >
+                {inhouseModels.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.title && m.title !== m.id ? `${m.title} — ${m.id}` : m.id}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-100/50 dark:bg-slate-900/50 border border-slate-100 dark:border-white/5">
+                {inhouse.model ? (
+                  <span className="text-sm text-slate-300 font-mono">{inhouse.model}</span>
+                ) : (
+                  <span className="text-sm text-slate-500">Query models to choose, or type below</span>
+                )}
+              </div>
+            )}
+            {inhouseModels.length === 0 && (
+              <input
+                type="text"
+                value={inhouse.model}
+                onChange={e => setInhouse(s => ({ ...s, model: e.target.value }))}
+                placeholder="Model id (e.g. DSllmOCoder)"
+                className="w-full mt-2 px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm font-mono focus:border-primary outline-none"
+              />
+            )}
+          </div>
+
+          {/* Context size + max output + temperature */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Context Size</label>
+              <input
+                type="number"
+                min={0}
+                value={inhouse.context_size}
+                onChange={e => setInhouse(s => ({ ...s, context_size: e.target.value }))}
+                placeholder="196000"
+                className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm font-mono focus:border-primary outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Max Output</label>
+              <input
+                type="number"
+                min={0}
+                value={inhouse.max_output_tokens}
+                onChange={e => setInhouse(s => ({ ...s, max_output_tokens: e.target.value }))}
+                placeholder="16384"
+                className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm font-mono focus:border-primary outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Temperature</label>
+              <input
+                type="number"
+                min={0}
+                max={2}
+                step={0.1}
+                value={inhouse.temperature}
+                onChange={e => setInhouse(s => ({ ...s, temperature: e.target.value }))}
+                placeholder="0.3"
+                className="w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm font-mono focus:border-primary outline-none"
+              />
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-500 -mt-1">
+            Context size is informational (model property). Max&nbsp;Output is sent as <span className="font-mono">max_tokens</span>.
+          </p>
+
+          {/* Test result */}
+          {inhouseTestResult && (
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${inhouseTestResult.ok
+              ? 'bg-green-500/10 text-green-400 border-green-500/30'
+              : 'bg-red-500/10 text-red-400 border-red-500/30'
+            }`}>
+              <span className="material-symbols-outlined text-base">{inhouseTestResult.ok ? 'check_circle' : 'error'}</span>
+              {inhouseTestResult.ok ? `Model responded: "${inhouseTestResult.reply || '(empty)'}"` : inhouseTestResult.error}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              onClick={handleInhouseSave}
+              disabled={inhouseSaving || !inhouse.base_url.trim()}
+              className="flex items-center gap-2 px-5 py-2 bg-primary hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-bold rounded-lg transition-colors"
+            >
+              <span className="material-symbols-outlined text-sm">save</span>
+              {inhouseSaving ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              onClick={handleInhouseTest}
+              disabled={inhouseTesting || !inhouse.base_url.trim() || !inhouse.model}
+              className="flex items-center gap-2 px-4 py-2 bg-muted-light dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-40 text-slate-700 dark:text-slate-200 text-sm font-bold rounded-lg transition-colors border border-slate-300 dark:border-white/10"
+            >
+              <span className={`material-symbols-outlined text-sm ${inhouseTesting ? 'animate-spin' : ''}`}>
+                {inhouseTesting ? 'progress_activity' : 'bolt'}
+              </span>
+              {inhouseTesting ? 'Testing…' : 'Test Chat'}
+            </button>
+            {inhouse.enabled && (
+              <span className="text-xs text-green-400 flex items-center gap-1 ml-auto">
+                <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                Default LLM
+              </span>
             )}
           </div>
         </div>

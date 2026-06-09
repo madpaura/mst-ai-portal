@@ -5,6 +5,7 @@ from typing import Optional, List
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import json
 import smtplib
 import socket
 import asyncpg
@@ -15,6 +16,7 @@ from email_utils.digest import generate_learning_digest
 from email_utils.utils import send_email_multi
 from config import settings
 from database import get_db
+from articles.llm import INHOUSE_LLM_HEADERS
 
 router = APIRouter()
 
@@ -635,6 +637,124 @@ async def test_ollama(req: OllamaTestRequest, admin: dict = Depends(require_admi
         return {"ok": False, "error": f"Cannot connect to {url}"}
     except httpx.TimeoutException:
         return {"ok": False, "error": f"Connection timed out — is Ollama running at {url}?"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+# ── In-house OpenAI-compatible LLM ────────────────────────────────────────────
+
+class InhouseLLMQueryRequest(BaseModel):
+    base_url: str
+    api_key: str | None = None
+
+
+def _normalize_model_list(data) -> list[dict]:
+    """Normalize a /models response into [{id, title, model, provider}].
+
+    Handles both the in-house shape ({"data":[{id,title,model,provider}]}) and the
+    standard OpenAI shape ({"data":[{id, ...}]})."""
+    items = data.get("data") if isinstance(data, dict) else data
+    if not isinstance(items, list):
+        return []
+    out = []
+    for m in items:
+        if not isinstance(m, dict):
+            continue
+        mid = m.get("id") or m.get("model")
+        if not mid:
+            continue
+        out.append({
+            "id": mid,
+            "title": m.get("title") or mid,
+            "model": m.get("model") or mid,
+            "provider": m.get("provider") or "",
+        })
+    return out
+
+
+async def _resolve_inhouse_token(db, supplied: str | None) -> str | None:
+    """Use the supplied token, or fall back to the saved one when the admin left it blank
+    (the GET endpoint masks it, so the UI may not have the real value)."""
+    if supplied:
+        return supplied
+    row = await db.fetchrow("SELECT value FROM app_settings WHERE key = 'inhouse_llm_config'")
+    if row:
+        try:
+            return json.loads(row["value"]).get("api_key") or None
+        except Exception:
+            return None
+    return None
+
+
+@router.post("/llm/query-models")
+async def query_inhouse_models(req: InhouseLLMQueryRequest, admin: dict = Depends(require_admin)):
+    """Query an OpenAI-compatible endpoint for its available models (GET {base_url}/models)."""
+    db = await get_db()
+    url = req.base_url.strip().rstrip("/")
+    if not url:
+        return {"ok": False, "error": "Base URL is required"}
+    token = await _resolve_inhouse_token(db, req.api_key)
+    headers = {"Accept": "application/json", **INHOUSE_LLM_HEADERS}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            resp = await client.get(f"{url}/models", headers=headers)
+        if resp.status_code == 200:
+            return {"ok": True, "models": _normalize_model_list(resp.json())}
+        if resp.status_code in (401, 403):
+            return {"ok": False, "error": "Authentication failed — check the token."}
+        return {"ok": False, "error": f"Endpoint returned HTTP {resp.status_code}"}
+    except httpx.ConnectError:
+        return {"ok": False, "error": f"Cannot connect to {url}"}
+    except httpx.TimeoutException:
+        return {"ok": False, "error": f"Connection to {url} timed out"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+class InhouseLLMTestRequest(BaseModel):
+    base_url: str
+    api_key: str | None = None
+    model: str
+
+
+@router.post("/llm/test-chat")
+async def test_inhouse_chat(req: InhouseLLMTestRequest, admin: dict = Depends(require_admin)):
+    """Send a tiny chat completion to verify the endpoint + token + model actually work."""
+    db = await get_db()
+    url = req.base_url.strip().rstrip("/")
+    if not url:
+        return {"ok": False, "error": "Base URL is required"}
+    if not req.model:
+        return {"ok": False, "error": "Select a model first"}
+    token = await _resolve_inhouse_token(db, req.api_key)
+    headers = {"Content-Type": "application/json", **INHOUSE_LLM_HEADERS}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    body = {
+        "model": req.model,
+        "messages": [{"role": "user", "content": "Reply with the single word: ok"}],
+        "temperature": 0,
+        "max_tokens": 16,
+        "stream": False,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(f"{url}/chat/completions", headers=headers, json=body)
+        if resp.status_code == 200:
+            try:
+                reply = resp.json()["choices"][0]["message"]["content"]
+            except Exception:
+                reply = ""
+            return {"ok": True, "reply": (reply or "").strip()[:200]}
+        if resp.status_code in (401, 403):
+            return {"ok": False, "error": "Authentication failed — check the token."}
+        return {"ok": False, "error": f"Endpoint returned HTTP {resp.status_code}: {resp.text[:150]}"}
+    except httpx.ConnectError:
+        return {"ok": False, "error": f"Cannot connect to {url}"}
+    except httpx.TimeoutException:
+        return {"ok": False, "error": f"Request to {url} timed out"}
     except Exception as e:
         return {"ok": False, "error": str(e)[:200]}
 

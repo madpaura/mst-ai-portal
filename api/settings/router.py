@@ -14,6 +14,7 @@ class UpdateSettingRequest(BaseModel):
 _MASKED_KEYS = {
     "smtp_config": "smtp_password",
     "transcript_config": "api_key",
+    "inhouse_llm_config": "api_key",
 }
 
 @router.get("/{key}")

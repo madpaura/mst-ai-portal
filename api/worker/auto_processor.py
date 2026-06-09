@@ -192,6 +192,32 @@ async def _get_transcript_settings(pool: asyncpg.Pool) -> dict:
 
 async def _call_llm(pool: asyncpg.Pool, prompt: str) -> str:
     """Call the configured LLM provider."""
+    # In-house OpenAI-compatible provider takes precedence when enabled.
+    inhouse_row = await pool.fetchrow("SELECT value FROM app_settings WHERE key = 'inhouse_llm_config'")
+    if inhouse_row:
+        try:
+            ih = json.loads(inhouse_row["value"])
+        except Exception:
+            ih = None
+        if isinstance(ih, dict) and ih.get("enabled") and (ih.get("base_url") or "").strip():
+            from articles.llm import INHOUSE_LLM_HEADERS
+            base_url = ih["base_url"].strip().rstrip("/")
+            headers = {"Content-Type": "application/json", **INHOUSE_LLM_HEADERS}
+            if ih.get("api_key"):
+                headers["Authorization"] = f"Bearer {ih['api_key']}"
+            body: dict = {
+                "model": ih.get("model") or "",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": ih.get("temperature", 0.3),
+                "stream": False,
+            }
+            if ih.get("max_output_tokens"):
+                body["max_tokens"] = ih["max_output_tokens"]
+            async with httpx.AsyncClient(timeout=180.0) as client:
+                resp = await client.post(f"{base_url}/chat/completions", headers=headers, json=body)
+                resp.raise_for_status()
+                return resp.json()["choices"][0]["message"]["content"]
+
     row = await pool.fetchrow(
         "SELECT llm_provider, llm_model, llm_api_key, ollama_url FROM forge_settings WHERE is_active = true LIMIT 1"
     )

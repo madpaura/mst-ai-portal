@@ -5,7 +5,7 @@ import httpx
 from dataclasses import dataclass, field
 from typing import AsyncIterator
 
-from articles.llm import get_llm_settings
+from articles.llm import get_llm_settings, INHOUSE_LLM_HEADERS
 from config import settings
 
 
@@ -158,6 +158,16 @@ async def call_llm_with_tools(
     if provider == "ollama":
         raw = await _call_ollama_with_tools(messages, tools, model, ollama_url, system_prompt)
         return parse_ollama_response(raw)
+    elif provider == "openai_compatible":
+        base_url = llm.get("base_url")
+        if not base_url:
+            raise RuntimeError("In-house LLM base URL not configured in Settings.")
+        raw = await _call_openai_with_tools(
+            messages, tools, model, api_key, system_prompt,
+            base_url=base_url, max_tokens=llm.get("max_output_tokens"),
+            extra_headers=INHOUSE_LLM_HEADERS,
+        )
+        return parse_openai_response(raw)
     elif provider == "openai":
         if not api_key:
             raise RuntimeError("OpenAI API key not configured in Settings > Marketplace")
@@ -195,19 +205,28 @@ async def _call_ollama_with_tools(messages, tools, model, ollama_url, system):
         return resp.json()
 
 
-async def _call_openai_with_tools(messages, tools, model, api_key, system):
+async def _call_openai_with_tools(
+    messages, tools, model, api_key, system,
+    base_url: str = "https://api.openai.com/v1", max_tokens: int | None = None,
+    extra_headers: dict | None = None,
+):
     chat_messages = [{"role": "system", "content": system}] + messages
     body: dict = {"model": model or "gpt-4o-mini", "messages": chat_messages, "temperature": 0.7}
+    if max_tokens:
+        body["max_tokens"] = max_tokens
     if tools:
         body["tools"] = tools
+    headers = {"Content-Type": "application/json", **(extra_headers or {})}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
     async with httpx.AsyncClient(timeout=120.0) as client:
         resp = await client.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            f"{base_url.rstrip('/')}/chat/completions",
+            headers=headers,
             json=body,
         )
         if resp.status_code == 401:
-            raise RuntimeError("OpenAI API key is invalid or expired.")
+            raise RuntimeError("LLM API key/token is invalid or expired.")
         resp.raise_for_status()
         return resp.json()
 
@@ -253,6 +272,16 @@ async def stream_llm_response(
 
     if provider == "ollama":
         async for token in _stream_ollama(messages, model, ollama_url, system_prompt):
+            yield token
+    elif provider == "openai_compatible":
+        base_url = llm.get("base_url")
+        if not base_url:
+            raise RuntimeError("In-house LLM base URL not configured in Settings.")
+        async for token in _stream_openai(
+            messages, model, api_key, system_prompt,
+            base_url=base_url, max_tokens=llm.get("max_output_tokens"),
+            extra_headers=INHOUSE_LLM_HEADERS,
+        ):
             yield token
     elif provider == "openai":
         if not api_key:
@@ -362,24 +391,32 @@ async def _stream_ollama(
 
 
 async def _stream_openai(
-    messages: list[dict], model: str, api_key: str, system: str
+    messages: list[dict], model: str, api_key: str, system: str,
+    base_url: str = "https://api.openai.com/v1", max_tokens: int | None = None,
+    extra_headers: dict | None = None,
 ) -> AsyncIterator[str]:
-    """Stream tokens from OpenAI /v1/chat/completions."""
+    """Stream tokens from an OpenAI-compatible /chat/completions endpoint."""
     chat_messages = [{"role": "system", "content": system}] + messages
+    body: dict = {
+        "model": model or "gpt-4o-mini",
+        "messages": chat_messages,
+        "stream": True,
+        "temperature": 0.7,
+    }
+    if max_tokens:
+        body["max_tokens"] = max_tokens
+    headers = {"Content-Type": "application/json", **(extra_headers or {})}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
     async with httpx.AsyncClient(timeout=120.0) as client:
         async with client.stream(
             "POST",
-            "https://api.openai.com/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "model": model or "gpt-4o-mini",
-                "messages": chat_messages,
-                "stream": True,
-                "temperature": 0.7,
-            },
+            f"{base_url.rstrip('/')}/chat/completions",
+            headers=headers,
+            json=body,
         ) as resp:
             if resp.status_code == 401:
-                raise RuntimeError("OpenAI API key is invalid or expired.")
+                raise RuntimeError("LLM API key/token is invalid or expired.")
             resp.raise_for_status()
             async for line in resp.aiter_lines():
                 if not line.startswith("data: "):
