@@ -77,20 +77,42 @@ async def lifespan(app: FastAPI):
     from forge.scheduler import run_scheduler
     from cache.client import init_redis, close_redis
 
-    # Run Alembic migrations before initialising the connection pool
+    # Run Alembic migrations before initialising the connection pool.
+    # Guarded by a Postgres advisory lock so that when the backend runs with
+    # multiple uvicorn workers they serialize instead of racing: the first
+    # worker migrates to head, the rest acquire the lock afterwards and no-op.
+    # (In Docker the entrypoint also migrates once before uvicorn starts; this
+    # remains correct for non-Docker `run.sh` and multi-worker launches.)
     import subprocess, sys, os
+    import asyncpg as _asyncpg
+    _MIGRATE_LOCK_KEY = 0x5F03E5D1
     alembic_dir = os.path.dirname(__file__)
-    result = subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", "head"],
-        cwd=alembic_dir,
-        capture_output=True,
-        text=True,
-        env={**os.environ},
-    )
-    if result.returncode != 0:
-        log.error("alembic upgrade failed: {}", result.stderr)
-    else:
-        log.info("alembic upgrade head: OK")
+    _lock_conn = None
+    try:
+        _lock_conn = await _asyncpg.connect(settings.DATABASE_URL)
+        await _lock_conn.execute("SELECT pg_advisory_lock($1)", _MIGRATE_LOCK_KEY)
+    except Exception as exc:
+        log.warning("alembic advisory lock unavailable ({}); migrating without lock", exc)
+        _lock_conn = None
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd=alembic_dir,
+            capture_output=True,
+            text=True,
+            env={**os.environ},
+        )
+        if result.returncode != 0:
+            log.error("alembic upgrade failed: {}", result.stderr)
+        else:
+            log.info("alembic upgrade head: OK")
+    finally:
+        if _lock_conn is not None:
+            try:
+                await _lock_conn.execute("SELECT pg_advisory_unlock($1)", _MIGRATE_LOCK_KEY)
+                await _lock_conn.close()
+            except Exception:
+                pass
 
     await init_db()
     if settings.REDIS_ENABLED:
