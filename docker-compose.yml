@@ -79,6 +79,12 @@ services:
       SAML_STRICT: ${SAML_STRICT:-true}
       SAML_SETTINGS_PATH: ${SAML_SETTINGS_PATH:-/app/saml/settings.json}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Number of uvicorn worker processes (use more cores under load).
+      # Startup migration + forge scheduler are advisory-lock guarded, so they
+      # run once regardless of worker count.
+      UVICORN_WORKERS: ${UVICORN_WORKERS:-4}
+      # Flush stdout immediately so per-worker logs appear in `docker logs`.
+      PYTHONUNBUFFERED: "1"
     volumes:
       - "${VIDEO_DATA_VOLUME}:/data/videos"
       - "${MEDIA_DATA_VOLUME}:/data/media"

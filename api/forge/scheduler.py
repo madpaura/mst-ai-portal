@@ -13,13 +13,50 @@ import asyncpg
 from loguru import logger as log
 
 
+# Advisory-lock key so only ONE process runs the scheduler, even when the
+# backend runs multiple uvicorn workers (or multiple backend containers).
+_SCHEDULER_LOCK_KEY = 0x5F03E5C0
+
+
 async def run_scheduler(db_url: str):
     """
     Long-running coroutine that checks every 60s whether any
     scheduled sync jobs need to be created based on update_frequency.
-    """
-    log.info("Forge sync scheduler started")
 
+    Guarded by a Postgres session-level advisory lock: with multiple uvicorn
+    workers only the one that wins the lock runs the loop; the rest idle. The
+    lock is held on a dedicated connection for the process lifetime and released
+    automatically when the worker exits (or its connection drops).
+    """
+    try:
+        lock_conn = await asyncpg.connect(db_url)
+    except Exception as e:
+        log.warning("Forge scheduler: could not connect to acquire lock: {}", e)
+        return
+    try:
+        got_lock = await lock_conn.fetchval(
+            "SELECT pg_try_advisory_lock($1)", _SCHEDULER_LOCK_KEY
+        )
+    except Exception as e:
+        log.warning("Forge scheduler: advisory lock check failed: {}", e)
+        await lock_conn.close()
+        return
+    if not got_lock:
+        log.info("Forge scheduler: another worker holds the lock — idle in this worker")
+        await lock_conn.close()
+        return
+
+    log.info("Forge sync scheduler started (advisory lock acquired)")
+    try:
+        await _scheduler_loop(db_url)
+    finally:
+        try:
+            await lock_conn.close()  # releases the advisory lock
+        except Exception:
+            pass
+
+
+async def _scheduler_loop(db_url: str):
     while True:
         try:
             await asyncio.sleep(60)

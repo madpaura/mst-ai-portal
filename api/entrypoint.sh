@@ -18,7 +18,12 @@ if [[ "$1" == "uvicorn" ]]; then
     echo "[entrypoint] Migrations complete."
     # Uvicorn expects lowercase log level; default to info if LOG_LEVEL unset
     UVICORN_LOG_LEVEL=$(echo "${LOG_LEVEL:-info}" | tr '[:upper:]' '[:lower:]')
-    exec gosu appuser "$@" --log-level "$UVICORN_LOG_LEVEL"
+    # Number of worker processes. Default 1; set UVICORN_WORKERS to use more
+    # cores. Each worker runs the app's lifespan, but the alembic migration and
+    # the forge scheduler are guarded by Postgres advisory locks so they run
+    # once regardless of worker count.
+    UVICORN_WORKERS="${UVICORN_WORKERS:-1}"
+    exec gosu appuser "$@" --log-level "$UVICORN_LOG_LEVEL" --workers "$UVICORN_WORKERS"
 fi
 
 exec gosu appuser "$@"
