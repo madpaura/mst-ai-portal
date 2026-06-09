@@ -55,11 +55,38 @@ server {
         client_max_body_size 5120m;
     }
 
-    location /streams/ {
-        proxy_pass http://${BACKEND_UPSTREAM}/streams/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $http_x_real_ip;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    # ── HLS / stream assets served directly from disk ───────────────────────
+    # The video storage volume is mounted read-only at /data/videos (the same
+    # path the backend exposes under /streams via StaticFiles). Serving these
+    # here with sendfile keeps HLS manifest + segment fetches — the heaviest
+    # bandwidth path — off the Python event loop entirely.
+    #
+    # Two locations because the SPA builds stream URLs as ${VITE_API_URL}${hls_path}:
+    # with the default VITE_API_URL=/backend that is /backend/streams/...; a bare
+    # VITE_API_URL yields /streams/.... `^~` makes these outrank the /backend/
+    # catch-all proxy and any regex locations.
+    location ^~ /streams/ {
+        alias /data/videos/;
+        types {
+            application/vnd.apple.mpegurl m3u8;
+            video/mp2t                    ts;
+            image/jpeg                    jpg jpeg;
+            video/mp4                     mp4;
+        }
+        add_header Cache-Control $stream_cache always;
+        access_log off;
+    }
+
+    location ^~ /backend/streams/ {
+        alias /data/videos/;
+        types {
+            application/vnd.apple.mpegurl m3u8;
+            video/mp2t                    ts;
+            image/jpeg                    jpg jpeg;
+            video/mp4                     mp4;
+        }
+        add_header Cache-Control $stream_cache always;
+        access_log off;
     }
 
     location /analytics/ {

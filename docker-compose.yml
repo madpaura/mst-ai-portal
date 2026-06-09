@@ -201,6 +201,11 @@ services:
       - backend
     ports:
       - "${FRONTEND_PORT:-9810}:80"
+    # Mount the video storage read-only so nginx serves HLS/stream assets
+    # directly from disk (see the /streams locations in nginx.conf.template),
+    # keeping segment fetches off the Python backend.
+    volumes:
+      - "${VIDEO_DATA_VOLUME}:/data/videos:ro"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:80/ >/dev/null 2>&1 || exit 1"]
       interval: 30s
