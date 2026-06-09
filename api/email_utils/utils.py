@@ -166,6 +166,48 @@ async def send_email_multi(
         return False
 
 
+# Placeholder / non-routable domains used by seeded or test accounts (e.g. the
+# default admin@mst.internal). Sending to these makes the SMTP server refuse the
+# whole message, so we drop them before notifying.
+_UNDELIVERABLE_DOMAINS = (".internal", ".local", ".localhost", "localhost", "example.com", "example.org")
+
+
+def filter_deliverable(emails: list[str]) -> list[str]:
+    """Drop blank, malformed, and non-routable addresses (e.g. admin@mst.internal),
+    de-duplicating while preserving order. Sending to an undeliverable address makes
+    the SMTP server refuse the whole message, so these must never reach send."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for e in emails or []:
+        e = (e or "").strip()
+        if not e or "@" not in e:
+            continue
+        domain = e.rsplit("@", 1)[1].lower()
+        if any(domain == d or domain.endswith(d) for d in _UNDELIVERABLE_DOMAINS):
+            continue
+        key = e.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(e)
+    return out
+
+
+async def get_publish_authority_emails() -> list[str]:
+    """Return the configured 'Publish Authority' emails (Admin → Settings),
+    filtered to deliverable addresses. These are the people authorised to review
+    publish/contributor requests — notifications go to them, not to every admin."""
+    db = await get_db()
+    row = await db.fetchrow("SELECT value FROM app_settings WHERE key = 'publish_authority'")
+    if not row:
+        return []
+    try:
+        emails = json.loads(row["value"]) or []
+    except Exception:
+        return []
+    return filter_deliverable(emails)
+
+
 def generate_email_html(video_data: dict, featured_items: list = None, stats: dict = None, series: dict = None, issue_label: str = None) -> str:
     """
     Generate HTML email using editorial template.

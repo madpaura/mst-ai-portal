@@ -6,7 +6,7 @@ from loguru import logger as log
 
 from database import get_db
 from auth.dependencies import require_admin, require_content
-from email_utils.utils import send_email_multi
+from email_utils.utils import send_email_multi, get_publish_authority_emails
 from config import settings
 import cache
 
@@ -41,45 +41,14 @@ def _row_to_dict(r) -> dict:
     }
 
 
-async def _get_authority_emails(db) -> list[str]:
-    """Return list of publish-authority emails from app_settings."""
-    row = await db.fetchrow("SELECT value FROM app_settings WHERE key = 'publish_authority'")
-    if not row:
-        return []
-    try:
-        return json.loads(row["value"]) or []
-    except Exception:
-        return []
-
-
-# Placeholder / non-routable domains used by seeded or test accounts (e.g. the
-# default admin@mst.internal). Sending to these makes the SMTP server refuse the
-# whole message, so we drop them before notifying.
-_UNDELIVERABLE_DOMAINS = (".internal", ".local", ".localhost", "localhost", "example.com", "example.org")
-
-
-def _deliverable(emails: list[str]) -> list[str]:
-    out = []
-    for e in emails:
-        e = (e or "").strip()
-        if not e or "@" not in e:
-            continue
-        domain = e.rsplit("@", 1)[1].lower()
-        if any(domain == d or domain.endswith(d) for d in _UNDELIVERABLE_DOMAINS):
-            continue
-        out.append(e)
-    return out
-
-
 async def _notify_reviewers(db, req_id: str, target_type: str, target_title: str,
                             requester_name: str, note: str | None, portal_url: str):
-    authority = await _get_authority_emails(db)
-    recipients = _deliverable(list(dict.fromkeys(authority)))
+    recipients = await get_publish_authority_emails()
     if not recipients:
         log.warning(
             "Publish-request notification skipped: no deliverable 'Publish Authority' emails. "
             "Configure 'Publish Authority' emails in Admin → Settings (real, non-.internal/.local "
-            f"addresses). (authority={len(authority)})"
+            "addresses)."
         )
         return
     log.info(f"Notifying {len(recipients)} reviewer(s) of publish request '{target_title}': {recipients}")
