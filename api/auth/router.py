@@ -11,7 +11,7 @@ from auth.audit import audit
 from database import get_db
 from config import settings
 from limiter import limiter
-from email_utils.utils import send_email_multi
+from email_utils.utils import send_email_multi, get_publish_authority_emails
 
 _COOKIE_NAME = "mst_token"
 _COOKIE_MAX_AGE = int(settings.JWT_EXPIRE_HOURS * 3600)
@@ -189,15 +189,6 @@ async def get_my_contribute_request(user: dict = Depends(get_current_user)):
 _REVIEW_TOKEN_PURPOSE = "contribute_review"
 
 
-async def _get_admin_emails() -> list[str]:
-    """Return deliverable email addresses for all admin users."""
-    db = await get_db()
-    rows = await db.fetch(
-        "SELECT email FROM users WHERE role = 'admin' AND email IS NOT NULL AND email LIKE '%@%'"
-    )
-    return [r["email"] for r in rows if r["email"]]
-
-
 def _review_action_link(request_id: str, action: str) -> str:
     """Build a signed one-click approve/reject link for admin emails."""
     token = create_action_token(
@@ -208,10 +199,14 @@ def _review_action_link(request_id: str, action: str) -> str:
 
 async def _notify_admins_new_request(request_id: str, requester_name: str,
                                      username: str, requester_email: str, reason: str):
-    """Email all admins about a new contributor request, with one-click action buttons."""
-    admin_emails = await _get_admin_emails()
-    if not admin_emails:
-        log.info("Contributor request: no admin emails to notify | request_id={}", request_id)
+    """Email the Publish Authority about a new contributor request, with one-click action buttons."""
+    recipients = await get_publish_authority_emails()
+    if not recipients:
+        log.warning(
+            "Contributor request notification skipped: no deliverable 'Publish Authority' emails. "
+            "Configure 'Publish Authority' in Admin → Settings (real, non-.internal/.local addresses). "
+            "| request_id={}", request_id,
+        )
         return
     approve_link = _review_action_link(request_id, "approved")
     reject_link = _review_action_link(request_id, "rejected")
@@ -239,7 +234,7 @@ async def _notify_admins_new_request(request_id: str, requester_name: str,
         await send_email_multi(
             subject=f"New contributor request from {requester_name}",
             html_content=html,
-            to_emails=admin_emails,
+            to_emails=recipients,
         )
     except Exception as e:
         log.error(f"Failed to send admin contributor-request notification: {e}")
@@ -270,9 +265,9 @@ async def _notify_requester_received(to_email: str, display_name: str):
 
 
 async def _notify_admins_decision(request_id: str, requester_name: str, approved: bool):
-    """Inform admins that a contributor request has been resolved."""
-    admin_emails = await _get_admin_emails()
-    if not admin_emails:
+    """Inform the Publish Authority that a contributor request has been resolved."""
+    recipients = await get_publish_authority_emails()
+    if not recipients:
         return
     status_word = "approved" if approved else "declined"
     status_color = "#22c55e" if approved else "#ef4444"
@@ -287,7 +282,7 @@ async def _notify_admins_decision(request_id: str, requester_name: str, approved
         await send_email_multi(
             subject=f"Contributor request from {requester_name} {status_word}",
             html_content=html,
-            to_emails=admin_emails,
+            to_emails=recipients,
         )
     except Exception as e:
         log.error(f"Failed to send admin contributor-decision notification: {e}")
