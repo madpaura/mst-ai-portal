@@ -1,0 +1,11 @@
+# Python venv + caches
+.venv/
+__pycache__/
+*.pyc
+
+# Generated reports
+reports/
+*.html
+*.json
+*.csv
+!config.example.*
