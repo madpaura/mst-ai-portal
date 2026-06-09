@@ -62,7 +62,8 @@ export const AdminMemes: React.FC = () => {
   // Copy tracking URL
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const copyTrackingUrl = (meme: Meme) => {
-    const url = `${API_BASE}/r/${meme.id}`;
+    const base = API_BASE.startsWith('http') ? API_BASE : `${window.location.origin}${API_BASE}`;
+    const url = `${base}/r/${meme.id}`;
     navigator.clipboard.writeText(url).then(() => {
       setCopiedId(meme.id);
       setTimeout(() => setCopiedId(null), 1500);
