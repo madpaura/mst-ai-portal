@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, type DragEvent } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import JSZip from 'jszip';
 import { useSearchParams } from 'react-router-dom';
 import { api, toApiError } from '../api/client';
 import { useAuth } from '../api/auth';
@@ -864,6 +863,8 @@ async function readFilesFromDrop(fileList: File[]): Promise<DropResult> {
 
     if (isZip) {
       if (fileList.length === 1) zipName = file.name;
+      // Loaded on demand — only zip uploads pay for the jszip chunk
+      const { default: JSZip } = await import('jszip');
       const zip = await JSZip.loadAsync(file);
       const rawFiles: ArtifactFile[] = [];
       const entries = Object.entries(zip.files).filter(([, e]) => !e.dir);

@@ -4,7 +4,6 @@ import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import html2pdf from 'html2pdf.js';
 
 // ── Types ────────────────────────────────────────────────
 
@@ -188,7 +187,10 @@ export const AdminAnalytics: React.FC = () => {
         jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' as 'landscape' },
         pagebreak:    { mode: ['css', 'legacy'], avoid: ['.chart-card', '.stat-card'] }
       };
-      html2pdf().from(el).set(opt).save().then(() => setIsExporting(false));
+      // Loaded on demand — keeps html2pdf/jsPDF/html2canvas out of the page bundle
+      import('html2pdf.js').then(({ default: html2pdf }) =>
+        html2pdf().from(el).set(opt).save().then(() => setIsExporting(false))
+      ).catch(() => setIsExporting(false));
     }, 800); // give recharts time to render all SVGs
   };
 
