@@ -1,16 +1,15 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
-import TurndownService from 'turndown';
-import { gfm } from 'turndown-plugin-gfm';
 import 'highlight.js/styles/github-dark.css';
 import '../styles/howto-markdown.css';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { api, toApiError } from '../api/client';
+import { useArticlePasteDrop } from '../hooks/useArticlePasteDrop';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -30,21 +29,7 @@ interface Article {
   updated_at: string;
 }
 
-interface InlineUpload {
-  url: string;
-  filename: string;
-  mime_type: string;
-  file_size: number;
-}
-
 const DEFAULT_CATEGORIES = ['General', 'Tutorial', 'Announcement', 'Deep Dive', 'Best Practices'];
-
-const MIME_TO_EXT: Record<string, string> = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/gif': 'gif',
-  'image/webp': 'webp',
-};
 
 export const ArticleEditor: React.FC = () => {
   const { articleId } = useParams<{ articleId?: string }>();
@@ -59,20 +44,12 @@ export const ArticleEditor: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [beautifying, setBeautifying] = useState(false);
   const [loading, setLoading] = useState(isEdit);
-  const [dragOver, setDragOver] = useState(false);
-  const [uploadingPdf, setUploadingPdf] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const turndown = useMemo(() => {
-    const td = new TurndownService({
-      headingStyle: 'atx',
-      codeBlockStyle: 'fenced',
-      bulletListMarker: '-',
-      emDelimiter: '*',
-    });
-    td.use(gfm);
-    return td;
-  }, []);
+  const { textareaRef, dragOver, uploadingPdf, handlePaste } = useArticlePasteDrop({
+    setContent: (update) => setForm((f) => ({ ...f, content: update(f.content) })),
+    onPdfUploaded: (res) => setForm((f) => ({ ...f, pdf_url: res.url, pdf_filename: res.filename })),
+    active: !loading,
+  });
 
   useEffect(() => {
     if (!articleId) return;
@@ -92,167 +69,6 @@ export const ArticleEditor: React.FC = () => {
   }, [articleId, navigate]);
 
   const isPdfMode = !!form.pdf_url;
-
-  // ── Markdown insertion helpers ─────────────────────────────
-
-  const insertAtCursor = (text: string) => {
-    const ta = textareaRef.current;
-    setForm((f) => {
-      const pos = ta && document.activeElement === ta ? ta.selectionStart : f.content.length;
-      const before = f.content.slice(0, pos);
-      const after = f.content.slice(ta && document.activeElement === ta ? ta.selectionEnd : pos);
-      const needsNewline = before.length > 0 && !before.endsWith('\n') && text.startsWith('!');
-      const next = before + (needsNewline ? '\n' : '') + text + after;
-      requestAnimationFrame(() => {
-        if (ta) {
-          const cursor = (before + (needsNewline ? '\n' : '') + text).length;
-          ta.selectionStart = ta.selectionEnd = cursor;
-        }
-      });
-      return { ...f, content: next };
-    });
-  };
-
-  const uploadInline = (file: File) => api.upload<InlineUpload>('/articles/uploads', file);
-
-  const uploadAndInsertImage = async (file: File) => {
-    const label = file.name || 'image';
-    const token = `![Uploading ${label}…]()`;
-    insertAtCursor(`${token}\n`);
-    try {
-      const res = await uploadInline(file);
-      setForm((f) => ({ ...f, content: f.content.replace(token, `![${res.filename}](${res.url})`) }));
-    } catch (err: unknown) {
-      setForm((f) => ({ ...f, content: f.content.replace(`${token}\n`, '').replace(token, '') }));
-      alert(err instanceof Error ? toApiError(err) : 'Image upload failed');
-    }
-  };
-
-  // Convert pasted HTML to markdown; embedded data-URI images are uploaded
-  // and replaced with portal URLs so the markdown stays lightweight.
-  const htmlToMarkdown = async (html: string): Promise<string> => {
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    const imgs = Array.from(doc.querySelectorAll('img'));
-    for (const img of imgs) {
-      const src = img.getAttribute('src') || '';
-      if (src.startsWith('data:image/')) {
-        try {
-          const blob = await (await fetch(src)).blob();
-          const ext = MIME_TO_EXT[blob.type] || 'png';
-          const file = new File([blob], `pasted-image.${ext}`, { type: blob.type });
-          const res = await uploadInline(file);
-          img.setAttribute('src', res.url);
-        } catch {
-          img.remove(); // unsupported/oversized embedded image — drop it
-        }
-      } else if (src.startsWith('file:') || src.startsWith('blob:')) {
-        img.remove(); // local references are unreachable from the portal
-      }
-    }
-    return turndown.turndown(doc.body.innerHTML).trim();
-  };
-
-  // ── Paste / drop handlers ──────────────────────────────────
-
-  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const cd = e.clipboardData;
-    const files = Array.from(cd.files);
-    if (files.length === 0) {
-      // Some browsers expose pasted files only through items
-      for (const item of Array.from(cd.items)) {
-        if (item.kind === 'file') {
-          const f = item.getAsFile();
-          if (f) files.push(f);
-        }
-      }
-    }
-    const html = cd.getData('text/html');
-
-    // PDF file pasted from the OS file manager → switch to PDF mode
-    const pdf = files.find((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
-    if (pdf) {
-      e.preventDefault();
-      await handlePdfDrop(pdf);
-      return;
-    }
-
-    // Screenshot / copied image (no meaningful HTML alongside it)
-    const imageFiles = files.filter((f) => f.type.startsWith('image/'));
-    if (imageFiles.length > 0 && !html.trim()) {
-      e.preventDefault();
-      for (const f of imageFiles) await uploadAndInsertImage(f);
-      return;
-    }
-
-    if (html.trim()) {
-      e.preventDefault();
-      try {
-        const md = await htmlToMarkdown(html);
-        insertAtCursor(md || cd.getData('text/plain'));
-      } catch {
-        insertAtCursor(cd.getData('text/plain'));
-      }
-    }
-    // Plain text → default browser paste
-  };
-
-  const handlePdfDrop = async (file: File) => {
-    setUploadingPdf(true);
-    try {
-      const res = await uploadInline(file);
-      setForm((f) => ({ ...f, pdf_url: res.url, pdf_filename: res.filename }));
-    } catch (err: unknown) {
-      alert(err instanceof Error ? toApiError(err) : 'PDF upload failed');
-    }
-    setUploadingPdf(false);
-  };
-
-  const handleFiles = async (files: File[]) => {
-    if (files.length === 0) return;
-    const pdf = files.find((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
-    if (pdf) {
-      await handlePdfDrop(pdf);
-      return;
-    }
-    for (const f of files.filter((f) => f.type.startsWith('image/'))) {
-      await uploadAndInsertImage(f);
-    }
-  };
-  const handleFilesRef = useRef(handleFiles);
-  handleFilesRef.current = handleFiles;
-
-  // Capture file drags at the window level: dropping anywhere on the page
-  // routes into the editor instead of the browser opening the file in a
-  // new tab (the default for drops that miss a drop zone).
-  useEffect(() => {
-    const isFileDrag = (e: DragEvent) =>
-      Array.from(e.dataTransfer?.types || []).includes('Files');
-    const onDragOver = (e: DragEvent) => {
-      if (isFileDrag(e)) {
-        e.preventDefault();
-        setDragOver(true);
-      }
-    };
-    const onDrop = (e: DragEvent) => {
-      if (!isFileDrag(e)) return;
-      e.preventDefault();
-      setDragOver(false);
-      handleFilesRef.current(Array.from(e.dataTransfer?.files || []));
-    };
-    const onDragLeave = (e: DragEvent) => {
-      if (!e.relatedTarget) setDragOver(false); // drag left the window
-    };
-    window.addEventListener('dragover', onDragOver);
-    window.addEventListener('drop', onDrop);
-    window.addEventListener('dragleave', onDragLeave);
-    return () => {
-      window.removeEventListener('dragover', onDragOver);
-      window.removeEventListener('drop', onDrop);
-      window.removeEventListener('dragleave', onDragLeave);
-    };
-  }, []);
-
-  // ── Save / beautify ────────────────────────────────────────
 
   const handleSave = async () => {
     if (!form.title.trim()) {
