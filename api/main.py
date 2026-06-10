@@ -7,8 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.datastructures import MutableHeaders
 from contextlib import asynccontextmanager
 from loguru import logger as log
 
@@ -209,41 +208,76 @@ app.include_router(assistant_router, prefix="/assistant", tags=["assistant"])
 app.include_router(assistant_admin_router, prefix="/admin", tags=["admin-assistant"])
 
 
-class RequestIDMiddleware(BaseHTTPMiddleware):
-    """Inject X-Request-ID into every request/response; bind to log context."""
-    async def dispatch(self, request: Request, call_next):
-        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
-        request.state.request_id = request_id
+class RequestIDMiddleware:
+    """Inject X-Request-ID into every request/response; bind to log context.
+
+    Pure ASGI (not BaseHTTPMiddleware): avoids the per-request task/stream
+    wrapping overhead and plays nicely with streaming responses.
+    """
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        req_headers = dict(scope.get("headers") or [])
+        request_id = (req_headers.get(b"x-request-id") or b"").decode() or str(uuid.uuid4())
+        scope.setdefault("state", {})["request_id"] = request_id
+
+        async def send_with_id(message):
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message)["X-Request-ID"] = request_id
+            await send(message)
+
         with log.contextualize(request_id=request_id,
-                               method=request.method,
-                               path=request.url.path):
-            response: Response = await call_next(request)
-        response.headers["X-Request-ID"] = request_id
-        return response
+                               method=scope.get("method", ""),
+                               path=scope.get("path", "")):
+            await self.app(scope, receive, send_with_id)
 
 app.add_middleware(RequestIDMiddleware)
 
 
-# Middleware to prevent caching of HLS manifests and segments
-class NoCacheHLSMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
+class NoCacheHLSMiddleware:
+    """Prevent caching of HLS manifests/segments served by FastAPI (non-Docker
+    dev — in Docker, nginx serves /streams from disk with its own cache map).
+    Pure ASGI; also converts late unhandled errors into a JSON 500."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        path = scope.get("path", "")
+        is_hls = path.startswith("/streams/") and (path.endswith(".m3u8") or path.endswith(".ts"))
+        started = False
+
+        async def send_wrapper(message):
+            nonlocal started
+            if message["type"] == "http.response.start":
+                started = True
+                if is_hls:
+                    headers = MutableHeaders(scope=message)
+                    headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                    headers["Pragma"] = "no-cache"
+                    headers["Expires"] = "0"
+            await send(message)
+
         try:
-            response: Response = await call_next(request)
+            await self.app(scope, receive, send_wrapper)
         except Exception as exc:
-            request_id = getattr(request.state, "request_id", "unknown")
-            log.error(f"[{request_id}] Unhandled error in {request.method} {request.url.path}: {exc}")
+            request_id = scope.get("state", {}).get("request_id", "unknown")
+            log.error(f"[{request_id}] Unhandled error in {scope.get('method', '')} {path}: {exc}")
             log.error(traceback.format_exc())
-            return JSONResponse(
+            if started:
+                raise
+            response = JSONResponse(
                 status_code=500,
                 content={"detail": "internal_error", "request_id": request_id},
                 headers={"X-Request-ID": request_id},
             )
-        path = request.url.path
-        if path.startswith("/streams/") and (path.endswith(".m3u8") or path.endswith(".ts")):
-            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-            response.headers["Pragma"] = "no-cache"
-            response.headers["Expires"] = "0"
-        return response
+            await response(scope, receive, send)
 
 app.add_middleware(NoCacheHLSMiddleware)
 
