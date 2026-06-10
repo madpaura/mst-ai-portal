@@ -156,10 +156,28 @@ export const ArticleEditor: React.FC = () => {
 
   const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const cd = e.clipboardData;
-    const imageFiles = Array.from(cd.files).filter((f) => f.type.startsWith('image/'));
+    const files = Array.from(cd.files);
+    if (files.length === 0) {
+      // Some browsers expose pasted files only through items
+      for (const item of Array.from(cd.items)) {
+        if (item.kind === 'file') {
+          const f = item.getAsFile();
+          if (f) files.push(f);
+        }
+      }
+    }
     const html = cd.getData('text/html');
 
+    // PDF file pasted from the OS file manager → switch to PDF mode
+    const pdf = files.find((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+    if (pdf) {
+      e.preventDefault();
+      await handlePdfDrop(pdf);
+      return;
+    }
+
     // Screenshot / copied image (no meaningful HTML alongside it)
+    const imageFiles = files.filter((f) => f.type.startsWith('image/'));
     if (imageFiles.length > 0 && !html.trim()) {
       e.preventDefault();
       for (const f of imageFiles) await uploadAndInsertImage(f);
@@ -189,12 +207,8 @@ export const ArticleEditor: React.FC = () => {
     setUploadingPdf(false);
   };
 
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const files = Array.from(e.dataTransfer.files);
+  const handleFiles = async (files: File[]) => {
     if (files.length === 0) return;
-
     const pdf = files.find((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
     if (pdf) {
       await handlePdfDrop(pdf);
@@ -204,6 +218,39 @@ export const ArticleEditor: React.FC = () => {
       await uploadAndInsertImage(f);
     }
   };
+  const handleFilesRef = useRef(handleFiles);
+  handleFilesRef.current = handleFiles;
+
+  // Capture file drags at the window level: dropping anywhere on the page
+  // routes into the editor instead of the browser opening the file in a
+  // new tab (the default for drops that miss a drop zone).
+  useEffect(() => {
+    const isFileDrag = (e: DragEvent) =>
+      Array.from(e.dataTransfer?.types || []).includes('Files');
+    const onDragOver = (e: DragEvent) => {
+      if (isFileDrag(e)) {
+        e.preventDefault();
+        setDragOver(true);
+      }
+    };
+    const onDrop = (e: DragEvent) => {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      setDragOver(false);
+      handleFilesRef.current(Array.from(e.dataTransfer?.files || []));
+    };
+    const onDragLeave = (e: DragEvent) => {
+      if (!e.relatedTarget) setDragOver(false); // drag left the window
+    };
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('drop', onDrop);
+    window.addEventListener('dragleave', onDragLeave);
+    return () => {
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('drop', onDrop);
+      window.removeEventListener('dragleave', onDragLeave);
+    };
+  }, []);
 
   // ── Save / beautify ────────────────────────────────────────
 
@@ -254,6 +301,18 @@ export const ArticleEditor: React.FC = () => {
   return (
     <div className="bg-background-light dark:bg-background-dark text-text-strong min-h-screen font-sans">
       <Navbar variant="solutions" />
+
+      {dragOver && (
+        <div className="fixed inset-0 z-50 bg-primary/10 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+          <div className="flex flex-col items-center gap-3 px-10 py-8 bg-white dark:bg-slate-900 border-2 border-dashed border-primary rounded-2xl shadow-2xl">
+            <span className="material-symbols-outlined text-5xl text-primary">upload_file</span>
+            <p className="text-base font-semibold text-slate-900 dark:text-white">Drop anywhere</p>
+            <p className="text-sm text-slate-500">
+              Images are embedded in the article — a PDF becomes the article itself.
+            </p>
+          </div>
+        </div>
+      )}
 
       <main className="relative pt-16">
         <div className="max-w-4xl mx-auto px-6 pt-12 pb-24">
@@ -346,9 +405,6 @@ export const ArticleEditor: React.FC = () => {
 
           {/* Content */}
           <div
-            onDrop={handleDrop}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
             className={`bg-white dark:bg-slate-900 border rounded-xl overflow-hidden min-h-[500px] transition-colors ${
               dragOver
                 ? 'border-primary border-dashed border-2 bg-primary/5'
