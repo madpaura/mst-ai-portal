@@ -1,11 +1,13 @@
+import os
 import re
+import uuid
 import bleach
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, UploadFile, File
 from typing import Optional
 
 from articles.schemas import (
     ArticleResponse, ArticleListResponse, ArticleCreate, ArticleUpdate,
-    BeautifyRequest, BeautifyResponse, AttachmentResponse,
+    BeautifyRequest, BeautifyResponse, AttachmentResponse, InlineUploadResponse,
 )
 from articles.llm import call_llm
 from auth.dependencies import get_current_user
@@ -32,6 +34,27 @@ _ALLOWED_ATTRS = {
 
 def _sanitize(content: str) -> str:
     return bleach.clean(content, tags=_ALLOWED_TAGS, attributes=_ALLOWED_ATTRS, strip=True)
+
+
+# Inline uploads (pasted images, dropped PDFs) — stored outside any single
+# article so they can be uploaded before the article exists.
+_INLINE_URL_PREFIX = "/media/articles/inline/"
+_INLINE_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}  # no .svg (script risk)
+_INLINE_PDF_EXTENSION = ".pdf"
+_MAX_INLINE_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
+_MAX_INLINE_PDF_BYTES = 20 * 1024 * 1024    # 20 MB
+
+
+def _validate_pdf_url(pdf_url: Optional[str]) -> Optional[str]:
+    """Only allow PDFs we stored ourselves; '' clears the field."""
+    if not pdf_url:
+        return None
+    if not pdf_url.startswith(_INLINE_URL_PREFIX) or not pdf_url.endswith(_INLINE_PDF_EXTENSION):
+        raise HTTPException(status_code=400, detail="Invalid PDF URL")
+    name = pdf_url[len(_INLINE_URL_PREFIX):]
+    if "/" in name or ".." in name:
+        raise HTTPException(status_code=400, detail="Invalid PDF URL")
+    return pdf_url
 
 
 def _attachment_url(article_id: str, stored_name: str) -> str:
@@ -64,6 +87,7 @@ def _row_to_response(r, attachments: list[AttachmentResponse] | None = None) -> 
         summary=r.get("summary"), content=r["content"],
         category=r["category"], author_name=r.get("author_name"),
         is_published=r["is_published"], published_at=r.get("published_at"),
+        pdf_url=r.get("pdf_url"), pdf_filename=r.get("pdf_filename"),
         created_at=r["created_at"], updated_at=r["updated_at"],
         attachments=attachments or [],
     )
@@ -148,11 +172,12 @@ async def create_article(req: ArticleCreate, user: dict = Depends(get_current_us
 
     row = await db.fetchrow(
         """
-        INSERT INTO articles (title, slug, summary, content, category, author_id, author_name, is_published, published_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, true, now()) RETURNING *
+        INSERT INTO articles (title, slug, summary, content, category, author_id, author_name, is_published, published_at, pdf_url, pdf_filename)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, true, now(), $8, $9) RETURNING *
         """,
         req.title, slug, req.summary, _sanitize(req.content), req.category,
         user["id"], user.get("display_name", user.get("username", "User")),
+        _validate_pdf_url(req.pdf_url), req.pdf_filename,
     )
     await cache.bump_version(cache.NS_ARTICLES)
     return _row_to_response(row, [])
@@ -194,6 +219,10 @@ async def update_my_article(
         updates["content"] = _sanitize(req.content)
     if req.category is not None:
         updates["category"] = req.category
+    if req.pdf_url is not None:
+        updates["pdf_url"] = _validate_pdf_url(req.pdf_url)
+    if req.pdf_filename is not None:
+        updates["pdf_filename"] = req.pdf_filename or None
 
     if updates:
         set_clauses = [f"{k} = ${i+1}" for i, k in enumerate(updates.keys())]
@@ -237,6 +266,44 @@ async def beautify_text(req: BeautifyRequest, user: dict = Depends(get_current_u
     )
     result = await call_llm(prompt)
     return BeautifyResponse(content=result)
+
+
+# ── Inline uploads: pasted images & dropped PDFs ─────────────
+
+@router.post("/uploads", response_model=InlineUploadResponse)
+async def upload_inline_file(
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+):
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    is_image = ext in _INLINE_IMAGE_EXTENSIONS
+    is_pdf = ext == _INLINE_PDF_EXTENSION
+    if not is_image and not is_pdf:
+        raise HTTPException(
+            status_code=400,
+            detail="File type not allowed. Allowed: PNG, JPG, GIF, WebP, PDF",
+        )
+
+    data = await file.read()
+    limit = _MAX_INLINE_PDF_BYTES if is_pdf else _MAX_INLINE_IMAGE_BYTES
+    if len(data) > limit:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File exceeds {limit // (1024 * 1024)} MB limit",
+        )
+
+    stored_name = f"{uuid.uuid4()}{ext}"
+    dir_path = os.path.join(settings.MEDIA_STORAGE_PATH, "articles", "inline")
+    os.makedirs(dir_path, exist_ok=True)
+    with open(os.path.join(dir_path, stored_name), "wb") as f:
+        f.write(data)
+
+    return InlineUploadResponse(
+        url=f"{_INLINE_URL_PREFIX}{stored_name}",
+        filename=file.filename or stored_name,
+        mime_type=file.content_type or ("application/pdf" if is_pdf else "image/*"),
+        file_size=len(data),
+    )
 
 
 # ── Public article by slug (must be LAST — catches {slug}) ──
