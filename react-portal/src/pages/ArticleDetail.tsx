@@ -11,6 +11,8 @@ import { api } from '../api/client';
 import { usePageView } from '../hooks/usePageView';
 import { useParams, Link } from 'react-router-dom';
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 interface Attachment {
   id: string;
   filename: string;
@@ -29,6 +31,8 @@ interface Article {
   author_name: string | null;
   is_published: boolean;
   published_at: string | null;
+  pdf_url: string | null;
+  pdf_filename: string | null;
   created_at: string;
   updated_at: string;
   attachments: Attachment[];
@@ -141,14 +145,40 @@ export const ArticleDetail: React.FC = () => {
                 </p>
               )}
 
-              <div className="howto-markdown text-base text-slate-600 dark:text-slate-300 leading-relaxed">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  rehypePlugins={[rehypeHighlight, rehypeRaw]}
-                >
-                  {article.content}
-                </ReactMarkdown>
-              </div>
+              {article.pdf_url ? (
+                <div>
+                  <object
+                    data={`${API_BASE}${article.pdf_url}`}
+                    type="application/pdf"
+                    className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-white"
+                    style={{ height: '80vh' }}
+                  >
+                    <div className="flex flex-col items-center justify-center py-24 gap-4">
+                      <span className="material-symbols-outlined text-5xl text-slate-400">picture_as_pdf</span>
+                      <p className="text-slate-500">Your browser cannot display PDFs inline.</p>
+                    </div>
+                  </object>
+                  <a
+                    href={`${API_BASE}${article.pdf_url}`}
+                    download={article.pdf_filename || undefined}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 text-sm font-medium text-primary border border-primary/20 rounded-lg hover:bg-primary/5 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-base">download</span>
+                    Download {article.pdf_filename || 'PDF'}
+                  </a>
+                </div>
+              ) : (
+                <div className="howto-markdown text-base text-slate-600 dark:text-slate-300 leading-relaxed">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeHighlight, rehypeRaw]}
+                  >
+                    {article.content}
+                  </ReactMarkdown>
+                </div>
+              )}
 
             </article>
           )}

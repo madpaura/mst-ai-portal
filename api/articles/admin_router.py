@@ -17,7 +17,7 @@ import cache
 
 router = APIRouter()
 
-from articles.router import _sanitize  # shared sanitizer
+from articles.router import _sanitize, _validate_pdf_url  # shared sanitizer / validators
 
 
 async def _unique_slug(db, base: str, exclude_id: str | None = None) -> str:
@@ -84,6 +84,7 @@ def _row_to_response(r, attachments: list[AttachmentResponse] | None = None) -> 
         summary=r.get("summary"), content=r["content"],
         category=r["category"], author_name=r.get("author_name"),
         is_published=r["is_published"], published_at=r.get("published_at"),
+        pdf_url=r.get("pdf_url"), pdf_filename=r.get("pdf_filename"),
         created_at=r["created_at"], updated_at=r["updated_at"],
         attachments=attachments or [],
     )
@@ -117,14 +118,16 @@ async def admin_create_article(req: ArticleCreate, admin: dict = Depends(require
 
     slug = await _unique_slug(db, base_slug)
 
+    pdf_url = _validate_pdf_url(req.pdf_url)
     try:
         row = await db.fetchrow(
             """
-            INSERT INTO articles (title, slug, summary, content, category, author_id, author_name)
-            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *
+            INSERT INTO articles (title, slug, summary, content, category, author_id, author_name, pdf_url, pdf_filename)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *
             """,
             req.title, slug, req.summary, _sanitize(req.content), req.category,
             admin["id"], admin.get("display_name", "Admin"),
+            pdf_url, req.pdf_filename,
         )
     except asyncpg.UniqueViolationError:
         # Lost a race for the slug between the check above and the insert.
@@ -132,11 +135,12 @@ async def admin_create_article(req: ArticleCreate, admin: dict = Depends(require
         slug = await _unique_slug(db, f"{base_slug}-{uuid.uuid4().hex[:6]}")
         row = await db.fetchrow(
             """
-            INSERT INTO articles (title, slug, summary, content, category, author_id, author_name)
-            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *
+            INSERT INTO articles (title, slug, summary, content, category, author_id, author_name, pdf_url, pdf_filename)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *
             """,
             req.title, slug, req.summary, _sanitize(req.content), req.category,
             admin["id"], admin.get("display_name", "Admin"),
+            pdf_url, req.pdf_filename,
         )
     await cache.bump_version(cache.NS_ARTICLES)
     return _row_to_response(row, [])
@@ -182,7 +186,7 @@ async def admin_update_article(
     if not row:
         raise HTTPException(status_code=404, detail="Article not found")
 
-    _ARTICLE_UPDATABLE_FIELDS = frozenset({"title", "slug", "summary", "content", "category"})
+    _ARTICLE_UPDATABLE_FIELDS = frozenset({"title", "slug", "summary", "content", "category", "pdf_url", "pdf_filename"})
     updates = {}
     if req.title is not None:
         updates["title"] = req.title
@@ -197,6 +201,10 @@ async def admin_update_article(
         updates["content"] = _sanitize(req.content)
     if req.category is not None:
         updates["category"] = req.category
+    if req.pdf_url is not None:
+        updates["pdf_url"] = _validate_pdf_url(req.pdf_url)
+    if req.pdf_filename is not None:
+        updates["pdf_filename"] = req.pdf_filename or None
     updates = {k: v for k, v in updates.items() if k in _ARTICLE_UPDATABLE_FIELDS}
 
     if updates:

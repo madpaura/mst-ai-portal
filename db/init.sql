@@ -487,6 +487,8 @@ CREATE TABLE articles (
     is_published    BOOLEAN DEFAULT false,
     is_active       BOOLEAN DEFAULT true,
     published_at    TIMESTAMPTZ,
+    pdf_url         TEXT,
+    pdf_filename    TEXT,
     created_at      TIMESTAMPTZ DEFAULT now(),
     updated_at      TIMESTAMPTZ DEFAULT now()
 );

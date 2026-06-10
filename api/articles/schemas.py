@@ -23,6 +23,8 @@ class ArticleResponse(BaseModel):
     author_name: Optional[str] = None
     is_published: bool
     published_at: Optional[datetime] = None
+    pdf_url: Optional[str] = None
+    pdf_filename: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     attachments: list[AttachmentResponse] = []
@@ -46,6 +48,8 @@ class ArticleCreate(BaseModel):
     summary: Optional[str] = None
     content: str = ""
     category: str = "General"
+    pdf_url: Optional[str] = None
+    pdf_filename: Optional[str] = None
 
 
 class ArticleUpdate(BaseModel):
@@ -54,6 +58,15 @@ class ArticleUpdate(BaseModel):
     summary: Optional[str] = None
     content: Optional[str] = None
     category: Optional[str] = None
+    pdf_url: Optional[str] = None
+    pdf_filename: Optional[str] = None
+
+
+class InlineUploadResponse(BaseModel):
+    url: str
+    filename: str
+    mime_type: str
+    file_size: int
 
 
 class BeautifyRequest(BaseModel):
