@@ -8,8 +8,8 @@ async def init_db():
     global pool
     pool = await asyncpg.create_pool(
         settings.DATABASE_URL,
-        min_size=2,
-        max_size=20,
+        min_size=settings.DB_POOL_MIN,
+        max_size=settings.DB_POOL_MAX,
     )
 
 

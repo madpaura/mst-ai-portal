@@ -1,8 +1,9 @@
 import json
 import os
 
+import anyio
 from fastapi import APIRouter, HTTPException, Depends, Query, Path
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import FileResponse
 from typing import Annotated, Optional
 from pydantic import BaseModel
 
@@ -30,17 +31,17 @@ def _secs_to_vtt(s: float) -> str:
     return f"{h:02d}:{m:02d}:{sec:06.3f}"
 
 
-@router.get("/videos/{video_id}/captions.vtt", response_class=PlainTextResponse)
-async def get_captions_vtt(video_id: UUIDPath):
-    """Return WebVTT captions generated from the stored transcript segments."""
-    path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "transcript.json")
-    if not os.path.isfile(path):
-        raise HTTPException(status_code=404, detail="No transcript available")
-    with open(path) as f:
+def _ensure_vtt(src: str, out: str) -> bool:
+    """Render transcript.json → captions.vtt once, reusing it until the
+    transcript changes. Runs in a worker thread — file I/O and JSON parsing
+    of large transcripts must not block the event loop."""
+    if os.path.isfile(out) and os.path.getmtime(out) >= os.path.getmtime(src):
+        return True
+    with open(src) as f:
         data = json.load(f)
     segments = data.get("segments", [])
     if not segments:
-        raise HTTPException(status_code=404, detail="Transcript has no segments")
+        return False
 
     lines = ["WEBVTT", ""]
     for i, seg in enumerate(segments, 1):
@@ -50,7 +51,25 @@ async def get_captions_vtt(video_id: UUIDPath):
         if text:
             lines += [str(i), f"{start} --> {end}", text, ""]
 
-    return PlainTextResponse("\n".join(lines), media_type="text/vtt")
+    tmp = f"{out}.tmp.{os.getpid()}"
+    with open(tmp, "w") as f:
+        f.write("\n".join(lines))
+    os.replace(tmp, out)
+    return True
+
+
+@router.get("/videos/{video_id}/captions.vtt")
+async def get_captions_vtt(video_id: UUIDPath):
+    """Return WebVTT captions generated from the stored transcript segments."""
+    base = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
+    src = os.path.join(base, "transcript.json")
+    out = os.path.join(base, "captions.vtt")
+    if not os.path.isfile(src):
+        raise HTTPException(status_code=404, detail="No transcript available")
+    ok = await anyio.to_thread.run_sync(_ensure_vtt, src, out)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Transcript has no segments")
+    return FileResponse(out, media_type="text/vtt")
 
 
 class CourseProgressResponse(BaseModel):
@@ -353,7 +372,7 @@ async def update_video_progress(
     if video["duration_s"] and req.watched_seconds >= (video["duration_s"] * 0.9):
         completed = True
 
-    await db.execute(
+    row = await db.fetchrow(
         """
         INSERT INTO user_video_progress (user_id, video_id, watched_seconds, last_position, completed, updated_at)
         VALUES ($1, $2, $3, $4, $5, now())
@@ -362,13 +381,9 @@ async def update_video_progress(
             last_position = $4,
             completed = $5 OR user_video_progress.completed,
             updated_at = now()
+        RETURNING *
         """,
         user["id"], video["id"], req.watched_seconds, req.last_position, completed,
-    )
-
-    row = await db.fetchrow(
-        "SELECT * FROM user_video_progress WHERE user_id = $1 AND video_id = $2",
-        user["id"], video["id"],
     )
     return ProgressResponse(
         video_id=str(row["video_id"]), watched_seconds=row["watched_seconds"],
@@ -632,9 +647,28 @@ async def list_playlists(user: dict = Depends(get_current_user)):
     """Return the current user's custom playlists with their video slugs."""
     db = await get_db()
     rows = await db.fetch(
-        "SELECT * FROM playlists WHERE user_id = $1 ORDER BY created_at", user["id"]
+        """
+        SELECT p.id, p.name, p.created_at,
+            COALESCE(
+                array_agg(v.slug ORDER BY pv.added_at) FILTER (WHERE v.slug IS NOT NULL),
+                '{}'
+            ) AS slugs
+        FROM playlists p
+        LEFT JOIN playlist_videos pv ON pv.playlist_id = p.id
+        LEFT JOIN videos v ON v.id = pv.video_id AND v.is_published = true AND v.is_active = true
+        WHERE p.user_id = $1
+        GROUP BY p.id, p.name, p.created_at
+        ORDER BY p.created_at
+        """,
+        user["id"],
     )
-    return [await _playlist_with_slugs(db, r) for r in rows]
+    return [
+        PlaylistResponse(
+            id=str(r["id"]), name=r["name"], video_count=len(r["slugs"]),
+            video_slugs=list(r["slugs"]), created_at=r["created_at"],
+        )
+        for r in rows
+    ]
 
 
 @router.post("/playlists", response_model=PlaylistResponse)
@@ -833,17 +867,19 @@ async def unenroll_course(slug: str, user: dict = Depends(get_current_user)):
 async def enroll_all_courses(user: dict = Depends(get_current_user)):
     """Subscribe the current user to all active courses at once."""
     db = await get_db()
-    courses = await db.fetch("SELECT id, slug FROM courses WHERE is_active = true ORDER BY sort_order")
-    for course in courses:
-        await db.execute(
-            """
-            INSERT INTO user_course_enrollments (user_id, course_id)
-            VALUES ($1, $2) ON CONFLICT DO NOTHING
-            """,
-            user["id"], course["id"],
-        )
-        await db.execute(
-            "INSERT INTO course_analytics (user_id, course_id, event_type) VALUES ($1, $2, 'enroll')",
-            user["id"], course["id"],
-        )
+    await db.execute(
+        """
+        INSERT INTO user_course_enrollments (user_id, course_id)
+        SELECT $1, id FROM courses WHERE is_active = true
+        ON CONFLICT DO NOTHING
+        """,
+        user["id"],
+    )
+    await db.execute(
+        """
+        INSERT INTO course_analytics (user_id, course_id, event_type)
+        SELECT $1, id, 'enroll' FROM courses WHERE is_active = true
+        """,
+        user["id"],
+    )
     return await get_my_courses(user)

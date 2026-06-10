@@ -57,4 +57,7 @@ async def put_setting(key: str, req: UpdateSettingRequest, admin: dict = Depends
         """,
         key, value_json
     )
+    if key == "landing_page":
+        import cache
+        await cache.bump_version(cache.NS_SOLUTIONS)
     return {"status": "ok"}

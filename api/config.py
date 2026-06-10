@@ -16,6 +16,11 @@ _INSECURE_DB_PASSWORDS = {"portal123", "postgres", "password", "admin", "root"}
 class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql://portal:portal123@localhost:5432/mst_portal"
+    # asyncpg pool size — per uvicorn worker. Total backend connections is
+    # DB_POOL_MAX × UVICORN_WORKERS, plus the worker containers; keep the sum
+    # below Postgres max_connections (default 100).
+    DB_POOL_MIN: int = 2
+    DB_POOL_MAX: int = 10
 
     # Auth
     AUTH_MODE: Literal["open", "ldap", "saml"] = "open"

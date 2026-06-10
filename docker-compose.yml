@@ -51,6 +51,8 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       REDIS_ENABLED: ${REDIS_ENABLED:-true}
       REDIS_DEFAULT_TTL: ${REDIS_DEFAULT_TTL:-300}
+      DB_POOL_MIN: ${DB_POOL_MIN:-2}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       AUTH_MODE: ${AUTH_MODE:-open}
       VIDEO_STORAGE_PATH: /data/videos
