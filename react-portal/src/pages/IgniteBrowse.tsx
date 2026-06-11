@@ -2,6 +2,9 @@ import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 're
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Fuse from 'fuse.js';
 import { Navbar } from '../components/Navbar';
+import { VideoCardSkeleton } from '../components/Skeletons';
+import { Pager } from '../components/Pager';
+import { usePagedList } from '../hooks/usePagedList';
 import { api } from '../api/client';
 import { useAuth } from '../api/auth';
 
@@ -52,6 +55,10 @@ interface MyCourse {
 type DiscoverMode = 'all' | 'recent' | 'history' | 'trending' | 'saved' | 'rated';
 
 const apiBase = import.meta.env.VITE_API_URL || '';
+
+// First-paint batch size and grid page size: a small initial request renders
+// immediately while the full catalogue streams in behind skeleton cards.
+const PAGE_SIZE = 10;
 
 const fmtDuration = (s: number | null): string => {
   if (!s) return '–';
@@ -131,6 +138,8 @@ export const IgniteBrowse: React.FC = () => {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [myCourses, setMyCourses] = useState<MyCourse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fullLoaded, setFullLoaded] = useState(false);
+  const fullLoadedRef = useRef(false);
 
   // Filtering: a single discover mode + an optional exclusive "scope"
   // (a course/series or a playlist) + a category + free-text search.
@@ -182,15 +191,25 @@ export const IgniteBrowse: React.FC = () => {
   const [playlistMenuFor, setPlaylistMenuFor] = useState<string | null>(null); // video slug
 
   useEffect(() => {
-    Promise.all([
-      api.get<ApiCourse[]>('/video/courses'),
-      api.get<ApiVideo[]>('/video/videos'),
-    ])
-      .then(([courseList, videoList]) => {
-        setCourses(courseList);
-        setVideos(videoList);
+    api.get<ApiCourse[]>('/video/courses').then(setCourses).catch(() => {});
+    // Two-phase load: paint the first batch immediately, then swap in the
+    // full catalogue once the background request lands.
+    api.get<ApiVideo[]>(`/video/videos?limit=${PAGE_SIZE}`)
+      .then((batch) => {
+        if (!fullLoadedRef.current) setVideos(batch);
       })
       .catch(() => { /* graceful empty state */ })
+      .finally(() => setLoading(false));
+    api.get<ApiVideo[]>('/video/videos')
+      .then((all) => {
+        fullLoadedRef.current = true;
+        setVideos(all);
+        setFullLoaded(true);
+      })
+      .catch(() => {
+        // Full fetch failed — stop advertising more content via skeletons.
+        setFullLoaded(true);
+      })
       .finally(() => setLoading(false));
     // View counts power the views badge + Trending; like counts power Top Rated.
     api.get<Record<string, number>>('/video/videos/stats')
@@ -363,6 +382,9 @@ export const IgniteBrowse: React.FC = () => {
     if (category !== 'all') list = list.filter((v) => v.category === category);
     return list;
   }, [videos, mode, category, progressBySlug, views, likes, saved, courseScope, playlistScope, playlists]);
+
+  // Paginate the main grid; reset to page 1 whenever the active view changes.
+  const paged = usePagedList(filtered, PAGE_SIZE, viewParams.toString());
 
   // Fuzzy search index (YouTube-style results). Includes the resolved course
   // title so a series name matches even though videos only store course_id.
@@ -825,8 +847,8 @@ export const IgniteBrowse: React.FC = () => {
 
           <div className="relative z-[1] p-6 lg:p-8 max-w-[1400px] mx-auto">
             {loading ? (
-              <div className="flex items-center justify-center py-32">
-                <span className="material-symbols-outlined text-3xl text-text-faint animate-spin">progress_activity</span>
+              <div className="grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))' }}>
+                {Array.from({ length: PAGE_SIZE }, (_, i) => <VideoCardSkeleton key={i} />)}
               </div>
             ) : empty ? (
               <div className="flex flex-col items-center justify-center py-32 text-center">
@@ -941,11 +963,11 @@ export const IgniteBrowse: React.FC = () => {
                         </button>
                       )}
                       <span className="text-[13px] font-semibold text-primary">
-                        {filtered.length} video{filtered.length !== 1 ? 's' : ''}
+                        {filtered.length}{fullLoaded ? '' : '+'} video{filtered.length !== 1 ? 's' : ''}
                       </span>
                     </div>,
                   )}
-                  {noResults || ((mode === 'history' || mode === 'saved' || scopeActive) && filtered.length === 0) ? (
+                  {fullLoaded && (noResults || ((mode === 'history' || mode === 'saved' || scopeActive) && filtered.length === 0)) ? (
                     <div className="flex flex-col items-center justify-center py-16 text-center text-text-muted">
                       <span className="material-symbols-outlined text-5xl text-text-faint mb-3">
                         {playlistScope ? 'playlist_play' : mode === 'history' ? 'history' : mode === 'saved' ? 'bookmark' : 'movie'}
@@ -964,9 +986,25 @@ export const IgniteBrowse: React.FC = () => {
                       </p>
                     </div>
                   ) : (
-                    <div className="grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))' }}>
-                      {filtered.map((v) => <VideoCard key={v.id} v={v} />)}
-                    </div>
+                    <>
+                      <div className="grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))' }}>
+                        {paged.visible.map((v) => <VideoCard key={v.id} v={v} />)}
+                        {!fullLoaded && Array.from({ length: 4 }, (_, i) => <VideoCardSkeleton key={`sk-${i}`} />)}
+                      </div>
+                      {fullLoaded && paged.hasPager && (
+                        <Pager
+                          page={paged.page}
+                          pageCount={paged.pageCount}
+                          total={paged.total}
+                          showAll={paged.showAll}
+                          onPage={(p) => {
+                            paged.setPage(p);
+                            document.getElementById('all-videos')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          }}
+                          onToggleShowAll={() => paged.setShowAll(!paged.showAll)}
+                        />
+                      )}
+                    </>
                   )}
                 </section>
 
