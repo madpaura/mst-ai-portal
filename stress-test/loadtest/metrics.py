@@ -6,9 +6,14 @@ than stored individually, so a multi-million-request run stays at a few MB.
 from __future__ import annotations
 
 import math
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+
+# dataclass(slots=...) is 3.10+. Keep the per-sample memory win where available,
+# but stay importable on 3.9 (e.g. a stock macOS load-generator host).
+_SLOTS = {"slots": True} if sys.version_info >= (3, 10) else {}
 
 
 # ── Geometric-bucket histogram ────────────────────────────────────────────────
@@ -134,7 +139,7 @@ class Histogram:
 
 # ── Per-request sample ────────────────────────────────────────────────────────
 
-@dataclass(slots=True)
+@dataclass(**_SLOTS)
 class Sample:
     label: str
     method: str
