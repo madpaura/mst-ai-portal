@@ -138,6 +138,11 @@ class Engine:
         self.agg.record(s, inflight=self.inflight)
 
     async def _run_single(self) -> None:
+        if not self.endpoints:
+            # No usable endpoints (e.g. child discovery failed). Idle instead of
+            # raising on every iteration, which would busy-spin the event loop.
+            await asyncio.sleep(0.1)
+            return
         ep = random.choices(self.endpoints, weights=self._ep_weights, k=1)[0]
         await self._hit_endpoint(ep, self._cookie())
 
@@ -181,7 +186,11 @@ class Engine:
             try:
                 await self._unit()
             except Exception:
-                pass  # a single failed unit must not kill the VU
+                # A single failed unit must not kill the VU — but back off so a
+                # *persistent* failure (e.g. no endpoints) can't busy-spin the
+                # event loop and peg a CPU core.
+                await asyncio.sleep(0.05)
+                continue
             if self.cfg.think > 0 and not stage_stop.is_set():
                 await asyncio.sleep(random.expovariate(1.0 / self.cfg.think))
             else:
@@ -200,7 +209,16 @@ class Engine:
             await asyncio.sleep(min(1.0, max(0.05, end - loop.time())))
             self._emit_tick(vus)
         stage_stop.set()
-        await asyncio.gather(*workers, return_exceptions=True)
+        # Bounded drain: give VUs a short grace to finish the unit in flight,
+        # then cancel stragglers. Without this, a unit stuck on a slow request
+        # (HLS pulls several sequential segments, each up to request_timeout)
+        # can keep a stage running for minutes under overload.
+        grace = min(self.cfg.request_timeout, 15.0)
+        _, pending = await asyncio.wait(workers, timeout=grace)
+        for t in pending:
+            t.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
         return self._evaluate_stage(self.stage, vus, window)
 
     def _emit_tick(self, vus: int) -> None:

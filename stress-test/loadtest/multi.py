@@ -13,6 +13,7 @@ import json
 import multiprocessing as mp
 import os
 import tempfile
+import time
 from dataclasses import replace
 from typing import Dict, List, Optional
 
@@ -42,7 +43,30 @@ def _child_entry(args: dict) -> None:
     asyncio.run(_child_async(args))
 
 
+async def _ppid_guard(parent_pid: int) -> None:
+    """Exit the child immediately if the parent process goes away.
+
+    Without this a child re-parented to init/launchd (parent killed) keeps
+    running its load loop — orphans that can peg the generator host. spawn
+    children are not auto-reaped on a parent SIGKILL, so we self-terminate.
+    """
+    while True:
+        await asyncio.sleep(2.0)
+        if os.getppid() != parent_pid:
+            os._exit(0)
+
+
 async def _child_async(args: dict) -> None:
+    parent_pid = args.get("parent_pid")
+    guard = asyncio.create_task(_ppid_guard(parent_pid)) if parent_pid else None
+    try:
+        await _child_run(args)
+    finally:
+        if guard is not None:
+            guard.cancel()
+
+
+async def _child_run(args: dict) -> None:
     cfg = LoadConfig(**args["cfg"])
     authcfg = AuthConfig(**args["auth"]) if args.get("auth") else None
     setup_client = make_client(cfg.base_url, verify_tls=cfg.verify_tls,
@@ -90,6 +114,7 @@ def run_multi(cfg: LoadConfig, auth_dict: Optional[dict], n_workers: int,
     tmpdir = tempfile.mkdtemp(prefix="stress_multi_")
     procs, outs = [], []
     ctx = mp.get_context("spawn")  # safe across platforms; avoids fork+asyncio quirks
+    parent_pid = os.getpid()
     for w in range(n_workers):
         child_cfg = replace(cfg, stop_on_breach=False)
         if cfg.mode == "breakpoint":
@@ -99,13 +124,33 @@ def run_multi(cfg: LoadConfig, auth_dict: Optional[dict], n_workers: int,
         out_path = os.path.join(tmpdir, f"w{w}.json")
         outs.append(out_path)
         args = {"auth": auth_dict, "cfg": child_cfg.__dict__,
-                "no_auth": no_auth, "out_path": out_path}
-        p = ctx.Process(target=_child_entry, args=(args,), daemon=False)
+                "no_auth": no_auth, "out_path": out_path,
+                "parent_pid": parent_pid}
+        # daemon=True so children die with the parent on a normal exit; the
+        # ppid-guard inside each child covers a hard parent kill too.
+        p = ctx.Process(target=_child_entry, args=(args,), daemon=True)
         p.start()
         procs.append(p)
 
+    # Bounded wait: the ramp/steady duration plus generous slack for per-child
+    # setup (auth + discovery) and end-of-stage drain. A child that exceeds this
+    # is treated as hung and force-killed, so one stuck worker can never block
+    # the whole run forever (the old unbounded join() did exactly that).
+    n_stages = len(totals) if cfg.mode == "breakpoint" else 1
+    budget = (n_stages * cfg.stage_seconds if cfg.mode == "breakpoint"
+              else cfg.duration) + 120.0
+    deadline = time.monotonic() + budget
     for p in procs:
-        p.join()
+        p.join(timeout=max(1.0, deadline - time.monotonic()))
+    # Reap any survivors so they cannot orphan and peg the host.
+    for p in procs:
+        if p.is_alive():
+            p.terminate()
+    for p in procs:
+        p.join(timeout=10)
+        if p.is_alive():
+            p.kill()
+            p.join(timeout=5)
 
     merged = Aggregator()
     identities = hls = 0
