@@ -8,9 +8,10 @@ from typing import Optional
 from articles.schemas import (
     ArticleResponse, ArticleListResponse, ArticleCreate, ArticleUpdate,
     BeautifyRequest, BeautifyResponse, AttachmentResponse, InlineUploadResponse,
+    ArticleLikeResponse,
 )
 from articles.llm import call_llm
-from auth.dependencies import get_current_user
+from auth.dependencies import get_current_user, get_optional_user
 from database import get_db
 import cache
 from config import settings
@@ -157,6 +158,70 @@ async def list_articles(
         return [_row_to_list(r).model_dump(mode="json") for r in rows]
 
     return await cache.get_or_set(cache.NS_ARTICLES, "list", "all", cache_params, settings.REDIS_DEFAULT_TTL, _fetch)
+
+
+# ── Likes & view stats (power the trending sort) ───────────
+
+@router.get("/like-counts")
+async def article_like_counts() -> dict[str, int]:
+    """Public per-article like counts keyed by slug. Short-TTL cached."""
+    async def _fetch():
+        db = await get_db()
+        rows = await db.fetch(
+            """
+            SELECT a.slug, COUNT(l.user_id) AS likes
+            FROM articles a
+            JOIN article_likes l ON l.article_id = a.id
+            WHERE a.is_published = true AND a.is_active = true
+            GROUP BY a.slug
+            """,
+        )
+        return {r["slug"]: r["likes"] for r in rows}
+    return await cache.get_or_set(cache.NS_ARTICLES, "stats", "likes", None, 120, _fetch)
+
+
+@router.get("/view-stats")
+async def article_view_stats() -> dict[str, int]:
+    """Public per-article view counts keyed by slug, derived from page_views.
+
+    The detail page records a pageview at `/articles/<slug>`; editor routes
+    (`/articles/new`, `/articles/edit/...`) are excluded. Short-TTL cached."""
+    async def _fetch():
+        db = await get_db()
+        rows = await db.fetch(
+            """
+            SELECT path, COUNT(*) AS views
+            FROM page_views
+            WHERE path LIKE '/articles/%'
+              AND path NOT LIKE '/articles/edit/%'
+              AND path != '/articles/new'
+            GROUP BY path
+            """,
+        )
+        prefix = "/articles/"
+        out: dict[str, int] = {}
+        for r in rows:
+            slug = r["path"][len(prefix):]
+            if slug:
+                out[slug] = out.get(slug, 0) + r["views"]
+        return out
+    return await cache.get_or_set(cache.NS_ARTICLES, "stats", "views", None, 120, _fetch)
+
+
+@router.get("/my-likes")
+async def list_my_likes(user: dict = Depends(get_current_user)) -> list[str]:
+    """Return slugs of articles the current user has liked."""
+    db = await get_db()
+    rows = await db.fetch(
+        """
+        SELECT a.slug
+        FROM article_likes l
+        JOIN articles a ON a.id = l.article_id
+        WHERE l.user_id = $1 AND a.is_published = true AND a.is_active = true
+        """,
+        user["id"],
+    )
+    return [r["slug"] for r in rows]
 
 
 # ── User article CRUD (authenticated) ──────────────────────
@@ -332,3 +397,60 @@ async def get_article(slug: str):
         raise HTTPException(status_code=404, detail="Article not found")
     attachments = await _get_attachments(db, str(row["id"]))
     return _row_to_response(row, attachments)
+
+
+# ── Per-article likes (thumbs up) ──────────────────────────
+
+async def _published_article(db, slug: str):
+    row = await db.fetchrow(
+        "SELECT id FROM articles WHERE slug = $1 AND is_published = true AND is_active = true",
+        slug,
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Article not found")
+    return row
+
+
+@router.get("/{slug}/likes", response_model=ArticleLikeResponse)
+async def get_article_likes(slug: str, user: Optional[dict] = Depends(get_optional_user)):
+    db = await get_db()
+    article = await _published_article(db, slug)
+    count = await db.fetchval(
+        "SELECT COUNT(*) FROM article_likes WHERE article_id = $1", article["id"]
+    )
+    user_liked = False
+    if user:
+        row = await db.fetchrow(
+            "SELECT 1 FROM article_likes WHERE user_id = $1 AND article_id = $2",
+            user["id"], article["id"],
+        )
+        user_liked = row is not None
+    return ArticleLikeResponse(article_id=str(article["id"]), like_count=count, user_liked=user_liked)
+
+
+@router.post("/{slug}/likes", response_model=ArticleLikeResponse)
+async def like_article(slug: str, user: dict = Depends(get_current_user)):
+    db = await get_db()
+    article = await _published_article(db, slug)
+    await db.execute(
+        "INSERT INTO article_likes (user_id, article_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        user["id"], article["id"],
+    )
+    count = await db.fetchval(
+        "SELECT COUNT(*) FROM article_likes WHERE article_id = $1", article["id"]
+    )
+    return ArticleLikeResponse(article_id=str(article["id"]), like_count=count, user_liked=True)
+
+
+@router.delete("/{slug}/likes", response_model=ArticleLikeResponse)
+async def unlike_article(slug: str, user: dict = Depends(get_current_user)):
+    db = await get_db()
+    article = await _published_article(db, slug)
+    await db.execute(
+        "DELETE FROM article_likes WHERE user_id = $1 AND article_id = $2",
+        user["id"], article["id"],
+    )
+    count = await db.fetchval(
+        "SELECT COUNT(*) FROM article_likes WHERE article_id = $1", article["id"]
+    )
+    return ArticleLikeResponse(article_id=str(article["id"]), like_count=count, user_liked=False)

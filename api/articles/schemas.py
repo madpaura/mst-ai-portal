@@ -42,6 +42,12 @@ class ArticleListResponse(BaseModel):
     created_at: datetime
 
 
+class ArticleLikeResponse(BaseModel):
+    article_id: str
+    like_count: int
+    user_liked: bool
+
+
 class ArticleCreate(BaseModel):
     title: str
     slug: Optional[str] = ""

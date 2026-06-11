@@ -7,9 +7,9 @@ import 'highlight.js/styles/github-dark.css';
 import '../styles/howto-markdown.css';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
-import { api } from '../api/client';
+import { api, isLoggedIn } from '../api/client';
 import { usePageView } from '../hooks/usePageView';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -49,12 +49,18 @@ const CATEGORY_STYLES: Record<string, string> = {
 export const ArticleDetail: React.FC = () => {
   const { articleSlug } = useParams<{ articleSlug: string }>();
   usePageView(`/articles/${articleSlug}`);
+  const navigate = useNavigate();
   const [article, setArticle] = useState<Article | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
+  const [userLiked, setUserLiked] = useState(false);
 
   useEffect(() => {
     if (!articleSlug) return;
+    api.get<{ like_count: number; user_liked: boolean }>(`/articles/${articleSlug}/likes`)
+      .then((d) => { setLikeCount(d.like_count); setUserLiked(d.user_liked); })
+      .catch(() => {});
     api.get<Article>(`/articles/${articleSlug}`)
       .then((data) => {
         setArticle(data);
@@ -68,6 +74,25 @@ export const ArticleDetail: React.FC = () => {
       .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, [articleSlug]);
+
+  const toggleLike = async () => {
+    if (!isLoggedIn()) { navigate('/login'); return; }
+    if (!articleSlug) return;
+    const wasLiked = userLiked;
+    // Optimistic flip; revert on failure.
+    setUserLiked(!wasLiked);
+    setLikeCount((c) => Math.max(0, c + (wasLiked ? -1 : 1)));
+    try {
+      const d = wasLiked
+        ? await api.delete<{ like_count: number; user_liked: boolean }>(`/articles/${articleSlug}/likes`)
+        : await api.post<{ like_count: number; user_liked: boolean }>(`/articles/${articleSlug}/likes`);
+      setLikeCount(d.like_count);
+      setUserLiked(d.user_liked);
+    } catch {
+      setUserLiked(wasLiked);
+      setLikeCount((c) => Math.max(0, c + (wasLiked ? 1 : -1)));
+    }
+  };
 
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -113,9 +138,26 @@ export const ArticleDetail: React.FC = () => {
                   )}
                 </div>
 
-                {article.attachments?.length > 0 && (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {article.attachments.map((att) => (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={toggleLike}
+                    title={!isLoggedIn() ? 'Sign in to like' : userLiked ? 'Unlike' : 'Like this article'}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-semibold transition-colors ${
+                      userLiked
+                        ? 'border-primary/40 bg-primary/10 text-primary'
+                        : 'border-slate-200 dark:border-white/10 text-slate-400 hover:border-primary/40 hover:text-primary'
+                    }`}
+                  >
+                    <span
+                      className="material-symbols-outlined text-[18px]"
+                      style={{ fontVariationSettings: userLiked ? "'FILL' 1" : "'FILL' 0" }}
+                    >
+                      thumb_up
+                    </span>
+                    {likeCount}
+                  </button>
+                  {article.attachments?.length > 0 && (
+                    article.attachments.map((att) => (
                       <a
                         key={att.id}
                         href={att.url}
@@ -130,9 +172,9 @@ export const ArticleDetail: React.FC = () => {
                         </span>
                         <span className="material-symbols-outlined text-sm text-slate-400 group-hover:text-primary transition-colors">download</span>
                       </a>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  )}
+                </div>
               </div>
 
               <h1 className="text-4xl md:text-5xl font-bold text-slate-900 dark:text-white leading-tight mb-6">
