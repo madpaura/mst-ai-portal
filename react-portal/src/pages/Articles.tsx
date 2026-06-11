@@ -1,7 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
+import { ArticleCardSkeleton } from '../components/Skeletons';
+import { Pager } from '../components/Pager';
+import { usePagedList } from '../hooks/usePagedList';
 import { api } from '../api/client';
 import { isLoggedIn } from '../api/client';
 import { usePageView } from '../hooks/usePageView';
@@ -26,23 +29,38 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Best Practices': 'text-cyan-600 dark:text-cyan-400',
 };
 
+// First-paint batch size and grid page size (3-column grid → 4 clean rows).
+const PAGE_SIZE = 12;
+
 export const Articles: React.FC = () => {
   usePageView('/articles');
   const navigate = useNavigate();
   const [articles, setArticles] = useState<Article[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fullLoaded, setFullLoaded] = useState(false);
+  const fullLoadedRef = useRef(false);
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      api.get<Article[]>('/articles'),
-      api.get<string[]>('/articles/categories'),
-    ]).then(([arts, cats]) => {
-      setArticles(arts);
-      setCategories(cats);
-    }).catch(() => {}).finally(() => setLoading(false));
+    api.get<string[]>('/articles/categories').then(setCategories).catch(() => {});
+    // Two-phase load: paint the first batch immediately, then swap in the
+    // full list once the background request lands.
+    api.get<Article[]>(`/articles?limit=${PAGE_SIZE}`)
+      .then((batch) => {
+        if (!fullLoadedRef.current) setArticles(batch);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+    api.get<Article[]>('/articles')
+      .then((all) => {
+        fullLoadedRef.current = true;
+        setArticles(all);
+        setFullLoaded(true);
+      })
+      .catch(() => setFullLoaded(true))
+      .finally(() => setLoading(false));
   }, []);
 
   const filtered = useMemo(() => {
@@ -61,6 +79,9 @@ export const Articles: React.FC = () => {
     }
     return result;
   }, [articles, activeCategory, search]);
+
+  // Paginate the grid; reset to page 1 when the filter or search changes.
+  const paged = usePagedList(filtered, PAGE_SIZE, `${activeCategory ?? ''}|${search}`);
 
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -135,10 +156,12 @@ export const Articles: React.FC = () => {
         </section>
 
         {loading ? (
-          <div className="flex items-center justify-center py-32">
-            <span className="material-symbols-outlined text-4xl text-slate-500 animate-spin">progress_activity</span>
-          </div>
-        ) : filtered.length === 0 ? (
+          <section className="max-w-6xl mx-auto px-6 pb-24">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {Array.from({ length: 6 }, (_, i) => <ArticleCardSkeleton key={i} />)}
+            </div>
+          </section>
+        ) : fullLoaded && filtered.length === 0 ? (
           <div className="text-center py-32">
             <span className="material-symbols-outlined text-5xl text-slate-600 mb-4 block">article</span>
             <p className="text-slate-500 text-lg">
@@ -148,7 +171,7 @@ export const Articles: React.FC = () => {
         ) : (
           <section className="max-w-6xl mx-auto px-6 pb-24">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filtered.map((article) => (
+              {paged.visible.map((article) => (
                 <article
                   key={article.id}
                   onClick={() => navigate(`/articles/${article.slug}`)}
@@ -175,7 +198,21 @@ export const Articles: React.FC = () => {
                   )}
                 </article>
               ))}
+              {!fullLoaded && Array.from({ length: 3 }, (_, i) => <ArticleCardSkeleton key={`sk-${i}`} />)}
             </div>
+            {fullLoaded && paged.hasPager && (
+              <Pager
+                page={paged.page}
+                pageCount={paged.pageCount}
+                total={paged.total}
+                showAll={paged.showAll}
+                onPage={(p) => {
+                  paged.setPage(p);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                onToggleShowAll={() => paged.setShowAll(!paged.showAll)}
+              />
+            )}
           </section>
         )}
       </main>

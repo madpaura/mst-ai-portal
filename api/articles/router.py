@@ -115,14 +115,20 @@ async def list_categories():
 async def list_articles(
     search: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
+    limit: Optional[int] = Query(None, ge=1, le=500),
+    offset: int = Query(0, ge=0),
 ):
     cache_params: dict | None = None
-    if search or category:
+    if search or category or limit is not None or offset:
         cache_params = {}
         if search:
             cache_params["s"] = search.strip()
         if category:
             cache_params["c"] = category
+        if limit is not None:
+            cache_params["l"] = limit
+        if offset:
+            cache_params["o"] = offset
 
     async def _fetch():
         db = await get_db()
@@ -140,7 +146,14 @@ async def list_articles(
             qparams.append(search.strip())
             idx += 1
         where = " AND ".join(conditions)
-        rows = await db.fetch(f"SELECT * FROM articles WHERE {where} ORDER BY published_at DESC", *qparams)
+        sql = f"SELECT * FROM articles WHERE {where} ORDER BY published_at DESC"
+        if limit is not None:
+            qparams.append(limit)
+            sql += f" LIMIT ${len(qparams)}"
+        if offset:
+            qparams.append(offset)
+            sql += f" OFFSET ${len(qparams)}"
+        rows = await db.fetch(sql, *qparams)
         return [_row_to_list(r).model_dump(mode="json") for r in rows]
 
     return await cache.get_or_set(cache.NS_ARTICLES, "list", "all", cache_params, settings.REDIS_DEFAULT_TTL, _fetch)

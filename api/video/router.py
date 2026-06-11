@@ -154,19 +154,35 @@ async def get_course(slug: str):
 
 
 @router.get("/videos", response_model=list[VideoResponse])
-async def list_all_videos():
-    """Return all published videos in sort order — used by the Ignite sidebar."""
+async def list_all_videos(
+    limit: Optional[int] = Query(None, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    """Return published videos in sort order — used by the Ignite sidebar.
+
+    Optional limit/offset let the browse page paint a first batch fast and
+    stream the rest in a background request."""
+    cache_params: dict | None = None
+    if limit is not None or offset:
+        cache_params = {"l": limit, "o": offset}
+
     async def _fetch():
         db = await get_db()
-        rows = await db.fetch(
-            """
+        sql = """
             SELECT v.*, u.display_name AS author_name
             FROM videos v
             LEFT JOIN users u ON u.id = v.created_by
             WHERE v.is_published = true AND v.is_active = true
             ORDER BY v.sort_order
-            """,
-        )
+            """
+        qparams: list = []
+        if limit is not None:
+            qparams.append(limit)
+            sql += f" LIMIT ${len(qparams)}"
+        if offset:
+            qparams.append(offset)
+            sql += f" OFFSET ${len(qparams)}"
+        rows = await db.fetch(sql, *qparams)
         return [
             VideoResponse(
                 id=str(r["id"]), course_id=str(r["course_id"]) if r["course_id"] else None,
@@ -180,7 +196,7 @@ async def list_all_videos():
             ).model_dump(mode="json")
             for r in rows
         ]
-    return await cache.get_or_set(cache.NS_VIDEO, "list", "videos", None, settings.REDIS_DEFAULT_TTL, _fetch)
+    return await cache.get_or_set(cache.NS_VIDEO, "list", "videos", cache_params, settings.REDIS_DEFAULT_TTL, _fetch)
 
 
 @router.get("/videos/stats")
