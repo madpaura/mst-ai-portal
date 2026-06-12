@@ -29,9 +29,18 @@ BACKUP_CRON_SCHEDULE="0 2 * * *"   # daily at 02:00
 
 # ── Components to include ─────────────────────────────────────────────────────
 BACKUP_DB=true          # PostgreSQL dump
-BACKUP_VIDEOS=true      # ./volumes/storage/videos
-BACKUP_MEDIA=true       # ./volumes/storage/media
+BACKUP_VIDEOS=true      # video storage (see BACKUP_VIDEOS_DIR below)
+BACKUP_MEDIA=true       # media storage (see BACKUP_MEDIA_DIR below)
 BACKUP_CONFIG=true      # .env + docker-compose.yml
+
+# ── Storage locations ─────────────────────────────────────────────────────────
+# Where the video/media files live on disk. Leave empty to auto-detect from
+# .env (VIDEO_DATA_VOLUME / MEDIA_DATA_VOLUME — the same paths docker-compose
+# mounts), falling back to ./volumes/storage/videos and ./volumes/storage/media.
+# Relative paths are resolved against the project root. Used by both
+# backup.sh and restore.sh.
+BACKUP_VIDEOS_DIR=""
+BACKUP_MEDIA_DIR=""
 
 # ── Compression ───────────────────────────────────────────────────────────────
 # Compression level for tar (1=fastest, 9=best). Set to 0 to disable.

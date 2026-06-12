@@ -40,6 +40,10 @@ BACKUP_MEDIA=true
 BACKUP_CONFIG=true
 BACKUP_COMPRESS_LEVEL=6
 BACKUP_WEBHOOK_URL=""
+# Storage locations — empty means auto-detect from .env
+# (VIDEO_DATA_VOLUME / MEDIA_DATA_VOLUME), falling back to ./volumes/storage/*
+BACKUP_VIDEOS_DIR=""
+BACKUP_MEDIA_DIR=""
 
 # ── Load config ───────────────────────────────────────────────────────────────
 if [[ -f "$CONF_FILE" ]]; then
@@ -58,9 +62,19 @@ POSTGRES_USER="portal"
 POSTGRES_PASSWORD="portal123"
 if [[ -f "$ENV_FILE" ]]; then
     # shellcheck source=/dev/null
-    source <(grep -E '^(POSTGRES_DB|POSTGRES_USER|POSTGRES_PASSWORD|DB_PORT)=' "$ENV_FILE" | sed 's/[[:space:]]*#.*//')
+    source <(grep -E '^(POSTGRES_DB|POSTGRES_USER|POSTGRES_PASSWORD|DB_PORT|VIDEO_DATA_VOLUME|MEDIA_DATA_VOLUME)=' "$ENV_FILE" | sed 's/[[:space:]]*#.*//')
 fi
 DB_PORT="${DB_PORT:-5432}"
+
+# ── Resolve video/media storage locations ─────────────────────────────────────
+# Priority: backup.conf (BACKUP_VIDEOS_DIR / BACKUP_MEDIA_DIR)
+#         → .env (VIDEO_DATA_VOLUME / MEDIA_DATA_VOLUME, same as docker-compose)
+#         → ./volumes/storage defaults.
+# Relative paths are resolved against the project root.
+VIDEOS_DIR="${BACKUP_VIDEOS_DIR:-${VIDEO_DATA_VOLUME:-./volumes/storage/videos}}"
+MEDIA_DIR="${BACKUP_MEDIA_DIR:-${MEDIA_DATA_VOLUME:-./volumes/storage/media}}"
+[[ "$VIDEOS_DIR" != /* ]] && VIDEOS_DIR="$PROJECT_ROOT/${VIDEOS_DIR#./}"
+[[ "$MEDIA_DIR"  != /* ]] && MEDIA_DIR="$PROJECT_ROOT/${MEDIA_DIR#./}"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 timestamp() { date '+%Y-%m-%d_%H%M%S'; }
@@ -152,8 +166,8 @@ do_backup() {
     section "MST AI Portal — Backup  $TS"
     echo "  Destination : $DEST"
     echo "  DB          : $BACKUP_DB"
-    echo "  Videos      : $BACKUP_VIDEOS"
-    echo "  Media       : $BACKUP_MEDIA"
+    echo "  Videos      : $BACKUP_VIDEOS  ($VIDEOS_DIR)"
+    echo "  Media       : $BACKUP_MEDIA  ($MEDIA_DIR)"
     echo "  Config      : $BACKUP_CONFIG"
     echo "  Remote      : ${BACKUP_REMOTE_URL:-'(local only)'}"
 
@@ -189,7 +203,7 @@ do_backup() {
     # ── 2. Videos ─────────────────────────────────────────────────────────────
     if [[ "$BACKUP_VIDEOS" == "true" ]]; then
         step "2/4  Videos backup"
-        local VIDEO_SRC="$PROJECT_ROOT/volumes/storage/videos"
+        local VIDEO_SRC="$VIDEOS_DIR"
         local VIDEO_ARCHIVE="$DEST/files/videos.tar.gz"
         if [[ -d "$VIDEO_SRC" ]]; then
             tar -czf "$VIDEO_ARCHIVE" -C "$(dirname "$VIDEO_SRC")" "$(basename "$VIDEO_SRC")" \
@@ -205,7 +219,7 @@ do_backup() {
     # ── 3. Media ──────────────────────────────────────────────────────────────
     if [[ "$BACKUP_MEDIA" == "true" ]]; then
         step "3/4  Media backup"
-        local MEDIA_SRC="$PROJECT_ROOT/volumes/storage/media"
+        local MEDIA_SRC="$MEDIA_DIR"
         local MEDIA_ARCHIVE="$DEST/files/media.tar.gz"
         if [[ -d "$MEDIA_SRC" ]]; then
             tar -czf "$MEDIA_ARCHIVE" -C "$(dirname "$MEDIA_SRC")" "$(basename "$MEDIA_SRC")" \
@@ -234,6 +248,8 @@ do_backup() {
   "project_root": "$PROJECT_ROOT",
   "postgres_db": "$POSTGRES_DB",
   "postgres_user": "$POSTGRES_USER",
+  "videos_dir": "$VIDEOS_DIR",
+  "media_dir": "$MEDIA_DIR",
   "components": {
     "db": $BACKUP_DB,
     "videos": $BACKUP_VIDEOS,
