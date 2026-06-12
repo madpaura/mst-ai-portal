@@ -172,6 +172,8 @@ This uses a local Python venv and Vite dev server (not Docker). The database sti
 | `scripts/setup-nginx.sh` | Configure nginx reverse proxy for production |
 | `scripts/setup-watcher.sh` | Set up the filesystem watcher for auto video ingestion |
 
+Detailed backup / restore / migration guide: [doc/Backup_Restore_Migration.md](doc/Backup_Restore_Migration.md)
+
 ---
 
 ## Production checklist
