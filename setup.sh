@@ -102,6 +102,34 @@ host_network_enabled() {
     [ "$val" = "true" ] && echo "true" || echo "false"
 }
 
+# ── Proxy support ─────────────────────────────────────────
+# Read a var from the current environment or .env (env wins; last duplicate
+# line in .env wins, matching docker-compose semantics).
+proxy_value() {
+    local key="$1"
+    local val="${!key:-}"
+    if [ -z "$val" ] && [ -f .env ]; then
+        val=$(grep "^${key}=" .env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
+    fi
+    echo "$val"
+}
+
+# Emit --build-arg flags forwarding HTTP_PROXY/HTTPS_PROXY/NO_PROXY into every
+# image build. These are predefined Docker build args, so apt/pip/npm inside
+# the Dockerfiles use them without any ARG declarations.
+proxy_build_args() {
+    local args="" key lower val
+    for key in HTTP_PROXY HTTPS_PROXY NO_PROXY; do
+        lower=$(echo "$key" | tr '[:upper:]' '[:lower:]')
+        val=$(proxy_value "$key")
+        [ -z "$val" ] && val=$(proxy_value "$lower")
+        if [ -n "$val" ]; then
+            args="$args --build-arg ${key}=${val} --build-arg ${lower}=${val}"
+        fi
+    done
+    echo "$args"
+}
+
 # ── Prerequisite checks ───────────────────────────────────
 
 check_prereqs() {
@@ -242,8 +270,18 @@ deploy() {
         ok "Bridge networking (set HOST_NETWORK=true in .env if connectivity issues arise)"
     fi
 
+    local PROXY_ARGS=$(proxy_build_args)
+    if [ -n "$PROXY_ARGS" ]; then
+        ok "Proxy configured — forwarding to image builds"
+        for key in HTTP_PROXY HTTPS_PROXY NO_PROXY; do
+            lower=$(echo "$key" | tr '[:upper:]' '[:lower:]')
+            val=$(proxy_value "$key"); [ -z "$val" ] && val=$(proxy_value "$lower")
+            [ -n "$val" ] && echo "      ${key}=${val}"
+        done
+    fi
+
     echo "Building and starting containers..."
-    $COMPOSE $FILES build
+    $COMPOSE $FILES build $PROXY_ARGS
     $COMPOSE $FILES up -d
 
     echo ""
