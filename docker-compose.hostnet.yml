@@ -25,6 +25,7 @@
 #   backend           ${BACKEND_PORT:-8000}     (set BACKEND_PORT_INTERNAL if 8000 is taken)
 #   frontend (nginx)  ${FRONTEND_PORT:-9810}
 #   transcript        ${TRANSCRIPT_PORT:-9100}
+#   skillspector      ${SKILLSPECTOR_PORT:-9200}
 #
 # Note: host networking is Linux-only. On Docker Desktop (Mac/Windows) it works
 # starting from 4.34 as a beta feature; the default bridge mode is recommended
@@ -57,6 +58,19 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-portal}:${POSTGRES_PASSWORD:-portal123}@127.0.0.1:5432/${POSTGRES_DB:-mst_portal}
       REDIS_URL: redis://127.0.0.1:6379/0
       OLLAMA_BASE_URL: http://127.0.0.1:11434
+      # Service-name DNS ("skillspector") doesn't resolve in host mode.
+      SKILLSPECTOR_SERVICE_URL: http://127.0.0.1:${SKILLSPECTOR_PORT:-9200}
+
+  skillspector:
+    network_mode: host
+    extra_hosts: !reset []
+    # Bind uvicorn directly to the host port (no port mapping in host mode).
+    command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "${SKILLSPECTOR_PORT:-9200}"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${SKILLSPECTOR_PORT:-9200}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   worker:
     network_mode: host

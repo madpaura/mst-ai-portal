@@ -265,7 +265,7 @@ deploy() {
 
     if [ "$(host_network_enabled)" = "true" ]; then
         ok "HOST_NETWORK=true — all services will share the host network namespace"
-        warn "Make sure host ports 5432, 6379, ${BACKEND_PORT:-8000}, ${FRONTEND_PORT:-9810}, ${TRANSCRIPT_PORT:-9100} are free"
+        warn "Make sure host ports 5432, 6379, ${BACKEND_PORT:-8000}, ${FRONTEND_PORT:-9810}, ${TRANSCRIPT_PORT:-9100}, ${SKILLSPECTOR_PORT:-9200} are free"
     else
         ok "Bridge networking (set HOST_NETWORK=true in .env if connectivity issues arise)"
     fi
