@@ -1,0 +1,5 @@
+fastapi>=0.115,<0.116
+uvicorn[standard]>=0.30,<0.35
+# NVIDIA SkillSpector — pinned to a commit for reproducible builds.
+# Bump the SHA below (and rebuild the image) to upgrade the scanner.
+skillspector @ git+https://github.com/NVIDIA/SkillSpector@cff7ecc4f2881d9e23ea4bb801a6353e1dbe39e6
