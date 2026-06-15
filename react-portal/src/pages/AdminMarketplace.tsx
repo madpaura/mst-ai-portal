@@ -48,6 +48,45 @@ interface ComponentForm {
   manual_install: string;
 }
 
+// Catalog sections that can be paused independently (must match the public
+// Marketplace ?type= values and component_type stored on each card).
+const CATALOG_TYPES = [
+  { key: 'agent', label: 'Agents' },
+  { key: 'skill', label: 'Skills' },
+  { key: 'mcp_server', label: 'MCP Servers' },
+] as const;
+
+interface TypeStatus {
+  under_construction: boolean;
+  message: string;
+}
+
+interface MarketplaceStatus {
+  under_construction: boolean;
+  message: string;
+  types: Record<string, TypeStatus>;
+}
+
+const EMPTY_TYPE_STATUS: TypeStatus = { under_construction: false, message: '' };
+
+// Ensure every catalog type has an entry, tolerating older saved values that
+// only had the global { under_construction, message } shape.
+const normalizeStatus = (data: Partial<MarketplaceStatus> | null): MarketplaceStatus => {
+  const types: Record<string, TypeStatus> = {};
+  for (const t of CATALOG_TYPES) {
+    const existing = data?.types?.[t.key];
+    types[t.key] = {
+      under_construction: !!existing?.under_construction,
+      message: existing?.message || '',
+    };
+  }
+  return {
+    under_construction: !!data?.under_construction,
+    message: data?.message || '',
+    types,
+  };
+};
+
 const EMPTY_COMPONENT_FORM: ComponentForm = {
   slug: '', name: '', component_type: 'agent', description: '',
   icon: 'smart_toy', icon_color: 'text-primary',
@@ -132,9 +171,9 @@ export const AdminMarketplace: React.FC = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // ── Overview ──
-  const [marketplaceStatus, setMarketplaceStatus] = useState<{ under_construction: boolean; message: string } | null>(null);
+  const [marketplaceStatus, setMarketplaceStatus] = useState<MarketplaceStatus | null>(null);
   const [marketplaceSaving, setMarketplaceSaving] = useState(false);
-  const [marketplaceForm, setMarketplaceForm] = useState({ under_construction: false, message: '' });
+  const [marketplaceForm, setMarketplaceForm] = useState<MarketplaceStatus>(normalizeStatus(null));
 
   // ── Components ──
   const [components, setComponents] = useState<ForgeComponent[]>([]);
@@ -176,11 +215,10 @@ export const AdminMarketplace: React.FC = () => {
 
   const fetchMarketplaceStatus = useCallback(async () => {
     try {
-      const data = await api.get<{ under_construction: boolean; message: string } | null>('/settings/marketplace_status');
-      if (data) {
-        setMarketplaceStatus(data);
-        setMarketplaceForm({ under_construction: data.under_construction, message: data.message || '' });
-      }
+      const data = await api.get<Partial<MarketplaceStatus> | null>('/settings/marketplace_status');
+      const normalized = normalizeStatus(data);
+      setMarketplaceStatus(normalized);
+      setMarketplaceForm(normalized);
     } catch { }
   }, []);
 
@@ -245,7 +283,7 @@ export const AdminMarketplace: React.FC = () => {
     try {
       await api.put('/settings/admin/marketplace_status', { value: marketplaceForm });
       setMarketplaceStatus(marketplaceForm);
-      showMsg('success', 'Marketplace status saved');
+      showMsg('success', 'Catalog status saved');
     } catch (err: unknown) {
       showMsg('error', toApiError(err));
     } finally {
@@ -552,12 +590,12 @@ export const AdminMarketplace: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-primary">store</span>
                   <div>
-                    <h2 className="text-base font-bold text-slate-900 dark:text-white">Marketplace Status</h2>
-                    <p className="text-xs text-text-muted mt-0.5">Set under construction to show users a friendly notice</p>
+                    <h2 className="text-base font-bold text-slate-900 dark:text-white">Catalog Status</h2>
+                    <p className="text-xs text-text-muted mt-0.5">Pause the whole catalog, or just individual sections below</p>
                   </div>
                 </div>
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <span className="text-xs text-text-muted">Under Construction</span>
+                  <span className="text-xs text-text-muted">All Under Construction</span>
                   <button
                     type="button"
                     role="switch"
@@ -588,13 +626,50 @@ export const AdminMarketplace: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
                     <span className="material-symbols-outlined text-amber-400 text-sm">warning</span>
-                    <p className="text-xs text-amber-400">Marketplace will be hidden from all users until this is turned off.</p>
+                    <p className="text-xs text-amber-400">The entire catalog (Agents, Skills, MCP) will be hidden from all users until this is turned off.</p>
                   </div>
                 </div>
               )}
 
-              {(marketplaceStatus?.under_construction !== marketplaceForm.under_construction ||
-                (marketplaceStatus?.message || '') !== marketplaceForm.message) && (
+              {/* Per-section overrides */}
+              <div className="mt-4 pt-4 border-t border-slate-200 dark:border-white/5 space-y-4">
+                <p className="text-xs font-bold text-text-muted uppercase tracking-wider">Per-section</p>
+                {marketplaceForm.under_construction && (
+                  <p className="text-xs text-slate-500">The global switch above is on, so all sections are paused regardless of these.</p>
+                )}
+                {CATALOG_TYPES.map(t => {
+                  const ts = marketplaceForm.types[t.key] || EMPTY_TYPE_STATUS;
+                  const setType = (patch: Partial<TypeStatus>) =>
+                    setMarketplaceForm(f => ({ ...f, types: { ...f.types, [t.key]: { ...f.types[t.key], ...patch } } }));
+                  return (
+                    <div key={t.key} className={`rounded-lg border p-3 ${ts.under_construction ? 'border-amber-500/30 bg-amber-500/5' : 'border-slate-200 dark:border-white/5'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{t.label}</span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={ts.under_construction}
+                          onClick={() => setType({ under_construction: !ts.under_construction })}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${ts.under_construction ? 'bg-amber-500' : 'bg-slate-700'}`}
+                        >
+                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${ts.under_construction ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                      </div>
+                      {ts.under_construction && (
+                        <textarea
+                          rows={2}
+                          value={ts.message}
+                          onChange={e => setType({ message: e.target.value })}
+                          placeholder={`Optional message for the ${t.label} section (falls back to the global message)`}
+                          className="mt-3 w-full px-3 py-2 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {JSON.stringify(marketplaceStatus) !== JSON.stringify(marketplaceForm) && (
                 <div className="mt-4 pt-4 border-t border-slate-200 dark:border-white/5 flex gap-2">
                   <button
                     onClick={handleMarketplaceSave}
@@ -605,7 +680,7 @@ export const AdminMarketplace: React.FC = () => {
                     {marketplaceSaving ? 'Saving…' : 'Save Status'}
                   </button>
                   <button
-                    onClick={() => setMarketplaceForm({ under_construction: marketplaceStatus?.under_construction ?? false, message: marketplaceStatus?.message ?? '' })}
+                    onClick={() => setMarketplaceForm(normalizeStatus(marketplaceStatus))}
                     className="px-4 py-2 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors"
                   >
                     Discard
@@ -613,12 +688,21 @@ export const AdminMarketplace: React.FC = () => {
                 </div>
               )}
 
-              {marketplaceStatus && (
-                <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
-                  <span className={`w-1.5 h-1.5 rounded-full ${marketplaceStatus.under_construction ? 'bg-amber-400' : 'bg-green-400'}`} />
-                  {marketplaceStatus.under_construction ? 'Currently under construction' : 'Marketplace is live'}
-                </div>
-              )}
+              {marketplaceStatus && (() => {
+                const pausedTypes = CATALOG_TYPES.filter(t => marketplaceStatus.types[t.key]?.under_construction);
+                const allPaused = marketplaceStatus.under_construction;
+                const live = !allPaused && pausedTypes.length === 0;
+                return (
+                  <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+                    <span className={`w-1.5 h-1.5 rounded-full ${live ? 'bg-green-400' : 'bg-amber-400'}`} />
+                    {allPaused
+                      ? 'Entire catalog under construction'
+                      : pausedTypes.length > 0
+                        ? `Under construction: ${pausedTypes.map(t => t.label).join(', ')}`
+                        : 'Catalog is live'}
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="bg-card-light dark:bg-card-dark rounded-xl border border-slate-200 dark:border-white/5 p-6 mt-6">

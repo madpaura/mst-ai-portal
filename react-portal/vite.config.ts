@@ -1,10 +1,25 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { execSync } from 'child_process'
+
+// Resolve the build's short git commit hash so it can be surfaced in the UI
+// footer for traceability. Falls back to 'unknown' outside a git checkout.
+function gitShortHash(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', { cwd: __dirname }).toString().trim();
+  } catch {
+    return 'unknown';
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  define: {
+    __GIT_COMMIT_HASH__: JSON.stringify(gitShortHash()),
+    __BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 10)),
+  },
   esbuild: {
     // Strip console.log/debug calls and debugger statements in production builds.
     // console.warn and console.error are preserved.

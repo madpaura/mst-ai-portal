@@ -39,12 +39,26 @@ interface ForgeComponent {
   creator_user_id: string | null;
 }
 
-const SIDEBAR_CATEGORIES = [
-  { icon: 'smart_toy', label: 'Agents', key: 'agents', type: 'agent' },
-  { icon: 'bolt', label: 'Skills', key: 'skills', type: 'skill' },
-  { icon: 'dns', label: 'MCP Servers', key: 'mcp', type: 'mcp_server' },
-  { icon: 'lightbulb', label: 'All', key: 'all', type: '' },
-];
+// The catalog is split into Agents / Skills / MCP, selected from the navbar via
+// ?type=. Each type drives the page heading and which cards are shown.
+const TYPE_META: Record<string, { title: string; subtitle: string }> = {
+  agent: {
+    title: 'Agents',
+    subtitle: 'Deploy pre-trained design agents directly to your development environment.',
+  },
+  skill: {
+    title: 'Skills',
+    subtitle: 'Add specialized, installable skills to extend your AI workflows.',
+  },
+  mcp_server: {
+    title: 'MCP Servers',
+    subtitle: 'Connect model-context protocol servers to your tools and editors.',
+  },
+  '': {
+    title: 'Catalog',
+    subtitle: 'Deploy pre-trained design agents, specialized skills, and model-context protocol servers directly to your development environment.',
+  },
+};
 
 const BADGE_STYLES: Record<string, { label: string; color: string; bg: string }> = {
   verified: { label: 'Verified', color: 'text-green-500', bg: 'bg-green-500/10' },
@@ -70,6 +84,20 @@ interface ContributingGuide {
   video_link: string | null;
 }
 
+interface TypeStatus {
+  under_construction: boolean;
+  message?: string;
+}
+
+// Stored under the `marketplace_status` setting. `under_construction` is the
+// global switch (hides everything); `types` holds optional per-type overrides
+// (agent / skill / mcp_server) so a single section can be paused on its own.
+interface MarketplaceStatus {
+  under_construction: boolean;
+  message?: string;
+  types?: Record<string, TypeStatus>;
+}
+
 // First-paint batch size and grid page size (4-column grid → 3 clean rows).
 const PAGE_SIZE = 12;
 
@@ -79,8 +107,9 @@ export const Marketplace: React.FC = () => {
   const navigate = useNavigate();
   const [urlParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(urlParams.get('q') || '');
-  const [activeCategory, setActiveCategory] = useState('all');
-  const [activeTab, setActiveTab] = useState('');
+  // Active type comes from the navbar (?type=agent|skill|mcp_server); empty = all.
+  const activeTab = urlParams.get('type') || '';
+  const typeMeta = TYPE_META[activeTab] || TYPE_META[''];
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [communityBuilt, setCommunityBuilt] = useState(false);
   const [openSource, setOpenSource] = useState(false);
@@ -94,7 +123,7 @@ export const Marketplace: React.FC = () => {
   const [installTab, setInstallTab] = useState<'skills' | 'manual'>('skills');
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
   const [contributingGuide, setContributingGuide] = useState<ContributingGuide | null>(null);
-  const [underConstruction, setUnderConstruction] = useState<{ under_construction: boolean; message: string } | null>(null);
+  const [marketStatus, setMarketStatus] = useState<MarketplaceStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [fullLoaded, setFullLoaded] = useState(false);
   const fullLoadedRef = useRef(false);
@@ -117,21 +146,21 @@ export const Marketplace: React.FC = () => {
       .catch(() => setFullLoaded(true))
       .finally(() => setLoading(false));
     api.get<ContributingGuide>('/forge/contributing-guide').then(setContributingGuide).catch(() => {});
-    api.get<{ under_construction: boolean; message: string } | null>('/settings/marketplace_status')
-      .then(setUnderConstruction)
+    api.get<MarketplaceStatus | null>('/settings/marketplace_status')
+      .then(setMarketStatus)
       .catch(() => {});
   }, []);
+
+  // A section is paused if the whole catalog is paused (global switch) or the
+  // currently-viewed type has its own override on. Type message wins, else global.
+  const typeStatus = activeTab ? marketStatus?.types?.[activeTab] : undefined;
+  const isUnderConstruction = !!(marketStatus?.under_construction || typeStatus?.under_construction);
+  const constructionMessage =
+    (typeStatus?.under_construction ? typeStatus.message : '') || marketStatus?.message || '';
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
   };
-
-  const handleCategoryClick = (key: string) => {
-    setActiveCategory(key);
-    const cat = SIDEBAR_CATEGORIES.find((c) => c.key === key);
-    setActiveTab(cat?.type || '');
-  };
-
 
   // Install events already recorded this session, so repeated copies don't inflate the counter.
   const recordedInstalls = useRef<Set<string>>(new Set());
@@ -250,7 +279,7 @@ export const Marketplace: React.FC = () => {
     `${searchQuery}|${activeTab}|${verifiedOnly}|${communityBuilt}|${openSource}`,
   );
 
-  if (underConstruction?.under_construction) {
+  if (isUnderConstruction) {
     return (
       <div className="bg-background-light dark:bg-background-dark text-text-strong min-h-screen font-sans">
         <Navbar variant="solutions" />
@@ -262,11 +291,11 @@ export const Marketplace: React.FC = () => {
             </div>
           </div>
           <h1 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4">
-            Marketplace Under Construction
+            {typeMeta.title} Under Construction
           </h1>
           <p className="text-base text-text-muted max-w-md leading-relaxed mb-8">
-            {underConstruction.message ||
-              "We're upgrading the marketplace with new features. Check back soon — great things are coming!"}
+            {constructionMessage ||
+              "We're upgrading this section with new features. Check back soon — great things are coming!"}
           </p>
           <div className="flex items-center gap-4">
             <a
@@ -300,26 +329,6 @@ export const Marketplace: React.FC = () => {
           {/* Sidebar Filters */}
           <aside className="w-full lg:w-64 p-6 border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-background-dark/50">
             <div className="space-y-8">
-              <div>
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Categories</h3>
-                <div className="space-y-1">
-                  {SIDEBAR_CATEGORIES.map((cat) => (
-                    <button
-                      key={cat.key}
-                      onClick={() => handleCategoryClick(cat.key)}
-                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        activeCategory === cat.key
-                          ? 'bg-primary/10 text-primary'
-                          : 'hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-[20px]">{cat.icon}</span>
-                      {cat.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Interested in Contributing */}
               <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
                 <div className="flex items-center gap-2 mb-2">
@@ -397,10 +406,9 @@ export const Marketplace: React.FC = () => {
             <div className="mb-8">
               <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-1">
                 <div>
-                  <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Marketplace</h1>
+                  <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">{typeMeta.title}</h1>
                   <p className="text-sm text-text-muted max-w-2xl leading-relaxed">
-                    Deploy pre-trained design agents, specialized skills, and model-context protocol servers
-                    directly to your development environment.
+                    {typeMeta.subtitle}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -624,7 +632,11 @@ export const Marketplace: React.FC = () => {
             {fullLoaded && filteredCards.length === 0 && (
               <div className="text-center py-20 text-slate-500">
                 <span className="material-symbols-outlined text-4xl mb-4 block">search_off</span>
-                <p>No results found for &ldquo;{searchQuery}&rdquo;</p>
+                <p>
+                  {searchQuery
+                    ? <>No results found for &ldquo;{searchQuery}&rdquo;</>
+                    : `No ${typeMeta.title.toLowerCase()} available yet.`}
+                </p>
               </div>
             )}
           </div>

@@ -25,9 +25,14 @@ export const Footer: React.FC = () => {
             Internal Support
           </button>
         </div>
-        <p className="text-slate-500 dark:text-slate-600 text-xs">
-          &copy; 2026 MST. Internal Use Only.
-        </p>
+        <div className="flex flex-col items-center md:items-end gap-1">
+          <p className="text-slate-500 dark:text-slate-600 text-xs">
+            &copy; 2026 MST. Internal Use Only.
+          </p>
+          <p className="text-slate-400 dark:text-slate-700 text-[10px] font-mono tracking-tight">
+            build {__GIT_COMMIT_HASH__} · {__BUILD_DATE__}
+          </p>
+        </div>
       </div>
     </footer>
   );

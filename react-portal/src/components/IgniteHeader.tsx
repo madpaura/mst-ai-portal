@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../context/theme';
 import { PortalLogo } from './PortalLogo';
+import { useVisibleCatalogTypes } from '../hooks/useCatalogTypes';
 
 interface IgniteHeaderProps {
   notesTaken?: number;
@@ -11,6 +12,7 @@ export const IgniteHeader: React.FC<IgniteHeaderProps> = ({
   notesTaken = 0,
 }) => {
   const { theme, toggleTheme } = useTheme();
+  const catalogTypes = useVisibleCatalogTypes();
 
   const handleProfileClick = () => {};
 
@@ -32,12 +34,15 @@ export const IgniteHeader: React.FC<IgniteHeaderProps> = ({
           >
             Solutions
           </Link>
-          <Link
-            to="/marketplace"
-            className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary transition-colors"
-          >
-            Marketplace
-          </Link>
+          {catalogTypes.map(t => (
+            <Link
+              key={t.key}
+              to={`/marketplace?type=${t.key}`}
+              className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary transition-colors"
+            >
+              {t.label}
+            </Link>
+          ))}
           <Link
             to="/articles"
             className="text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary transition-colors"
