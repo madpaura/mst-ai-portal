@@ -7,6 +7,7 @@ import rehypeRaw from 'rehype-raw';
 import 'highlight.js/styles/github-dark.css';
 import '../styles/howto-markdown.css';
 import { Navbar } from '../components/Navbar';
+import { Footer } from '../components/Footer';
 import { IgniteSidebar, ALL_VIDEOS } from '../components/IgniteSidebar';
 import type { Video, Course, CourseProgress } from '../components/IgniteSidebar';
 import { CourseBrowser } from '../components/CourseBrowser';
@@ -765,6 +766,7 @@ export const Ignite: React.FC = () => {
             )}
           </div>
           {/* End of video content area (hidden when course browser is open) */}
+          <Footer />
         </main>
       </div>
     </div>

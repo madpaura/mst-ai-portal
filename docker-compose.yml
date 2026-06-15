@@ -231,6 +231,8 @@ services:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:${BACKEND_PORT:-8000}}
         VITE_AUTH_MODE: ${AUTH_MODE:-open}
         VITE_BETA_TAG: ${VITE_BETA_TAG:-}
+        VITE_GIT_COMMIT_HASH: ${GIT_COMMIT_HASH:-unknown}
+        VITE_BUILD_DATE: ${BUILD_DATE:-}
     restart: unless-stopped
     depends_on:
       - backend

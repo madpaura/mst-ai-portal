@@ -4,8 +4,13 @@ import path from 'path'
 import { execSync } from 'child_process'
 
 // Resolve the build's short git commit hash so it can be surfaced in the UI
-// footer for traceability. Falls back to 'unknown' outside a git checkout.
+// footer for traceability. Inside the Docker image build there is no .git
+// (only react-portal/ is in the build context, and git isn't installed), so we
+// prefer the VITE_GIT_COMMIT_HASH build arg and only fall back to invoking git
+// for local/dev builds. Resolves to 'unknown' when neither is available.
 function gitShortHash(): string {
+  const fromEnv = process.env.VITE_GIT_COMMIT_HASH?.trim();
+  if (fromEnv) return fromEnv;
   try {
     return execSync('git rev-parse --short HEAD', { cwd: __dirname }).toString().trim();
   } catch {
@@ -13,12 +18,19 @@ function gitShortHash(): string {
   }
 }
 
+// Build date — supplied via build arg in container builds, else "now".
+function buildDate(): string {
+  const fromEnv = process.env.VITE_BUILD_DATE?.trim();
+  if (fromEnv) return fromEnv;
+  return new Date().toISOString().slice(0, 10);
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
   define: {
     __GIT_COMMIT_HASH__: JSON.stringify(gitShortHash()),
-    __BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 10)),
+    __BUILD_DATE__: JSON.stringify(buildDate()),
   },
   esbuild: {
     // Strip console.log/debug calls and debugger statements in production builds.

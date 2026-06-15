@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from '../components/Navbar';
+import { Footer } from '../components/Footer';
 import { useAuth } from '../api/auth';
 import { api, toApiError } from '../api/client';
 
@@ -327,6 +328,7 @@ export const Contact: React.FC = () => {
           </div>
         )}
       </div>
+      <Footer />
     </div>
   );
 };
