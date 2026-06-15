@@ -21,6 +21,7 @@ Edit `.env` — at minimum set:
 | `SMTP_SERVER` | No | Required for email features |
 | `EMAIL_SUBJECT_PREFIX` | No | Prepended to every outgoing email subject (default `MSTAI-TF`; blank to disable) |
 | `LOG_LEVEL` | No | `DEBUG` \| `INFO` (default) \| `WARNING` \| `ERROR` — applies to all services |
+| `UVICORN_WORKERS` | No | Number of FastAPI worker processes (default `4`); increase for high-concurrency deployments; migrations and the scheduler are advisory-lock-guarded |
 
 ### 2. Deploy
 
