@@ -20,13 +20,39 @@ interface ValidationIssue {
   file: string;
   line: number | null;
   message: string;
-  pattern: string;
+  pattern?: string | null;
+  end_line?: number | null;
+  rule_id?: string | null;
+  category?: string | null;
+  risk_level?: string | null;
+  confidence?: number | null;
+  explanation?: string | null;
+  remediation?: string | null;
+  code_snippet?: string | null;
 }
 
 interface ValidationResult {
   passed: boolean;
   errors: ValidationIssue[];
   warnings: ValidationIssue[];
+  scanner?: string;
+  score?: number | null;
+  risk_severity?: string | null;
+  recommendation?: string | null;
+  scanned?: boolean;
+  used_llm?: boolean | null;
+  note?: string | null;
+}
+
+// Tailwind classes for a SkillSpector severity badge (LOW/MEDIUM/HIGH/CRITICAL).
+function riskBadgeClass(level?: string | null): string {
+  switch ((level || '').toUpperCase()) {
+    case 'CRITICAL': return 'bg-red-500/20 text-red-300';
+    case 'HIGH': return 'bg-orange-500/20 text-orange-300';
+    case 'MEDIUM': return 'bg-yellow-500/20 text-yellow-300';
+    case 'LOW': return 'bg-sky-500/20 text-sky-300';
+    default: return 'bg-slate-500/20 text-slate-300';
+  }
 }
 
 interface Artifact {
@@ -571,29 +597,66 @@ const ArtifactDetail: React.FC<{
         </div>
       )}
 
-      {/* Validation results */}
+      {/* Validation results — SkillSpector security report */}
       {vr && (
         <div className={`mb-4 p-3 rounded-lg border ${vr.passed ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <span className={`material-symbols-outlined text-sm ${vr.passed ? 'text-emerald-400' : 'text-red-400'}`}>
               {vr.passed ? 'verified' : 'dangerous'}
             </span>
             <span className={`text-xs font-bold ${vr.passed ? 'text-emerald-400' : 'text-red-400'}`}>
               {vr.passed
-                ? `Validation passed${vr.warnings.length ? ` (${vr.warnings.length} warning${vr.warnings.length > 1 ? 's' : ''})` : ''}`
-                : `${vr.errors.length} error${vr.errors.length > 1 ? 's' : ''} found — fix before submitting`}
+                ? `No blocking issues${vr.errors.length ? ` — ${vr.errors.length} high-risk finding${vr.errors.length > 1 ? 's' : ''} to review` : ''}`
+                : `Blocked — ${(vr.risk_severity ?? 'CRITICAL')} risk${vr.recommendation ? ` (${vr.recommendation})` : ''} — fix before submitting`}
             </span>
+            {typeof vr.score === 'number' && (
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${riskBadgeClass(vr.risk_severity)}`}>
+                Risk {vr.score}/100 · {vr.risk_severity ?? '—'}
+                {vr.recommendation ? ` · ${vr.recommendation}` : ''}
+              </span>
+            )}
+            {vr.scanner && (
+              <span className="text-[10px] text-slate-500 ml-auto">
+                {vr.scanner}{vr.used_llm === true ? ' · LLM' : vr.used_llm === false ? ' · static' : ''}
+              </span>
+            )}
           </div>
+
+          {vr.scanned === false && (
+            <p className="text-[11px] text-amber-300/90 mb-2">
+              {vr.note || 'This artifact type was not scanned.'}
+            </p>
+          )}
+
           {[...vr.errors, ...vr.warnings].map((issue, i) => (
-            <div key={i} className={`flex items-start gap-2 text-xs py-1 ${issue.severity === 'error' ? 'text-red-300' : 'text-yellow-300'}`}>
-              <span className="material-symbols-outlined text-xs mt-0.5">
-                {issue.severity === 'error' ? 'error' : 'warning'}
-              </span>
-              <span>
-                <span className="font-mono font-bold">{issue.file}</span>
-                {issue.line && <span className="text-slate-500">:{issue.line}</span>}
-                {' — '}{issue.message}
-              </span>
+            <div key={i} className={`text-xs py-1.5 border-t border-white/5 first:border-t-0 ${issue.severity === 'error' ? 'text-red-300' : 'text-yellow-300'}`}>
+              <div className="flex items-start gap-2">
+                <span className="material-symbols-outlined text-xs mt-0.5">
+                  {issue.severity === 'error' ? 'error' : 'warning'}
+                </span>
+                <span className="flex-1">
+                  {issue.risk_level && (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded mr-1.5 ${riskBadgeClass(issue.risk_level)}`}>
+                      {issue.risk_level}
+                    </span>
+                  )}
+                  {issue.rule_id && <span className="font-mono text-slate-400 mr-1">[{issue.rule_id}]</span>}
+                  <span className="font-mono font-bold">{issue.file}</span>
+                  {issue.line ? <span className="text-slate-500">:{issue.line}</span> : null}
+                  {' — '}{issue.message}
+                  {typeof issue.confidence === 'number' && (
+                    <span className="text-slate-500"> ({Math.round(issue.confidence * 100)}% conf.)</span>
+                  )}
+                  {issue.remediation && (
+                    <span className="block mt-0.5 text-[11px] text-slate-400">↳ Fix: {issue.remediation}</span>
+                  )}
+                  {issue.code_snippet && (
+                    <code className="block mt-0.5 text-[10px] text-slate-500 font-mono bg-black/30 rounded px-1.5 py-0.5 overflow-x-auto">
+                      {issue.code_snippet}
+                    </code>
+                  )}
+                </span>
+              </div>
             </div>
           ))}
         </div>

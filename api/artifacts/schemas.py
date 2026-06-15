@@ -138,13 +138,30 @@ class ValidationIssue(BaseModel):
     file: str
     line: Optional[int] = None
     message: str
-    pattern: str
+    pattern: Optional[str] = None
+    # SkillSpector enrichment (optional — absent on the legacy/scanner-unavailable paths)
+    end_line: Optional[int] = None
+    rule_id: Optional[str] = None
+    category: Optional[str] = None
+    risk_level: Optional[str] = None      # LOW | MEDIUM | HIGH | CRITICAL
+    confidence: Optional[float] = None
+    explanation: Optional[str] = None
+    remediation: Optional[str] = None
+    code_snippet: Optional[str] = None
 
 
 class ValidationResult(BaseModel):
     passed: bool
     errors: list[ValidationIssue] = []
     warnings: list[ValidationIssue] = []
+    # SkillSpector report summary
+    scanner: str = "skillspector"
+    score: Optional[int] = None           # 0-100 risk score
+    risk_severity: Optional[str] = None   # LOW | MEDIUM | HIGH | CRITICAL
+    recommendation: Optional[str] = None  # e.g. "SAFE", "DO NOT INSTALL"
+    scanned: bool = True                  # false when type out of scope or scanner unavailable
+    used_llm: Optional[bool] = None
+    note: Optional[str] = None
 
 
 class ArtifactSubmissionResponse(BaseModel):

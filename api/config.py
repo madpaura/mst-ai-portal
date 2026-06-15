@@ -71,6 +71,17 @@ class Settings(BaseSettings):
     # Use localhost by default for local runs; Docker compose overrides this to host.docker.internal.
     OLLAMA_BASE_URL: str = "http://localhost:11434"
 
+    # SkillSpector — security scanner for submitted skill/MCP artifacts.
+    # Runs as a sidecar container; the backend POSTs files to {URL}/scan.
+    SKILLSPECTOR_SERVICE_URL: str = "http://localhost:9200"
+    # Use the portal's active LLM (in-house/Ollama) for SkillSpector's semantic
+    # stage. When no usable endpoint is configured the scan falls back to static.
+    SKILLSPECTOR_USE_LLM: bool = True
+    # When the scanner is unreachable: false = allow submit with a warning
+    # (fail-open), true = block submit (fail-closed).
+    SKILLSPECTOR_FAIL_CLOSED: bool = False
+    SKILLSPECTOR_TIMEOUT: float = 180.0
+
     # Portal frontend URL (used for links in emails/newsletters)
     PORTAL_URL: str = "http://localhost:9810"
 
