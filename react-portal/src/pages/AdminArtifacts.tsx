@@ -47,11 +47,11 @@ interface ValidationResult {
 // Tailwind classes for a SkillSpector severity badge (LOW/MEDIUM/HIGH/CRITICAL).
 function riskBadgeClass(level?: string | null): string {
   switch ((level || '').toUpperCase()) {
-    case 'CRITICAL': return 'bg-red-500/20 text-red-300';
-    case 'HIGH': return 'bg-orange-500/20 text-orange-300';
-    case 'MEDIUM': return 'bg-yellow-500/20 text-yellow-300';
-    case 'LOW': return 'bg-sky-500/20 text-sky-300';
-    default: return 'bg-slate-500/20 text-slate-300';
+    case 'CRITICAL': return 'bg-red-500/20 text-red-700 dark:text-red-300';
+    case 'HIGH': return 'bg-orange-500/20 text-orange-700 dark:text-orange-300';
+    case 'MEDIUM': return 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300';
+    case 'LOW': return 'bg-sky-500/20 text-sky-700 dark:text-sky-300';
+    default: return 'bg-slate-500/20 text-slate-700 dark:text-slate-300';
   }
 }
 
@@ -108,17 +108,17 @@ interface GithubConfig {
 const TYPE_LABELS: Record<ArtifactType, string> = { agent: 'Agent', skill: 'Skill', mcp: 'MCP Server' };
 const TYPE_ICONS: Record<ArtifactType, string> = { agent: 'smart_toy', skill: 'terminal', mcp: 'hub' };
 const TYPE_COLORS: Record<ArtifactType, string> = {
-  agent: 'text-blue-400 bg-blue-400/10 border-blue-400/30',
-  skill: 'text-purple-400 bg-purple-400/10 border-purple-400/30',
-  mcp: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30',
+  agent: 'text-blue-600 dark:text-blue-400 bg-blue-400/10 border-blue-400/30',
+  skill: 'text-purple-600 dark:text-purple-400 bg-purple-400/10 border-purple-400/30',
+  mcp: 'text-emerald-600 dark:text-emerald-400 bg-emerald-400/10 border-emerald-400/30',
 };
 
 const STATUS_COLORS: Record<ArtifactStatus, string> = {
-  draft:     'text-slate-400 bg-slate-400/10 border-slate-400/30',
-  pending:   'text-yellow-400 bg-yellow-400/10 border-yellow-400/30',
-  approved:  'text-blue-400 bg-blue-400/10 border-blue-400/30',
-  published: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30',
-  rejected:  'text-red-400 bg-red-400/10 border-red-400/30',
+  draft:     'text-slate-600 dark:text-slate-400 bg-slate-400/10 border-slate-400/30',
+  pending:   'text-yellow-700 dark:text-yellow-400 bg-yellow-400/10 border-yellow-400/30',
+  approved:  'text-blue-600 dark:text-blue-400 bg-blue-400/10 border-blue-400/30',
+  published: 'text-emerald-600 dark:text-emerald-400 bg-emerald-400/10 border-emerald-400/30',
+  rejected:  'text-red-600 dark:text-red-400 bg-red-400/10 border-red-400/30',
 };
 
 const EMPTY_GITHUB_CONFIG: GithubConfig = {
@@ -452,7 +452,7 @@ const ArtifactDetail: React.FC<{
           </div>
           {editMode ? (
             <input
-              className="text-xl font-bold bg-white/5 border border-white/20 rounded px-3 py-1 text-white w-full focus:outline-none focus:border-primary/50"
+              className="text-xl font-bold bg-white dark:bg-white/5 border border-slate-300 dark:border-white/20 rounded px-3 py-1 text-slate-900 dark:text-white w-full focus:outline-none focus:border-primary/50"
               value={editData.display_name}
               onChange={e => setEditData(d => ({ ...d, display_name: e.target.value }))}
             />
@@ -466,7 +466,7 @@ const ArtifactDetail: React.FC<{
           {canEdit && !editMode && (
             <button
               onClick={() => { setEditMode(true); onEditModeChange(true); }}
-              className="flex items-center gap-1 px-3 py-1.5 rounded bg-white/10 text-slate-300 text-xs font-medium hover:bg-white/20 transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 rounded bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-300 text-xs font-medium hover:bg-slate-200 dark:hover:bg-white/20 transition-colors"
             >
               <span className="material-symbols-outlined text-sm">edit</span>
               Edit
@@ -476,7 +476,7 @@ const ArtifactDetail: React.FC<{
             <>
               <button
                 onClick={() => { setEditMode(false); onEditModeChange(false); }}
-                className="px-3 py-1.5 rounded bg-white/10 text-slate-400 text-xs hover:bg-white/20 transition-colors"
+                className="px-3 py-1.5 rounded bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 text-xs hover:bg-slate-200 dark:hover:bg-white/20 transition-colors"
               >
                 Cancel
               </button>
@@ -501,12 +501,12 @@ const ArtifactDetail: React.FC<{
       </div>
 
       {/* Action bar */}
-      <div className="flex flex-wrap items-center gap-2 mb-6 p-3 rounded-lg bg-white/5 border border-white/10">
+      <div className="flex flex-wrap items-center gap-2 mb-6 p-3 rounded-lg bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10">
         {(isOwner || isAdmin) && ['draft', 'rejected'].includes(artifact.status) && (
           <button
             onClick={handleValidate}
             disabled={validating}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-purple-500/20 border border-purple-500/30 text-purple-300 text-xs font-medium hover:bg-purple-500/30 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-purple-500/20 border border-purple-500/30 text-purple-700 dark:text-purple-300 text-xs font-medium hover:bg-purple-500/30 transition-colors disabled:opacity-50"
           >
             <span className="material-symbols-outlined text-sm">verified_user</span>
             {validating ? 'Validating…' : 'Validate'}
@@ -517,7 +517,7 @@ const ArtifactDetail: React.FC<{
           <button
             onClick={() => handleAction('submit')}
             disabled={!!actionLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-yellow-500/20 border border-yellow-500/30 text-yellow-300 text-xs font-medium hover:bg-yellow-500/30 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-yellow-500/20 border border-yellow-500/30 text-yellow-700 dark:text-yellow-300 text-xs font-medium hover:bg-yellow-500/30 transition-colors disabled:opacity-50"
           >
             <span className="material-symbols-outlined text-sm">send</span>
             {actionLoading === 'submit' ? 'Submitting…' : 'Submit for Review'}
@@ -529,14 +529,14 @@ const ArtifactDetail: React.FC<{
             <button
               onClick={() => handleAction('approve')}
               disabled={!!actionLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-blue-500/20 border border-blue-500/30 text-blue-300 text-xs font-medium hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-blue-500/20 border border-blue-500/30 text-blue-700 dark:text-blue-300 text-xs font-medium hover:bg-blue-500/30 transition-colors disabled:opacity-50"
             >
               <span className="material-symbols-outlined text-sm">thumb_up</span>
               {actionLoading === 'approve' ? 'Approving…' : 'Approve'}
             </button>
             <button
               onClick={() => setShowRejectBox(!showRejectBox)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-500/20 border border-red-500/30 text-red-300 text-xs font-medium hover:bg-red-500/30 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-red-500/20 border border-red-500/30 text-red-700 dark:text-red-300 text-xs font-medium hover:bg-red-500/30 transition-colors"
             >
               <span className="material-symbols-outlined text-sm">thumb_down</span>
               Reject
@@ -548,7 +548,7 @@ const ArtifactDetail: React.FC<{
           <button
             onClick={() => handleAction('publish')}
             disabled={!!actionLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-medium hover:bg-emerald-500/30 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-medium hover:bg-emerald-500/30 transition-colors disabled:opacity-50"
           >
             <span className="material-symbols-outlined text-sm">rocket_launch</span>
             {actionLoading === 'publish' ? 'Publishing…' : 'Publish to GitHub'}
@@ -560,7 +560,7 @@ const ArtifactDetail: React.FC<{
             href={artifact.github_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-medium hover:bg-emerald-500/30 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-medium hover:bg-emerald-500/30 transition-colors"
           >
             <span className="material-symbols-outlined text-sm">open_in_new</span>
             View on GitHub
@@ -571,9 +571,9 @@ const ArtifactDetail: React.FC<{
       {/* Reject box */}
       {showRejectBox && (
         <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
-          <p className="text-xs text-red-400 mb-2 font-medium">Rejection reason (optional)</p>
+          <p className="text-xs text-red-600 dark:text-red-400 mb-2 font-medium">Rejection reason (optional)</p>
           <textarea
-            className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-red-500/50 resize-none"
+            className="w-full bg-white dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded px-3 py-2 text-sm text-slate-900 dark:text-slate-300 focus:outline-none focus:border-red-500/50 resize-none"
             rows={2}
             placeholder="Explain why…"
             value={rejectReason}
@@ -582,7 +582,7 @@ const ArtifactDetail: React.FC<{
           <button
             onClick={() => handleAction('reject', { reason: rejectReason })}
             disabled={!!actionLoading}
-            className="mt-2 px-3 py-1.5 rounded bg-red-500/30 text-red-300 text-xs font-medium hover:bg-red-500/50 transition-colors disabled:opacity-50"
+            className="mt-2 px-3 py-1.5 rounded bg-red-500/30 text-red-700 dark:text-red-300 text-xs font-medium hover:bg-red-500/50 transition-colors disabled:opacity-50"
           >
             {actionLoading === 'reject' ? 'Rejecting…' : 'Confirm Reject'}
           </button>
@@ -592,8 +592,8 @@ const ArtifactDetail: React.FC<{
       {/* Reject reason display */}
       {artifact.status === 'rejected' && artifact.reject_reason && (
         <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
-          <p className="text-xs text-red-400 font-medium mb-1">Rejection reason</p>
-          <p className="text-sm text-red-300">{artifact.reject_reason}</p>
+          <p className="text-xs text-red-600 dark:text-red-400 font-medium mb-1">Rejection reason</p>
+          <p className="text-sm text-red-700 dark:text-red-300">{artifact.reject_reason}</p>
         </div>
       )}
 
@@ -601,10 +601,10 @@ const ArtifactDetail: React.FC<{
       {vr && (
         <div className={`mb-4 p-3 rounded-lg border ${vr.passed ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
           <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <span className={`material-symbols-outlined text-sm ${vr.passed ? 'text-emerald-400' : 'text-red-400'}`}>
+            <span className={`material-symbols-outlined text-sm ${vr.passed ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
               {vr.passed ? 'verified' : 'dangerous'}
             </span>
-            <span className={`text-xs font-bold ${vr.passed ? 'text-emerald-400' : 'text-red-400'}`}>
+            <span className={`text-xs font-bold ${vr.passed ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
               {vr.passed
                 ? `No blocking issues${vr.errors.length ? ` — ${vr.errors.length} high-risk finding${vr.errors.length > 1 ? 's' : ''} to review` : ''}`
                 : `Blocked — ${(vr.risk_severity ?? 'CRITICAL')} risk${vr.recommendation ? ` (${vr.recommendation})` : ''} — fix before submitting`}
@@ -623,13 +623,13 @@ const ArtifactDetail: React.FC<{
           </div>
 
           {vr.scanned === false && (
-            <p className="text-[11px] text-amber-300/90 mb-2">
+            <p className="text-[11px] text-amber-700 dark:text-amber-300/90 mb-2">
               {vr.note || 'This artifact type was not scanned.'}
             </p>
           )}
 
           {[...vr.errors, ...vr.warnings].map((issue, i) => (
-            <div key={i} className={`text-xs py-1.5 border-t border-white/5 first:border-t-0 ${issue.severity === 'error' ? 'text-red-300' : 'text-yellow-300'}`}>
+            <div key={i} className={`text-xs py-1.5 border-t border-slate-200 dark:border-white/5 first:border-t-0 ${issue.severity === 'error' ? 'text-red-700 dark:text-red-300' : 'text-yellow-700 dark:text-yellow-300'}`}>
               <div className="flex items-start gap-2">
                 <span className="material-symbols-outlined text-xs mt-0.5">
                   {issue.severity === 'error' ? 'error' : 'warning'}
@@ -663,12 +663,12 @@ const ArtifactDetail: React.FC<{
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-4 border-b border-white/10">
+      <div className="flex gap-1 mb-4 border-b border-slate-200 dark:border-white/10">
         {(['overview', 'files', 'instructions', 'history'] as const).map(t => (
           <button
             key={t}
             onClick={() => setDetailTab(t)}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${detailTab === t ? 'text-white border-b-2 border-primary' : 'text-slate-500 hover:text-slate-300'}`}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${detailTab === t ? 'text-slate-900 dark:text-white border-b-2 border-primary' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
           >
             {t.charAt(0).toUpperCase() + t.slice(1)}
             {t === 'files' && ` (${artifact.files.length})`}
@@ -684,15 +684,15 @@ const ArtifactDetail: React.FC<{
             <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">Description</p>
             {editMode ? (
               <textarea
-                className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-primary/50 resize-none"
+                className="w-full bg-white dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded px-3 py-2 text-sm text-slate-900 dark:text-slate-300 focus:outline-none focus:border-primary/50 resize-none"
                 rows={4}
                 value={editData.description}
                 onChange={e => setEditData(d => ({ ...d, description: e.target.value }))}
                 placeholder="Describe what this artifact does…"
               />
             ) : (
-              <p className="text-sm text-slate-300 whitespace-pre-wrap">
-                {artifact.description || <span className="text-slate-600 italic">No description</span>}
+              <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                {artifact.description || <span className="text-slate-400 dark:text-slate-600 italic">No description</span>}
               </p>
             )}
           </div>
@@ -701,7 +701,7 @@ const ArtifactDetail: React.FC<{
             <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">Tags</p>
             {editMode ? (
               <input
-                className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-primary/50"
+                className="w-full bg-white dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded px-3 py-2 text-sm text-slate-900 dark:text-slate-300 focus:outline-none focus:border-primary/50"
                 value={editData.tags}
                 onChange={e => setEditData(d => ({ ...d, tags: e.target.value }))}
                 placeholder="comma, separated, tags"
@@ -709,31 +709,31 @@ const ArtifactDetail: React.FC<{
             ) : (
               <div className="flex flex-wrap gap-2">
                 {artifact.tags.length ? artifact.tags.map(t => (
-                  <span key={t} className="px-2 py-0.5 rounded-full text-xs bg-white/10 text-slate-400 border border-white/10">{t}</span>
-                )) : <span className="text-slate-600 italic text-sm">No tags</span>}
+                  <span key={t} className="px-2 py-0.5 rounded-full text-xs bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/10">{t}</span>
+                )) : <span className="text-slate-400 dark:text-slate-600 italic text-sm">No tags</span>}
               </div>
             )}
           </div>
 
           <div className="grid grid-cols-2 gap-4 pt-2 text-xs text-slate-500">
             <div>
-              <span className="block font-medium text-slate-400 mb-0.5">Submitted by</span>
+              <span className="block font-medium text-slate-600 dark:text-slate-400 mb-0.5">Submitted by</span>
               {artifact.submitted_by_name || 'Unknown'}
             </div>
             <div>
-              <span className="block font-medium text-slate-400 mb-0.5">Last updated</span>
+              <span className="block font-medium text-slate-600 dark:text-slate-400 mb-0.5">Last updated</span>
               {new Date(artifact.updated_at).toLocaleString()}
             </div>
             {artifact.parent_slug && (
               <div>
-                <span className="block font-medium text-slate-400 mb-0.5">Updating component</span>
+                <span className="block font-medium text-slate-600 dark:text-slate-400 mb-0.5">Updating component</span>
                 <span className="font-mono text-primary">{artifact.parent_slug}</span>
               </div>
             )}
             {artifact.version_tag && (
               <div>
-                <span className="block font-medium text-slate-400 mb-0.5">Version</span>
-                <span className="font-mono text-emerald-400">v{artifact.version_tag}</span>
+                <span className="block font-medium text-slate-600 dark:text-slate-400 mb-0.5">Version</span>
+                <span className="font-mono text-emerald-600 dark:text-emerald-400">v{artifact.version_tag}</span>
               </div>
             )}
           </div>
@@ -759,7 +759,7 @@ const ArtifactDetail: React.FC<{
         <div>
           {editMode ? (
             <textarea
-              className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-slate-300 font-mono focus:outline-none focus:border-primary/50 resize-none"
+              className="w-full bg-white dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded px-3 py-2 text-sm text-slate-900 dark:text-slate-300 font-mono focus:outline-none focus:border-primary/50 resize-none"
               rows={20}
               value={editData.instructions}
               onChange={e => setEditData(d => ({ ...d, instructions: e.target.value }))}
@@ -812,9 +812,9 @@ const VersionHistory: React.FC<{ versions: ArtifactVersion[] | null }> = ({ vers
               onClick={() => setOpenId(isOpen ? null : v.id)}
               className="w-full flex items-center gap-3 px-4 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 transition-colors text-left"
             >
-              <span className="font-mono text-sm font-bold text-emerald-400">v{v.version}</span>
+              <span className="font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">v{v.version}</span>
               {i === 0 && (
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">latest</span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">latest</span>
               )}
               <span className="text-xs text-slate-500 flex-1 truncate">
                 {v.published_by_name || 'Unknown'} · {new Date(v.published_at).toLocaleString()}
@@ -1094,7 +1094,7 @@ const FilesEditor: React.FC<{
       </div>
 
       {dropMsg && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400">
+        <div className="flex items-center gap-2 px-3 py-2 rounded bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-600 dark:text-emerald-400">
           <span className="material-symbols-outlined text-sm">check_circle</span>
           {dropMsg}
         </div>
@@ -1362,7 +1362,7 @@ const NewArtifactForm: React.FC<{
       </div>
 
       {error && (
-        <div className="p-3 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-sm">{error}</div>
+        <div className="p-3 rounded bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-sm">{error}</div>
       )}
 
       {/* Files — shown first so ZIP drop auto-populates the fields below */}
@@ -1480,7 +1480,7 @@ const NewArtifactForm: React.FC<{
             </div>
             <p className="text-xs text-slate-600 mt-1.5 font-mono">
               {currentVersion ? `current v${currentVersion} → ` : 'first publish → '}
-              <span className="text-emerald-400">v{nextVersion}</span>
+              <span className="text-emerald-600 dark:text-emerald-400">v{nextVersion}</span>
               <span className="not-italic font-sans text-slate-500"> · assigned automatically when an admin publishes</span>
             </p>
           </div>
@@ -1660,7 +1660,7 @@ export const GithubConfigPanel: React.FC = () => {
         <div>
           <label className="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">GitHub Repository URL</label>
           <input
-            className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-primary/50 font-mono"
+            className="w-full bg-white dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded px-3 py-2 text-sm text-slate-900 dark:text-slate-300 focus:outline-none focus:border-primary/50 font-mono"
             value={cfg.url}
             onChange={e => updateTypeConfig(activeType, 'url', e.target.value)}
             placeholder="https://github.com/org/repo.git"
@@ -1671,7 +1671,7 @@ export const GithubConfigPanel: React.FC = () => {
           <div>
             <label className="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">Branch</label>
             <input
-              className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-primary/50 font-mono"
+              className="w-full bg-white dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded px-3 py-2 text-sm text-slate-900 dark:text-slate-300 focus:outline-none focus:border-primary/50 font-mono"
               value={cfg.branch}
               onChange={e => updateTypeConfig(activeType, 'branch', e.target.value)}
               placeholder="main"
@@ -1680,7 +1680,7 @@ export const GithubConfigPanel: React.FC = () => {
           <div>
             <label className="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">Base Folder</label>
             <input
-              className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-primary/50 font-mono"
+              className="w-full bg-white dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded px-3 py-2 text-sm text-slate-900 dark:text-slate-300 focus:outline-none focus:border-primary/50 font-mono"
               value={cfg.folder}
               onChange={e => updateTypeConfig(activeType, 'folder', e.target.value)}
               placeholder={activeType === 'agent' ? 'agents' : activeType === 'skill' ? 'skills' : 'mcp'}
@@ -1693,7 +1693,7 @@ export const GithubConfigPanel: React.FC = () => {
           <label className="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">GitHub Personal Access Token</label>
           <input
             type="password"
-            className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-primary/50 font-mono"
+            className="w-full bg-white dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded px-3 py-2 text-sm text-slate-900 dark:text-slate-300 focus:outline-none focus:border-primary/50 font-mono"
             value={cfg.token}
             onChange={e => updateTypeConfig(activeType, 'token', e.target.value)}
             placeholder="ghp_… (leave blank to keep existing)"
