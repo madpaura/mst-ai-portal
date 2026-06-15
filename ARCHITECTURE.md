@@ -96,7 +96,7 @@ Redis      — cache + rate limiting
 | Frontend | React 19 + Vite | Fast builds, lazy-loaded chunks, TypeScript |
 | Video | FFmpeg + HLS | Browser-compatible adaptive bitrate, GPU via NVENC |
 | Transcription | Whisper (faster-whisper) | Offline, accurate, SSE streaming progress |
-| LLM | Ollama / OpenAI / Anthropic | Multi-provider; auto-mode uses Ollama; assistant supports all three |
+| LLM | Ollama / OpenAI / Anthropic / OpenAI-compatible | Multi-provider; auto-mode uses Ollama; in-house gateway takes priority when enabled; assistant supports all four |
 | Auth | JWT httpOnly cookie | XSS-safe; SAML/LDAP for enterprise SSO |
 | Cache | Redis | Per-namespace versioned cache, TTL-based invalidation |
 
@@ -110,14 +110,15 @@ Redis      — cache + rate limiting
 - `user_notes` — timestamped video notes
 - `video_bookmarks` — per-user saved/bookmarked videos
 - `playlists` + `playlist_videos` — user-created custom playlists with ordered video membership
-- `articles` — knowledge base
+- `articles` — knowledge base; `pdf_url` / `pdf_filename` for PDF-mode articles; `view_count` aggregated from analytics
+- `article_likes` — one row per (user, article); used for like counts and trending score
 - `solutions` + `news_items` — solutions showcase + feed
 - `forge_components` — marketplace registry; `creator_user_id` tracks the submitting user for owner-gated controls
 - `artifact_submissions` — contributor submissions pending review; `parent_slug` links updates to an existing component, `version_tag` records the target version
 - `artifact_versions` — immutable snapshot of every published version (version string, timestamp, metadata)
 - `publish_requests` — submit-for-review records (target_type, target_id, status, reviewer)
 - `meme_clicks` — per-meme click log for redirect analytics (`/r/{meme_id}`)
-- `app_settings` — key/value admin config (SMTP, feature flags, assistant system prompt, `assistant_enabled`, `artifact_allowed_types`)
+- `app_settings` — key/value admin config (SMTP, feature flags, assistant system prompt, `assistant_enabled`, `artifact_allowed_types`, `inhouse_llm_config`)
 
 ## Security model
 

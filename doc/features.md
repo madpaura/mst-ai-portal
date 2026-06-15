@@ -84,9 +84,24 @@ High-level summary of all major features.
 
 ## Discover
 
-- **Articles** — long-form knowledge articles with Markdown content, category filter, and search
-- **Memes** — image gallery with titles and tags; public short-link redirect (`/r/{meme_id}`) with click logging; analytics showing daily click totals and per-meme breakdown in the Admin Analytics panel
-- **News** — RSS-ingested news feed with external links and summaries
+### Articles
+
+- Long-form knowledge articles with Markdown content, category filter, and search
+- **Two-phase load + pagination** — first batch paints immediately; remaining articles stream in behind skeleton cards; numbered pager with "Show all" toggle
+- **Trending / Latest sort** — default sort is a trending score (`likes × 5 + views`, recency tiebreak); a toggle switches to Latest; liking a post does not reshuffle the grid mid-browse
+- **Thumbs-up likes** — optimistic like/unlike button on every card and in the article detail view; per-article and aggregate like counts
+- **View counts** — article views tracked via the analytics section map; view count displayed on each card
+- **PDF article mode** — drop a PDF onto the article editor to publish it as a native browser PDF view (`<object>`) with a download fallback; PDF stored under `media/articles/inline/`
+- **Rich-text paste** — paste HTML (Word, web pages, email) and it is converted to GFM markdown client-side via `turndown`; embedded `data-URI` images are uploaded and rewritten to portal URLs
+- **Image & file drag-and-drop** — images dropped or pasted into the editor are uploaded to `POST /articles/uploads` and inserted as `![](url)` (max 10 MB); PDFs trigger PDF-article mode (max 20 MB)
+
+### Memes
+
+- Image gallery with titles and tags; public short-link redirect (`/r/{meme_id}`) with click logging; analytics showing daily click totals and per-meme breakdown in the Admin Analytics panel
+
+### News
+
+- RSS-ingested news feed with external links and summaries
 
 ---
 
@@ -114,7 +129,7 @@ High-level summary of all major features.
 - **Forge Settings** — configure GitHub repo URL, token, branch, and scan paths for sync
 - **Analytics** — page-view counts and trends; **Memes tab** with daily click totals and per-meme breakdown
 - **Digest** — schedule and send learning digest emails (curated content newsletter)
-- **Settings** — SMTP configuration (including subject prefix), portal theme, transcript service URL/key, marketplace under-construction toggle, SAML settings path, **AI assistant enable/disable**, **assistant system prompt**
+- **Settings** — SMTP configuration (including subject prefix), portal theme, transcript service URL/key, marketplace under-construction toggle, SAML settings path, **AI assistant enable/disable**, **assistant system prompt**, **In-House LLM** (base URL, API key, model, context/output/temperature — takes priority over Ollama/Forge when enabled)
 - **Publish Authority** — review submit-for-publish requests from content creators; one-click approve/decline via portal UI or email action links
 - **Artifact Hub** — manage contributor submissions; approve or reject with version tagging; view per-artifact version history
 
@@ -127,7 +142,7 @@ High-level summary of all major features.
 - Floating chat widget available on all non-admin pages; slides in from the bottom-right corner
 - **SSE streaming** — response tokens arrive in real time via Server-Sent Events
 - **21 role-gated tools** covering: search/list videos and courses, article/solution/marketplace search, user learning progress, personal notes, announcements, news feed, global search, pending publish requests, artifact submissions, and job status
-- **Multi-provider LLM** — supports Ollama, OpenAI, and Anthropic via a unified tool-calling loop; configured in Admin → Forge Settings
+- **Multi-provider LLM** — supports Ollama, OpenAI, Anthropic, and **in-house OpenAI-compatible** gateways via a unified tool-calling loop; configured in Admin → Forge Settings / In-House LLM
 - **Rolling history compaction** — client sends the last 20 messages to `/assistant/compact` when the window fills; older context is summarised and injected as a system message
 - **Admin controls** — enable/disable the assistant site-wide via Admin → Settings; configure a custom system prompt injected before every chat
 - `/assistant/enabled` endpoint lets the widget check its own state before rendering
@@ -202,8 +217,29 @@ Both themes support light and dark mode toggle independently.
 - **Redis** cache with configurable TTL for API responses (list endpoints, search suggestions)
 - **Alembic** migrations run automatically on backend startup — safe to redeploy without manual migration steps
 - **Resource limits** — all background worker containers have configurable CPU/memory caps so content serving is never starved
-- **Backup** — `scripts/backup.sh` handles DB dump + video archive + config; supports local, rsync, scp, and rclone remote transfer with configurable retention
+- **Backup** — `scripts/backup.sh` handles DB dump + video archive + config; supports local, rsync, scp, and rclone remote transfer with configurable retention; storage locations resolved from `backup.conf` → `.env` → default paths so backups track `VIDEO_DATA_VOLUME` / `MEDIA_DATA_VOLUME` moves automatically
 - **Live migration** — `scripts/migrate.sh` handles full server-to-server migration with automatic rollback on failure
 - **Unified log level** — `LOG_LEVEL` env var (`DEBUG` / `INFO` / `WARNING` / `ERROR`) applied consistently to backend, worker, auto-processor, and uvicorn access logs
 - **Host networking mode** — `HOST_NETWORK=true` + `docker-compose.hostnet.yml` override switches all containers to `network_mode: host`; useful when the Docker bridge network causes Ollama or LDAP connectivity issues (Linux only)
 - **Same-origin API proxy** — nginx `/backend/` location strips the prefix and forwards to the backend, allowing `VITE_API_URL=/backend` for CORS-free access regardless of port layout
+- **Configurable uvicorn workers** — `UVICORN_WORKERS` env var (default `4` in Docker) scales FastAPI across multiple CPU cores; Alembic migrations and the Forge scheduler are each guarded by a Postgres advisory lock so only one worker runs them regardless of worker count
+- **Self-hosted fonts** — Material Symbols and Space Grotesk are served from npm packages (`material-symbols`, `@fontsource/space-grotesk`); no external CDN dependency at runtime, important for air-gapped / intranet deployments
+- **Performance (nginx)** — HLS and stream assets served directly from disk (bypasses FastAPI), keepalive upstreams, immutable `Cache-Control` for versioned assets, SSE buffering scoped to the assistant endpoint only
+- **Performance (frontend)** — vendor chunk split from 2 MB into smaller pieces; PDF-export and JSZip lazy-loaded on demand to reduce initial bundle size
+- **Performance (backend)** — per-request DB round-trips reduced on hot paths; custom middleware converted to pure ASGI (no `BaseHTTPMiddleware` per-request task overhead)
+- **Performance (pages)** — Ignite Browse, Articles, and Marketplace use a two-phase load: small first batch for immediate paint, full list streamed behind skeleton cards; shared `Pager` component and `usePagedList` hook for numbered pagination with a "Show all" escape
+
+---
+
+## Stress Testing
+
+A self-contained, asyncio-based **read-only** load-test CLI lives in `stress-test/`:
+
+- Mints `mst_token` JWTs locally from `JWT_SECRET` — no IdP round-trip, safe against SAML/ADFS deployments
+- **Breaking-point ramp** — ramps virtual users until error rate or p95 latency SLOs breach; reports max sustainable concurrency and throughput
+- **Steady / latency / soak** modes for fixed-rate or long-run tests
+- **HLS streaming load** — discovers a real video and replays master → variant → segment fetches to simulate concurrent viewers
+- **Multi-process load generation** (`--load-workers N`) — forks N generator processes to bypass Python GIL; combined histograms give exact percentiles
+- **Reports** — live terminal dashboard, self-contained HTML report (inline SVG charts), JSON, CSV
+
+See [stress-test/README.md](../stress-test/README.md) for full usage.
