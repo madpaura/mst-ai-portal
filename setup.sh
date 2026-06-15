@@ -280,6 +280,12 @@ deploy() {
         done
     fi
 
+    # Surface build provenance (short commit + date) into the frontend image so
+    # the UI footer can show it — the .git dir isn't in the image build context.
+    export GIT_COMMIT_HASH="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    export BUILD_DATE="$(date -u +%Y-%m-%d)"
+    ok "Build version: ${GIT_COMMIT_HASH} (${BUILD_DATE})"
+
     echo "Building and starting containers..."
     $COMPOSE $FILES build $PROXY_ARGS
     $COMPOSE $FILES up -d

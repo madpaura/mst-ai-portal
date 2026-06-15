@@ -61,7 +61,7 @@ const TYPE_META: Record<string, { title: string; subtitle: string }> = {
 };
 
 const BADGE_STYLES: Record<string, { label: string; color: string; bg: string }> = {
-  verified: { label: 'Verified', color: 'text-green-500', bg: 'bg-green-500/10' },
+  verified: { label: 'Recommended', color: 'text-green-500', bg: 'bg-green-500/10' },
   community: { label: 'Community', color: 'text-slate-500', bg: 'bg-slate-500/10' },
   open_source: { label: 'Open Source', color: 'text-primary', bg: 'bg-primary/10' },
 };
@@ -370,7 +370,7 @@ export const Marketplace: React.FC = () => {
                       type="checkbox"
                     />
                     <span className="text-sm text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200">
-                      Verified by Intel
+                      Officially Recommended
                     </span>
                   </label>
                   <label className="flex items-center gap-3 cursor-pointer group">
@@ -643,10 +643,13 @@ export const Marketplace: React.FC = () => {
         </main>
 
         {/* Footer */}
-        <footer className="bg-slate-100 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-6 py-4 flex items-center text-xs text-slate-500">
+        <footer className="bg-slate-100 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-6 py-4 flex items-center justify-between text-xs text-slate-500">
           <span className="flex items-center gap-1">
             <span className="size-2 rounded-full bg-green-500" />
             MST Registry Online
+          </span>
+          <span className="font-mono tracking-tight text-slate-400 dark:text-slate-600">
+            build {__GIT_COMMIT_HASH__} · {__BUILD_DATE__}
           </span>
         </footer>
       </div>

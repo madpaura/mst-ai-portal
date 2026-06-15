@@ -12,6 +12,14 @@ ENV VITE_AUTH_MODE=${VITE_AUTH_MODE}
 ARG VITE_BETA_TAG=
 ENV VITE_BETA_TAG=${VITE_BETA_TAG}
 
+# Build provenance surfaced in the UI footer. The .git dir isn't in this build
+# context, so the host passes these in (see docker-compose + setup.sh).
+ARG VITE_GIT_COMMIT_HASH=unknown
+ENV VITE_GIT_COMMIT_HASH=${VITE_GIT_COMMIT_HASH}
+
+ARG VITE_BUILD_DATE=
+ENV VITE_BUILD_DATE=${VITE_BUILD_DATE}
+
 COPY package.json package-lock.json ./
 RUN npm ci
 

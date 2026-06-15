@@ -1162,7 +1162,7 @@ export const AdminMarketplace: React.FC = () => {
                   <select value={compForm.badge} onChange={e => setCompForm(f => ({ ...f, badge: e.target.value }))}
                     className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none">
                     <option value="">None</option>
-                    <option value="verified">Verified</option>
+                    <option value="verified">Officially Recommended</option>
                     <option value="community">Community</option>
                     <option value="open_source">Open Source</option>
                   </select>
