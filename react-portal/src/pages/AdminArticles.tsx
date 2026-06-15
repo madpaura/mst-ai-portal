@@ -7,6 +7,7 @@ import 'highlight.js/styles/github-dark.css';
 import '../styles/howto-markdown.css';
 import { api, toApiError } from '../api/client';
 import { useArticlePasteDrop } from '../hooks/useArticlePasteDrop';
+import { ContentEmailModal } from '../components/ContentEmailModal';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -62,6 +63,7 @@ export const AdminArticles: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   // Create form
   const [showCreate, setShowCreate] = useState(false);
@@ -372,6 +374,14 @@ export const AdminArticles: React.FC = () => {
                   {saving ? 'Saving...' : 'Save'}
                 </button>
                 <button
+                  onClick={() => setEmailOpen(true)}
+                  title="Email this article"
+                  className="flex items-center gap-1.5 px-3 py-2 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold rounded-lg transition-colors border border-primary/20"
+                >
+                  <span className="material-symbols-outlined text-sm">mail</span>
+                  Email
+                </button>
+                <button
                   onClick={handleDelete}
                   className="flex items-center gap-1.5 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs rounded-lg transition-colors border border-red-500/20"
                 >
@@ -577,6 +587,16 @@ export const AdminArticles: React.FC = () => {
           </div>
         )}
       </div>
+
+      {selected && (
+        <ContentEmailModal
+          open={emailOpen}
+          title={selected.title}
+          previewPath={`/admin/articles/${selected.id}/email-preview`}
+          sendPath={`/admin/articles/${selected.id}/send-email`}
+          onClose={() => setEmailOpen(false)}
+        />
+      )}
     </div>
   );
 };

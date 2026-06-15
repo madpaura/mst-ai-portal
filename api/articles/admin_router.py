@@ -5,11 +5,15 @@ import bleach
 import asyncpg
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 
+from pydantic import BaseModel
+
 from articles.schemas import (
     ArticleResponse, ArticleListResponse, ArticleCreate, ArticleUpdate,
     BeautifyRequest, BeautifyResponse, AttachmentResponse,
 )
 from articles.llm import call_llm
+from articles.email import generate_email_preview
+from email_utils.utils import send_email_multi
 from auth.dependencies import require_content as require_admin
 from config import settings
 from database import get_db
@@ -337,3 +341,60 @@ async def delete_attachment(
 
     await db.execute("DELETE FROM article_attachments WHERE id = $1", attachment_id)
     return {"message": "Attachment deleted"}
+
+
+# ── Email (send an individual article as a newsletter-style email) ─────────────
+
+class EmailPreviewRequest(BaseModel):
+    custom_content: str = ""
+
+
+class EmailPreviewResponse(BaseModel):
+    subject: str
+    html_content: str
+    plain_text: str
+
+
+class SendEmailRequest(BaseModel):
+    recipient_emails: list[str]
+    subject: str
+    html_content: str
+    plain_text: str = ""
+
+
+class SendEmailResponse(BaseModel):
+    success: bool
+    message: str
+    sent_count: int = 0
+
+
+@router.post("/articles/{article_id}/email-preview", response_model=EmailPreviewResponse)
+async def admin_article_email_preview(
+    article_id: str, req: EmailPreviewRequest, admin: dict = Depends(require_admin)
+):
+    try:
+        preview = await generate_email_preview(article_id, req.custom_content or None)
+        return EmailPreviewResponse(**preview)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate preview: {str(e)}")
+
+
+@router.post("/articles/{article_id}/send-email", response_model=SendEmailResponse)
+async def admin_article_send_email(
+    article_id: str, req: SendEmailRequest, admin: dict = Depends(require_admin)
+):
+    try:
+        total = len(req.recipient_emails)
+        success = await send_email_multi(
+            subject=req.subject,
+            html_content=req.html_content,
+            plain_text=req.plain_text or None,
+            bcc_emails=req.recipient_emails,
+        )
+        if success:
+            return SendEmailResponse(success=True, message=f"Email sent to {total} recipient(s)", sent_count=total)
+        return SendEmailResponse(success=False, message="Failed to send email — check SMTP settings", sent_count=0)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Email send error: {str(e)}")
