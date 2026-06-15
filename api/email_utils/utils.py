@@ -208,6 +208,45 @@ async def get_publish_authority_emails() -> list[str]:
     return filter_deliverable(emails)
 
 
+def generate_item_email_html(
+    item: dict,
+    related_items: Optional[list] = None,
+    stats: Optional[dict] = None,
+    issue_title: str = "Portal<br><em>Update</em>",
+    cta_text: str = "Explore the portal",
+    cta_link: Optional[str] = None,
+    issue_label: Optional[str] = None,
+) -> str:
+    """Generate a single-item editorial email (article, marketplace component, …).
+
+    Unlike generate_email_html (which fills video-flavored placeholder items when
+    none are given), this passes the caller's lists through verbatim — pass an
+    empty related_items to omit the "more to explore" grid entirely.
+
+    item keys: title, description, category, duration, author, author_initials, tag, link
+    """
+    featured = {
+        "title": item.get("title", ""),
+        "description": item.get("description", ""),
+        "category": item.get("category", "Update"),
+        "duration": item.get("duration", ""),
+        "author": item.get("author", "MST AI Portal"),
+        "author_initials": item.get("author_initials", "AI"),
+        "tag": item.get("tag", "Featured"),
+        "link": item.get("link", settings.PORTAL_URL),
+    }
+    return generate_editorial_email(
+        issue_title=issue_title,
+        issue_number=1,
+        featured_item=featured,
+        featured_items=related_items or [],
+        stats=stats or {},
+        cta_text=cta_text,
+        cta_link=cta_link or settings.PORTAL_URL,
+        issue_label=issue_label,
+    )
+
+
 def generate_email_html(video_data: dict, featured_items: list = None, stats: dict = None, series: dict = None, issue_label: str = None) -> str:
     """
     Generate HTML email using editorial template.
