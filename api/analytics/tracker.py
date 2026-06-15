@@ -20,6 +20,7 @@ SECTION_MAP = {
     "/ignite": "ignite",
     "/news": "news",
     "/howto": "ignite",
+    "/articles": "articles",
 }
 
 

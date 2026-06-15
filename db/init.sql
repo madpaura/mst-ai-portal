@@ -375,6 +375,18 @@ CREATE TABLE video_likes (
 
 CREATE INDEX idx_video_likes_video ON video_likes(video_id);
 
+---------------------------------------------------
+-- ARTICLE LIKES (thumbs up — powers trending sort)
+---------------------------------------------------
+CREATE TABLE article_likes (
+    user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
+    article_id  UUID REFERENCES articles(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (user_id, article_id)
+);
+
+CREATE INDEX idx_article_likes_article ON article_likes(article_id);
+
 -- Saved / bookmarks (Ignite browse "Saved")
 CREATE TABLE video_bookmarks (
     user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -487,6 +499,8 @@ CREATE TABLE articles (
     is_published    BOOLEAN DEFAULT false,
     is_active       BOOLEAN DEFAULT true,
     published_at    TIMESTAMPTZ,
+    pdf_url         TEXT,
+    pdf_filename    TEXT,
     created_at      TIMESTAMPTZ DEFAULT now(),
     updated_at      TIMESTAMPTZ DEFAULT now()
 );

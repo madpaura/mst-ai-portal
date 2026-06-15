@@ -21,8 +21,9 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
   const [logoAnim, setLogoAnim] = useState(false);
   const [showVmg, setShowVmg] = useState(false);
 
-  const handleLogoClick = (e: React.MouseEvent) => {
-    e.preventDefault();
+  const handleLogoClick = () => {
+    // Let the <Link to="/"> navigate home; just play the spin/VMG easter-egg
+    // animation alongside it (skip re-triggering while one is already running).
     if (logoAnim) return;
     setLogoAnim(true);
     setShowVmg(false);

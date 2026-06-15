@@ -11,6 +11,9 @@ import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../api/auth';
 import { usePageView } from '../hooks/usePageView';
+import { ComponentCardSkeleton, ComponentRowSkeleton } from '../components/Skeletons';
+import { Pager } from '../components/Pager';
+import { usePagedList } from '../hooks/usePagedList';
 
 interface ForgeComponent {
   id: string;
@@ -95,6 +98,9 @@ interface MarketplaceStatus {
   types?: Record<string, TypeStatus>;
 }
 
+// First-paint batch size and grid page size (4-column grid → 3 clean rows).
+const PAGE_SIZE = 12;
+
 export const Marketplace: React.FC = () => {
   usePageView('/marketplace');
   const { user, isAdmin } = useAuth();
@@ -118,9 +124,27 @@ export const Marketplace: React.FC = () => {
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
   const [contributingGuide, setContributingGuide] = useState<ContributingGuide | null>(null);
   const [marketStatus, setMarketStatus] = useState<MarketplaceStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [fullLoaded, setFullLoaded] = useState(false);
+  const fullLoadedRef = useRef(false);
 
   useEffect(() => {
-    api.get<ForgeComponent[]>('/forge/components').then(setComponents).catch(() => {});
+    // Two-phase load: paint the first batch immediately, then swap in the
+    // full registry once the background request lands.
+    api.get<ForgeComponent[]>(`/forge/components?limit=${PAGE_SIZE}`)
+      .then((batch) => {
+        if (!fullLoadedRef.current) setComponents(batch);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+    api.get<ForgeComponent[]>('/forge/components')
+      .then((all) => {
+        fullLoadedRef.current = true;
+        setComponents(all);
+        setFullLoaded(true);
+      })
+      .catch(() => setFullLoaded(true))
+      .finally(() => setLoading(false));
     api.get<ContributingGuide>('/forge/contributing-guide').then(setContributingGuide).catch(() => {});
     api.get<MarketplaceStatus | null>('/settings/marketplace_status')
       .then(setMarketStatus)
@@ -247,6 +271,13 @@ export const Marketplace: React.FC = () => {
       (openSource && c.badge === 'open_source');
     return matchesSearch && matchesType && matchesBadge;
   });
+
+  // Paginate the grid/list; reset to page 1 when any filter changes.
+  const paged = usePagedList(
+    filteredCards,
+    PAGE_SIZE,
+    `${searchQuery}|${activeTab}|${verifiedOnly}|${communityBuilt}|${openSource}`,
+  );
 
   if (isUnderConstruction) {
     return (
@@ -426,7 +457,7 @@ export const Marketplace: React.FC = () => {
             {/* Grid of Cards */}
             {viewMode === 'card' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {filteredCards.map((card) => {
+              {paged.visible.map((card) => {
                 const typeStyle = TYPE_BADGES[card.component_type] || TYPE_BADGES.agent;
                 const badgeStyle = card.badge ? BADGE_STYLES[card.badge] : null;
                 const dotColor = TYPE_DOT[card.component_type] || 'bg-slate-400';
@@ -505,10 +536,12 @@ export const Marketplace: React.FC = () => {
                   </div>
                 );
               })}
+              {(loading || !fullLoaded) &&
+                Array.from({ length: loading ? 8 : 4 }, (_, i) => <ComponentCardSkeleton key={`sk-${i}`} />)}
             </div>
             ) : (
             <div className="flex flex-col gap-2">
-              {filteredCards.map((card) => {
+              {paged.visible.map((card) => {
                 const typeStyle = TYPE_BADGES[card.component_type] || TYPE_BADGES.agent;
                 const badgeStyle = card.badge ? BADGE_STYLES[card.badge] : null;
                 const dotColor = TYPE_DOT[card.component_type] || 'bg-slate-400';
@@ -577,10 +610,26 @@ export const Marketplace: React.FC = () => {
                   </div>
                 );
               })}
+              {(loading || !fullLoaded) &&
+                Array.from({ length: loading ? 8 : 4 }, (_, i) => <ComponentRowSkeleton key={`sk-${i}`} />)}
             </div>
             )}
 
-            {filteredCards.length === 0 && (
+            {fullLoaded && paged.hasPager && (
+              <Pager
+                page={paged.page}
+                pageCount={paged.pageCount}
+                total={paged.total}
+                showAll={paged.showAll}
+                onPage={(p) => {
+                  paged.setPage(p);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                onToggleShowAll={() => paged.setShowAll(!paged.showAll)}
+              />
+            )}
+
+            {fullLoaded && filteredCards.length === 0 && (
               <div className="text-center py-20 text-slate-500">
                 <span className="material-symbols-outlined text-4xl mb-4 block">search_off</span>
                 <p>

@@ -16,6 +16,11 @@ _INSECURE_DB_PASSWORDS = {"portal123", "postgres", "password", "admin", "root"}
 class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql://portal:portal123@localhost:5432/mst_portal"
+    # asyncpg pool size — per uvicorn worker. Total backend connections is
+    # DB_POOL_MAX × UVICORN_WORKERS, plus the worker containers; keep the sum
+    # below Postgres max_connections (default 100).
+    DB_POOL_MIN: int = 2
+    DB_POOL_MAX: int = 10
 
     # Auth
     AUTH_MODE: Literal["open", "ldap", "saml"] = "open"
@@ -65,6 +70,17 @@ class Settings(BaseSettings):
     # LLM / Ollama
     # Use localhost by default for local runs; Docker compose overrides this to host.docker.internal.
     OLLAMA_BASE_URL: str = "http://localhost:11434"
+
+    # SkillSpector — security scanner for submitted skill/MCP artifacts.
+    # Runs as a sidecar container; the backend POSTs files to {URL}/scan.
+    SKILLSPECTOR_SERVICE_URL: str = "http://localhost:9200"
+    # Use the portal's active LLM (in-house/Ollama) for SkillSpector's semantic
+    # stage. When no usable endpoint is configured the scan falls back to static.
+    SKILLSPECTOR_USE_LLM: bool = True
+    # When the scanner is unreachable: false = allow submit with a warning
+    # (fail-open), true = block submit (fail-closed).
+    SKILLSPECTOR_FAIL_CLOSED: bool = False
+    SKILLSPECTOR_TIMEOUT: float = 180.0
 
     # Portal frontend URL (used for links in emails/newsletters)
     PORTAL_URL: str = "http://localhost:9810"

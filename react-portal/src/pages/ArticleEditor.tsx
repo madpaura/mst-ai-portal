@@ -9,6 +9,9 @@ import '../styles/howto-markdown.css';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { api, toApiError } from '../api/client';
+import { useArticlePasteDrop } from '../hooks/useArticlePasteDrop';
+
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 interface Article {
   id: string;
@@ -20,6 +23,8 @@ interface Article {
   author_name: string | null;
   is_published: boolean;
   published_at: string | null;
+  pdf_url: string | null;
+  pdf_filename: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -33,11 +38,18 @@ export const ArticleEditor: React.FC = () => {
 
   const [form, setForm] = useState({
     title: '', summary: '', content: '', category: 'General',
+    pdf_url: '', pdf_filename: '',
   });
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [beautifying, setBeautifying] = useState(false);
   const [loading, setLoading] = useState(isEdit);
+
+  const { textareaRef, dragOver, uploadingPdf, handlePaste } = useArticlePasteDrop({
+    setContent: (update) => setForm((f) => ({ ...f, content: update(f.content) })),
+    onPdfUploaded: (res) => setForm((f) => ({ ...f, pdf_url: res.url, pdf_filename: res.filename })),
+    active: !loading,
+  });
 
   useEffect(() => {
     if (!articleId) return;
@@ -48,11 +60,15 @@ export const ArticleEditor: React.FC = () => {
           summary: a.summary || '',
           content: a.content,
           category: a.category,
+          pdf_url: a.pdf_url || '',
+          pdf_filename: a.pdf_filename || '',
         });
       })
       .catch(() => navigate('/articles'))
       .finally(() => setLoading(false));
   }, [articleId, navigate]);
+
+  const isPdfMode = !!form.pdf_url;
 
   const handleSave = async () => {
     if (!form.title.trim()) {
@@ -101,6 +117,18 @@ export const ArticleEditor: React.FC = () => {
   return (
     <div className="bg-background-light dark:bg-background-dark text-text-strong min-h-screen font-sans">
       <Navbar variant="solutions" />
+
+      {dragOver && (
+        <div className="fixed inset-0 z-50 bg-primary/10 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+          <div className="flex flex-col items-center gap-3 px-10 py-8 bg-white dark:bg-slate-900 border-2 border-dashed border-primary rounded-2xl shadow-2xl">
+            <span className="material-symbols-outlined text-5xl text-primary">upload_file</span>
+            <p className="text-base font-semibold text-slate-900 dark:text-white">Drop anywhere</p>
+            <p className="text-sm text-slate-500">
+              Images are embedded in the article — a PDF becomes the article itself.
+            </p>
+          </div>
+        </div>
+      )}
 
       <main className="relative pt-16">
         <div className="max-w-4xl mx-auto px-6 pt-12 pb-24">
@@ -157,41 +185,80 @@ export const ArticleEditor: React.FC = () => {
           </div>
 
           {/* Editor toolbar */}
-          <div className="flex items-center gap-2 mb-2">
-            <button
-              onClick={() => setShowPreview(false)}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-                !showPreview
-                  ? 'bg-primary/10 text-primary border border-primary/20'
-                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              Write
-            </button>
-            <button
-              onClick={() => setShowPreview(true)}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-                showPreview
-                  ? 'bg-primary/10 text-primary border border-primary/20'
-                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              Preview
-            </button>
-            <div className="flex-1" />
-            <button
-              onClick={handleBeautify}
-              disabled={beautifying || !form.content.trim()}
-              className="flex items-center gap-1.5 px-4 py-2 bg-purple-500/10 hover:bg-purple-500/20 disabled:opacity-40 text-purple-500 dark:text-purple-400 text-sm font-medium rounded-lg transition-colors border border-purple-500/20"
-            >
-              <span className="material-symbols-outlined text-sm">{beautifying ? 'progress_activity' : 'auto_fix_high'}</span>
-              {beautifying ? 'Beautifying...' : 'Beautify with AI'}
-            </button>
-          </div>
+          {!isPdfMode && (
+            <div className="flex items-center gap-2 mb-2">
+              <button
+                onClick={() => setShowPreview(false)}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                  !showPreview
+                    ? 'bg-primary/10 text-primary border border-primary/20'
+                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                Write
+              </button>
+              <button
+                onClick={() => setShowPreview(true)}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                  showPreview
+                    ? 'bg-primary/10 text-primary border border-primary/20'
+                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                Preview
+              </button>
+              <div className="flex-1" />
+              <button
+                onClick={handleBeautify}
+                disabled={beautifying || !form.content.trim()}
+                className="flex items-center gap-1.5 px-4 py-2 bg-purple-500/10 hover:bg-purple-500/20 disabled:opacity-40 text-purple-500 dark:text-purple-400 text-sm font-medium rounded-lg transition-colors border border-purple-500/20"
+              >
+                <span className="material-symbols-outlined text-sm">{beautifying ? 'progress_activity' : 'auto_fix_high'}</span>
+                {beautifying ? 'Beautifying...' : 'Beautify with AI'}
+              </button>
+            </div>
+          )}
 
           {/* Content */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden min-h-[500px]">
-            {showPreview ? (
+          <div
+            className={`bg-white dark:bg-slate-900 border rounded-xl overflow-hidden min-h-[500px] transition-colors ${
+              dragOver
+                ? 'border-primary border-dashed border-2 bg-primary/5'
+                : 'border-slate-200 dark:border-white/10'
+            }`}
+          >
+            {uploadingPdf ? (
+              <div className="flex flex-col items-center justify-center min-h-[500px] gap-3">
+                <span className="material-symbols-outlined text-4xl text-primary animate-spin">progress_activity</span>
+                <p className="text-sm text-slate-500">Uploading PDF...</p>
+              </div>
+            ) : isPdfMode ? (
+              <div className="flex flex-col min-h-[500px]">
+                <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5">
+                  <span className="material-symbols-outlined text-red-500">picture_as_pdf</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                      {form.pdf_filename || 'document.pdf'}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      This article will display the PDF instead of markdown content.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setForm((f) => ({ ...f, pdf_url: '', pdf_filename: '' }))}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-500 hover:bg-red-500/10 rounded-lg transition-colors border border-red-500/20"
+                  >
+                    <span className="material-symbols-outlined text-sm">close</span>
+                    Remove PDF
+                  </button>
+                </div>
+                <iframe
+                  src={`${API_BASE}${form.pdf_url}`}
+                  title={form.pdf_filename || 'PDF preview'}
+                  className="flex-1 w-full min-h-[600px] bg-white"
+                />
+              </div>
+            ) : showPreview ? (
               <div className="p-6 howto-markdown text-base text-slate-600 dark:text-slate-300 leading-relaxed">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
@@ -202,13 +269,23 @@ export const ArticleEditor: React.FC = () => {
               </div>
             ) : (
               <textarea
+                ref={textareaRef}
                 value={form.content}
                 onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
-                placeholder="Write your article in Markdown..."
+                onPaste={handlePaste}
+                placeholder="Write your article in Markdown... Paste rich text (it converts to Markdown automatically), paste or drop images, or drop a PDF to display the PDF itself."
                 className="w-full min-h-[500px] bg-transparent border-none resize-none text-slate-900 dark:text-white placeholder-slate-400 focus:ring-0 text-sm font-mono p-6 outline-none leading-relaxed"
               />
             )}
           </div>
+
+          {!isPdfMode && (
+            <p className="mt-2 text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-sm">info</span>
+              Paste rich text from Word, web pages or emails — it is converted to Markdown.
+              Paste or drag &amp; drop images to embed them. Drop a PDF to publish it as the article body.
+            </p>
+          )}
         </div>
       </main>
 

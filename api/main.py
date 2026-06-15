@@ -7,8 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.datastructures import MutableHeaders
 from contextlib import asynccontextmanager
 from loguru import logger as log
 
@@ -77,20 +76,42 @@ async def lifespan(app: FastAPI):
     from forge.scheduler import run_scheduler
     from cache.client import init_redis, close_redis
 
-    # Run Alembic migrations before initialising the connection pool
+    # Run Alembic migrations before initialising the connection pool.
+    # Guarded by a Postgres advisory lock so that when the backend runs with
+    # multiple uvicorn workers they serialize instead of racing: the first
+    # worker migrates to head, the rest acquire the lock afterwards and no-op.
+    # (In Docker the entrypoint also migrates once before uvicorn starts; this
+    # remains correct for non-Docker `run.sh` and multi-worker launches.)
     import subprocess, sys, os
+    import asyncpg as _asyncpg
+    _MIGRATE_LOCK_KEY = 0x5F03E5D1
     alembic_dir = os.path.dirname(__file__)
-    result = subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", "head"],
-        cwd=alembic_dir,
-        capture_output=True,
-        text=True,
-        env={**os.environ},
-    )
-    if result.returncode != 0:
-        log.error("alembic upgrade failed: {}", result.stderr)
-    else:
-        log.info("alembic upgrade head: OK")
+    _lock_conn = None
+    try:
+        _lock_conn = await _asyncpg.connect(settings.DATABASE_URL)
+        await _lock_conn.execute("SELECT pg_advisory_lock($1)", _MIGRATE_LOCK_KEY)
+    except Exception as exc:
+        log.warning("alembic advisory lock unavailable ({}); migrating without lock", exc)
+        _lock_conn = None
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd=alembic_dir,
+            capture_output=True,
+            text=True,
+            env={**os.environ},
+        )
+        if result.returncode != 0:
+            log.error("alembic upgrade failed: {}", result.stderr)
+        else:
+            log.info("alembic upgrade head: OK")
+    finally:
+        if _lock_conn is not None:
+            try:
+                await _lock_conn.execute("SELECT pg_advisory_unlock($1)", _MIGRATE_LOCK_KEY)
+                await _lock_conn.close()
+            except Exception:
+                pass
 
     await init_db()
     if settings.REDIS_ENABLED:
@@ -187,41 +208,76 @@ app.include_router(assistant_router, prefix="/assistant", tags=["assistant"])
 app.include_router(assistant_admin_router, prefix="/admin", tags=["admin-assistant"])
 
 
-class RequestIDMiddleware(BaseHTTPMiddleware):
-    """Inject X-Request-ID into every request/response; bind to log context."""
-    async def dispatch(self, request: Request, call_next):
-        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
-        request.state.request_id = request_id
+class RequestIDMiddleware:
+    """Inject X-Request-ID into every request/response; bind to log context.
+
+    Pure ASGI (not BaseHTTPMiddleware): avoids the per-request task/stream
+    wrapping overhead and plays nicely with streaming responses.
+    """
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        req_headers = dict(scope.get("headers") or [])
+        request_id = (req_headers.get(b"x-request-id") or b"").decode() or str(uuid.uuid4())
+        scope.setdefault("state", {})["request_id"] = request_id
+
+        async def send_with_id(message):
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message)["X-Request-ID"] = request_id
+            await send(message)
+
         with log.contextualize(request_id=request_id,
-                               method=request.method,
-                               path=request.url.path):
-            response: Response = await call_next(request)
-        response.headers["X-Request-ID"] = request_id
-        return response
+                               method=scope.get("method", ""),
+                               path=scope.get("path", "")):
+            await self.app(scope, receive, send_with_id)
 
 app.add_middleware(RequestIDMiddleware)
 
 
-# Middleware to prevent caching of HLS manifests and segments
-class NoCacheHLSMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
+class NoCacheHLSMiddleware:
+    """Prevent caching of HLS manifests/segments served by FastAPI (non-Docker
+    dev — in Docker, nginx serves /streams from disk with its own cache map).
+    Pure ASGI; also converts late unhandled errors into a JSON 500."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        path = scope.get("path", "")
+        is_hls = path.startswith("/streams/") and (path.endswith(".m3u8") or path.endswith(".ts"))
+        started = False
+
+        async def send_wrapper(message):
+            nonlocal started
+            if message["type"] == "http.response.start":
+                started = True
+                if is_hls:
+                    headers = MutableHeaders(scope=message)
+                    headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                    headers["Pragma"] = "no-cache"
+                    headers["Expires"] = "0"
+            await send(message)
+
         try:
-            response: Response = await call_next(request)
+            await self.app(scope, receive, send_wrapper)
         except Exception as exc:
-            request_id = getattr(request.state, "request_id", "unknown")
-            log.error(f"[{request_id}] Unhandled error in {request.method} {request.url.path}: {exc}")
+            request_id = scope.get("state", {}).get("request_id", "unknown")
+            log.error(f"[{request_id}] Unhandled error in {scope.get('method', '')} {path}: {exc}")
             log.error(traceback.format_exc())
-            return JSONResponse(
+            if started:
+                raise
+            response = JSONResponse(
                 status_code=500,
                 content={"detail": "internal_error", "request_id": request_id},
                 headers={"X-Request-ID": request_id},
             )
-        path = request.url.path
-        if path.startswith("/streams/") and (path.endswith(".m3u8") or path.endswith(".ts")):
-            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-            response.headers["Pragma"] = "no-cache"
-            response.headers["Expires"] = "0"
-        return response
+            await response(scope, receive, send)
 
 app.add_middleware(NoCacheHLSMiddleware)
 

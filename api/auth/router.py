@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from loguru import logger as log
 from auth.schemas import LoginRequest, TokenResponse, UserResponse, UserUpdateRequest
 from auth.service import verify_password, create_access_token, create_action_token, decode_action_token
-from auth.dependencies import get_current_user, require_admin
+from auth.dependencies import get_current_user, require_admin, invalidate_user_cache
 from auth.audit import audit
 from database import get_db
 from config import settings
@@ -109,6 +109,7 @@ async def update_me(req: UserUpdateRequest, user: dict = Depends(get_current_use
             user["id"],
             *values,
         )
+        invalidate_user_cache(user["id"])
 
     updated = await db.fetchrow("SELECT * FROM users WHERE id = $1", user["id"])
     return UserResponse(
@@ -386,6 +387,7 @@ async def _apply_contribute_review(request_id: str, status: str, admin_note: str
             "UPDATE users SET role = 'content' WHERE id = $1 AND role = 'user'",
             row["user_id"],
         )
+        invalidate_user_cache(row["user_id"])
 
     approved = status == "approved"
     name = row.get("user_display_name") or "there"
@@ -556,6 +558,7 @@ async def update_user_role(request: Request, user_id: str, role: str, admin: dic
     result = await db.execute("UPDATE users SET role = $1 WHERE id = $2", role, user_id)
     if result == "UPDATE 0":
         raise HTTPException(status_code=404, detail="User not found")
+    invalidate_user_cache(user_id)
     await audit(request, admin, "user.role_change", "user", user_id, {"new_role": role})
     return {"message": f"Role updated to '{role}'"}
 
@@ -598,6 +601,7 @@ async def reset_user_password(request: Request, user_id: str, body: ResetPasswor
     _validate_password_strength(body.new_password)
     pw_hash = hash_password(body.new_password)
     await db.execute("UPDATE users SET password_hash = $1 WHERE id = $2", pw_hash, user_id)
+    invalidate_user_cache(user_id)
     await audit(request, admin, "user.password_reset", "user", user_id)
     return {"message": "Password updated"}
 
@@ -626,6 +630,7 @@ async def delete_user(request: Request, user_id: str, force: bool = False, admin
             str(admin["id"]), user_id,
         )
     await db.execute("DELETE FROM users WHERE id = $1", user_id)
+    invalidate_user_cache(user_id)
     await audit(request, admin, "user.delete", "user", user_id)
     return {"message": "User deleted"}
 

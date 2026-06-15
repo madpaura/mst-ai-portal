@@ -46,9 +46,11 @@ async def list_components(
     type: Optional[str] = Query(None, alias="type"),
     badge: Optional[str] = None,
     q: Optional[str] = None,
+    limit: Optional[int] = Query(None, ge=1, le=500),
+    offset: int = Query(0, ge=0),
 ):
     cache_params: dict | None = None
-    if type or badge or q:
+    if type or badge or q or limit is not None or offset:
         cache_params = {}
         if type:
             cache_params["t"] = type
@@ -56,6 +58,10 @@ async def list_components(
             cache_params["b"] = badge
         if q:
             cache_params["q"] = q
+        if limit is not None:
+            cache_params["l"] = limit
+        if offset:
+            cache_params["o"] = offset
 
     async def _fetch():
         db = await get_db()
@@ -77,10 +83,14 @@ async def list_components(
             qparams.append(q)
             idx += 1
         where = " AND ".join(conditions)
-        rows = await db.fetch(
-            f"SELECT * FROM forge_components WHERE {where} ORDER BY downloads DESC, name ASC",
-            *qparams,
-        )
+        sql = f"SELECT * FROM forge_components WHERE {where} ORDER BY downloads DESC, name ASC"
+        if limit is not None:
+            qparams.append(limit)
+            sql += f" LIMIT ${len(qparams)}"
+        if offset:
+            qparams.append(offset)
+            sql += f" OFFSET ${len(qparams)}"
+        rows = await db.fetch(sql, *qparams)
         return [_row_to_component(r).model_dump(mode="json") for r in rows]
 
     return await cache.get_or_set(cache.NS_FORGE, "list", "components", cache_params, settings.REDIS_DEFAULT_TTL, _fetch)

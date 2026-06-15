@@ -9,9 +9,9 @@ Corporate AI learning and tools portal — video courses, solutions showcase, co
 - **Ignite** — HLS video library with courses, chapters, AI-generated transcripts, closed captions, auto-metadata pipeline, and per-creator content isolation; **browse/discovery UI** with featured hero, discover modes (Trending, Top Rated, Recently Added), custom playlists, bookmarks, and in-page fuzzy search
 - **Solutions** — filterable solution card showcase (SW / HW / Other)
 - **Marketplace** — agent, skill, and MCP server registry with GitHub sync, type-aware install guides, zip download, contributor submission workflow, version history, and lifecycle management (MANIFEST.json, artifact deletion)
-- **Discover** — Articles, Memes (with click analytics), News feed with RSS/ingest support
+- **Discover** — Articles (with likes, trending sort, PDF mode, rich-text paste), Memes (with click analytics), News feed with RSS/ingest support
 - **Search** — site-wide full-text + fuzzy typo-tolerant search across all content types
-- **AI Assistant** — floating chat widget with 21 portal-aware tools, multi-provider LLM (Ollama/OpenAI/Anthropic), admin-configurable system prompt
+- **AI Assistant** — floating chat widget with 21 portal-aware tools, multi-provider LLM (Ollama/OpenAI/Anthropic/in-house OpenAI-compatible gateway), admin-configurable system prompt
 - **Publish Authority** — content creator submit-for-review workflow with email approve/decline
 - **Admin panel** — content management, analytics, digest scheduling, SMTP, and portal settings
 - **Auth** — local (`open`), LDAP, or SAML 2.0 / ADFS
@@ -145,6 +145,7 @@ See [.env.example](.env.example) for the full annotated list. Critical variables
 | `LOG_LEVEL` | `INFO` | `DEBUG` \| `INFO` \| `WARNING` \| `ERROR` — applied to all services |
 | `HOST_NETWORK` | `false` | `true` enables host networking (Linux only; use when Docker bridge causes issues) |
 | `REDIS_ENABLED` | `true` | Set `false` for local dev without Redis |
+| `UVICORN_WORKERS` | `4` *(Docker)* | Number of uvicorn worker processes; Alembic and the scheduler are advisory-lock-guarded so multi-worker is safe |
 
 ---
 
@@ -166,11 +167,14 @@ This uses a local Python venv and Vite dev server (not Docker). The database sti
 
 | Script | Purpose |
 |---|---|
-| `scripts/backup.sh` | Backup DB + videos + media + config; supports rsync/scp/rclone remote transfer |
-| `scripts/restore.sh` | Restore from a backup directory |
+| `scripts/backup.sh` | Backup DB + videos + media + config; supports rsync/scp/rclone remote transfer; storage paths resolved from `backup.conf` → `.env` → defaults |
+| `scripts/restore.sh` | Restore from a backup directory; handles storage path changes via temp-dir rename |
 | `scripts/migrate.sh` | Live server-to-server migration with automatic rollback |
 | `scripts/setup-nginx.sh` | Configure nginx reverse proxy for production |
 | `scripts/setup-watcher.sh` | Set up the filesystem watcher for auto video ingestion |
+| `stress-test/stressctl.py` | Read-only load-test CLI — breaking-point ramp, HLS streaming load, HTML/JSON/CSV reports |
+
+Detailed backup / restore / migration guide: [doc/Backup_Restore_Migration.md](doc/Backup_Restore_Migration.md)
 
 ---
 

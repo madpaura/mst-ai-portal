@@ -21,6 +21,7 @@ Edit `.env` — at minimum set:
 | `SMTP_SERVER` | No | Required for email features |
 | `EMAIL_SUBJECT_PREFIX` | No | Prepended to every outgoing email subject (default `MSTAI-TF`; blank to disable) |
 | `LOG_LEVEL` | No | `DEBUG` \| `INFO` (default) \| `WARNING` \| `ERROR` — applies to all services |
+| `UVICORN_WORKERS` | No | Number of FastAPI worker processes (default `4`); increase for high-concurrency deployments; migrations and the scheduler are advisory-lock-guarded |
 
 ### 2. Deploy
 
@@ -101,11 +102,22 @@ Alembic migrations run automatically on backend startup.
 - **Auto-processor**: controlled by `AUTO_PROCESSOR_CONCURRENCY` env var (default 4)
 - **Frontend**: stateless — can be load-balanced
 
-## Backup
+## Backup, restore & migration
 
-Critical data:
-- PostgreSQL: `docker compose exec db pg_dump -U portal mst_portal > backup.sql`
-- Video files: back up the `VIDEO_STORAGE_PATH` directory (default `./storage/videos`)
+Use the bundled scripts — they handle the DB dump, video/media archives, config,
+scheduling, remote transfer, safe restore with rollback, and server-to-server
+migration:
+
+```bash
+./scripts/backup.sh              # backup now (./scripts/backup.sh --schedule for nightly cron)
+./scripts/restore.sh             # interactive restore with pre-restore snapshot + rollback
+./scripts/migrate.sh --target user@new-host --dry-run   # move to a new server
+```
+
+Storage locations are taken from `.env` (`VIDEO_DATA_VOLUME` / `MEDIA_DATA_VOLUME`),
+so backups follow wherever docker-compose mounts the data.
+
+See the full guide: [doc/Backup_Restore_Migration.md](doc/Backup_Restore_Migration.md)
 
 ## Environment variables reference
 

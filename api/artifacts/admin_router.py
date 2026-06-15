@@ -77,6 +77,26 @@ async def _make_about(name: str, artifact_type: str, source_text: str) -> Option
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _results_to_schema(vd: dict) -> ValidationResult:
+    """Map a stored/fresh validation-result dict into the response schema.
+
+    Tolerates legacy rows (pre-SkillSpector) where only passed/errors/warnings
+    were stored — the SkillSpector summary fields default to None.
+    """
+    return ValidationResult(
+        passed=vd.get("passed", False),
+        errors=[ValidationIssue(**e) for e in vd.get("errors", [])],
+        warnings=[ValidationIssue(**w) for w in vd.get("warnings", [])],
+        scanner=vd.get("scanner", "skillspector"),
+        score=vd.get("score"),
+        risk_severity=vd.get("risk_severity"),
+        recommendation=vd.get("recommendation"),
+        scanned=vd.get("scanned", True),
+        used_llm=vd.get("used_llm"),
+        note=vd.get("note"),
+    )
+
+
 def _row_to_response(row, submitter_name: Optional[str] = None) -> ArtifactSubmissionResponse:
     files_raw = row["files"] if isinstance(row["files"], list) else json.loads(row["files"] or "[]")
     files = [ArtifactFile(name=f["name"], content=f["content"]) for f in files_raw]
@@ -85,11 +105,7 @@ def _row_to_response(row, submitter_name: Optional[str] = None) -> ArtifactSubmi
     validation_results = None
     if val_raw:
         vd = val_raw if isinstance(val_raw, dict) else json.loads(val_raw)
-        validation_results = ValidationResult(
-            passed=vd.get("passed", False),
-            errors=[ValidationIssue(**e) for e in vd.get("errors", [])],
-            warnings=[ValidationIssue(**w) for w in vd.get("warnings", [])],
-        )
+        validation_results = _results_to_schema(vd)
 
     tags = row["tags"] or []
 
@@ -654,18 +670,14 @@ async def validate_artifact(artifact_id: str, user: dict = Depends(require_conte
         raise HTTPException(403, "Access denied")
 
     files_raw = row["files"] if isinstance(row["files"], list) else json.loads(row["files"] or "[]")
-    results = validate_files(files_raw)
+    results = await validate_files(files_raw, row["artifact_type"])
 
     await db.execute(
         "UPDATE artifact_submissions SET validation_results = $1, updated_at = now() WHERE id = $2",
         json.dumps(results), artifact_id,
     )
 
-    return ValidationResult(
-        passed=results["passed"],
-        errors=[ValidationIssue(**e) for e in results["errors"]],
-        warnings=[ValidationIssue(**w) for w in results["warnings"]],
-    )
+    return _results_to_schema(results)
 
 
 @router.post("/artifacts/{artifact_id}/submit")
@@ -693,10 +705,10 @@ async def submit_artifact(
         raise HTTPException(400, "Submission must contain at least one file")
 
     # Auto-run validation on submit
-    results = validate_files(files_raw)
+    results = await validate_files(files_raw, row["artifact_type"])
     if not results["passed"]:
         raise HTTPException(422, {
-            "message": "Submission blocked: secrets or unsafe patterns detected. Run Validate and fix all errors first.",
+            "message": "Submission blocked: SkillSpector flagged this artifact as CRITICAL risk. Review the report and address the findings first.",
             "validation": results,
         })
 

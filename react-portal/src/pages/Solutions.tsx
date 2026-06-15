@@ -5,6 +5,7 @@ import { Footer } from '../components/Footer';
 import { api } from '../api/client';
 import { usePageView } from '../hooks/usePageView';
 import { HlsPlayer } from '../components/HlsPlayer';
+import { SolutionCardSkeleton } from '../components/Skeletons';
 
 interface SolutionCard {
   id: string;
@@ -38,8 +39,12 @@ export const Solutions: React.FC = () => {
   const [landingConfig, setLandingConfig] = useState<LandingConfig | null>(null);
   const [cardSearch, setCardSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [cardsLoading, setCardsLoading] = useState(true);
   useEffect(() => {
-    api.get<SolutionCard[]>('/api/solutions/cards').then(setSolutionCards).catch(() => {});
+    api.get<SolutionCard[]>('/api/solutions/cards')
+      .then(setSolutionCards)
+      .catch(() => {})
+      .finally(() => setCardsLoading(false));
     api.get<LandingConfig>('/api/solutions/landing_page').then(setLandingConfig).catch(() => {});
   }, []);
 
@@ -107,7 +112,7 @@ export const Solutions: React.FC = () => {
         </section>
 
         {/* ── Our Solutions ────────────────────────────────────────── */}
-        {solutionCards.length > 0 && (
+        {(cardsLoading || solutionCards.length > 0) && (
           <section className="max-w-7xl mx-auto px-6 py-16 border-t border-slate-200 dark:border-primary/10">
             <div className="flex flex-wrap items-center justify-between mb-8 gap-4">
               <div>
@@ -174,7 +179,9 @@ export const Solutions: React.FC = () => {
                 scrollbarColor: 'rgba(37,140,244,0.25) transparent',
               }}
             >
-              {filteredCards.length > 0 ? filteredCards.map((card) => (
+              {cardsLoading ? (
+                Array.from({ length: 8 }, (_, i) => <SolutionCardSkeleton key={i} />)
+              ) : filteredCards.length > 0 ? filteredCards.map((card) => (
                 <div
                   key={card.id}
                   onClick={() => handleCardClick(card)}

@@ -14,6 +14,7 @@ class UpdateSettingRequest(BaseModel):
 _MASKED_KEYS = {
     "smtp_config": "smtp_password",
     "transcript_config": "api_key",
+    "inhouse_llm_config": "api_key",
 }
 
 @router.get("/{key}")
@@ -56,4 +57,7 @@ async def put_setting(key: str, req: UpdateSettingRequest, admin: dict = Depends
         """,
         key, value_json
     )
+    if key == "landing_page":
+        import cache
+        await cache.bump_version(cache.NS_SOLUTIONS)
     return {"status": "ok"}

@@ -46,11 +46,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      skillspector:
+        condition: service_started
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-portal}:${POSTGRES_PASSWORD:-portal123}@db:5432/${POSTGRES_DB:-mst_portal}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       REDIS_ENABLED: ${REDIS_ENABLED:-true}
       REDIS_DEFAULT_TTL: ${REDIS_DEFAULT_TTL:-300}
+      DB_POOL_MIN: ${DB_POOL_MIN:-2}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       AUTH_MODE: ${AUTH_MODE:-open}
       VIDEO_STORAGE_PATH: /data/videos
@@ -58,6 +62,11 @@ services:
       FFMPEG_PATH: ffmpeg
       REMOTION_BANNER_PATH: /remotion-banner
       OLLAMA_BASE_URL: http://host.docker.internal:11434
+      # SkillSpector sidecar — scans submitted skill/MCP artifacts for security issues.
+      SKILLSPECTOR_SERVICE_URL: ${SKILLSPECTOR_SERVICE_URL:-http://skillspector:9200}
+      SKILLSPECTOR_USE_LLM: ${SKILLSPECTOR_USE_LLM:-true}
+      SKILLSPECTOR_FAIL_CLOSED: ${SKILLSPECTOR_FAIL_CLOSED:-false}
+      SKILLSPECTOR_TIMEOUT: ${SKILLSPECTOR_TIMEOUT:-180}
       PORTAL_URL: ${PORTAL_URL:-http://localhost:9810}
       # Public portal base used for "View on Portal" links in publish/review
       # emails. Falls back to PORTAL_URL when not set separately.
@@ -79,6 +88,12 @@ services:
       SAML_STRICT: ${SAML_STRICT:-true}
       SAML_SETTINGS_PATH: ${SAML_SETTINGS_PATH:-/app/saml/settings.json}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Number of uvicorn worker processes (use more cores under load).
+      # Startup migration + forge scheduler are advisory-lock guarded, so they
+      # run once regardless of worker count.
+      UVICORN_WORKERS: ${UVICORN_WORKERS:-4}
+      # Flush stdout immediately so per-worker logs appear in `docker logs`.
+      PYTHONUNBUFFERED: "1"
     volumes:
       - "${VIDEO_DATA_VOLUME}:/data/videos"
       - "${MEDIA_DATA_VOLUME}:/data/media"
@@ -88,6 +103,32 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ── SkillSpector Security Scanner ────────────────────────
+  # Sidecar wrapping NVIDIA SkillSpector. The backend POSTs submitted skill/MCP
+  # artifact files to /scan and gets a risk report back. Upgrade by bumping the
+  # pinned commit in skillspector-service/requirements.txt and rebuilding.
+  skillspector:
+    image: mst-portal-skillspector:latest
+    build:
+      context: ./skillspector-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    # Needed only when SkillSpector's LLM stage points at a host endpoint
+    # (in-house OpenAI-compatible gateway or local Ollama).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      SKILLSPECTOR_LOG_LEVEL: ${SKILLSPECTOR_LOG_LEVEL:-WARNING}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PYTHONUNBUFFERED: "1"
+    expose:
+      - "9200"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/health"]
+      interval: 30s
       timeout: 5s
       retries: 3
 
@@ -195,6 +236,13 @@ services:
       - backend
     ports:
       - "${FRONTEND_PORT:-9810}:80"
+    # Mount the video + media storage read-only so nginx serves HLS/stream
+    # assets and attachments directly from disk (see the /streams and /media
+    # locations in nginx.conf.template), keeping those fetches off the Python
+    # backend.
+    volumes:
+      - "${VIDEO_DATA_VOLUME}:/data/videos:ro"
+      - "${MEDIA_DATA_VOLUME}:/data/media:ro"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:80/ >/dev/null 2>&1 || exit 1"]
       interval: 30s

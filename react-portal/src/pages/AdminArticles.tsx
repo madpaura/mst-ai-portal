@@ -6,6 +6,10 @@ import rehypeRaw from 'rehype-raw';
 import 'highlight.js/styles/github-dark.css';
 import '../styles/howto-markdown.css';
 import { api, toApiError } from '../api/client';
+import { useArticlePasteDrop } from '../hooks/useArticlePasteDrop';
+import { ContentEmailModal } from '../components/ContentEmailModal';
+
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 interface Attachment {
   id: string;
@@ -27,6 +31,8 @@ interface Article {
   author_name: string | null;
   is_published: boolean;
   published_at: string | null;
+  pdf_url?: string | null;
+  pdf_filename?: string | null;
   created_at: string;
   updated_at?: string;
   attachments?: Attachment[];
@@ -57,6 +63,7 @@ export const AdminArticles: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   // Create form
   const [showCreate, setShowCreate] = useState(false);
@@ -65,6 +72,7 @@ export const AdminArticles: React.FC = () => {
   // Edit form
   const [editForm, setEditForm] = useState({
     title: '', slug: '', summary: '', content: '', category: '',
+    pdf_url: '', pdf_filename: '',
   });
   const [saving, setSaving] = useState(false);
   const [beautifying, setBeautifying] = useState(false);
@@ -72,6 +80,13 @@ export const AdminArticles: React.FC = () => {
   // Attachments
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isPdfMode = !!editForm.pdf_url;
+  const { textareaRef, dragOver, uploadingPdf, handlePaste } = useArticlePasteDrop({
+    setContent: (update) => setEditForm((f) => ({ ...f, content: update(f.content) })),
+    onPdfUploaded: (res) => setEditForm((f) => ({ ...f, pdf_url: res.url, pdf_filename: res.filename })),
+    active: !!selected,
+  });
 
   const fetchArticles = useCallback(async () => {
     try {
@@ -93,6 +108,8 @@ export const AdminArticles: React.FC = () => {
         summary: full.summary || '',
         content: full.content || '',
         category: full.category,
+        pdf_url: full.pdf_url || '',
+        pdf_filename: full.pdf_filename || '',
       });
       setShowPreview(false);
     } catch { /* ignore */ }
@@ -226,6 +243,17 @@ export const AdminArticles: React.FC = () => {
 
   return (
     <div className="flex h-[calc(100vh-64px)]">
+      {dragOver && selected && (
+        <div className="fixed inset-0 z-50 bg-primary/10 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+          <div className="flex flex-col items-center gap-3 px-10 py-8 bg-white dark:bg-slate-900 border-2 border-dashed border-primary rounded-2xl shadow-2xl">
+            <span className="material-symbols-outlined text-5xl text-primary">upload_file</span>
+            <p className="text-base font-semibold text-slate-900 dark:text-white">Drop anywhere</p>
+            <p className="text-sm text-slate-500">
+              Images are embedded in the article — a PDF becomes the article itself.
+            </p>
+          </div>
+        </div>
+      )}
       {/* Left Panel — Article List */}
       <div className="w-[340px] shrink-0 border-r border-slate-200 dark:border-white/10 flex flex-col bg-sidebar-light dark:bg-sidebar-dark">
         <div className="p-4 border-b border-slate-200 dark:border-white/10 space-y-3">
@@ -346,6 +374,14 @@ export const AdminArticles: React.FC = () => {
                   {saving ? 'Saving...' : 'Save'}
                 </button>
                 <button
+                  onClick={() => setEmailOpen(true)}
+                  title="Email this article"
+                  className="flex items-center gap-1.5 px-3 py-2 bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold rounded-lg transition-colors border border-primary/20"
+                >
+                  <span className="material-symbols-outlined text-sm">mail</span>
+                  Email
+                </button>
+                <button
                   onClick={handleDelete}
                   className="flex items-center gap-1.5 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs rounded-lg transition-colors border border-red-500/20"
                 >
@@ -401,6 +437,7 @@ export const AdminArticles: React.FC = () => {
             </div>
 
             {/* Editor / Preview toggle */}
+            {!isPdfMode && (
             <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-200 dark:border-white/10 shrink-0">
               <button
                 onClick={() => setShowPreview(false)}
@@ -428,10 +465,42 @@ export const AdminArticles: React.FC = () => {
                 {beautifying ? 'Beautifying...' : 'Beautify with AI'}
               </button>
             </div>
+            )}
 
             {/* Content area */}
             <div className="flex-1 overflow-y-auto">
-              {showPreview ? (
+              {uploadingPdf ? (
+                <div className="flex flex-col items-center justify-center h-full gap-3">
+                  <span className="material-symbols-outlined text-4xl text-primary animate-spin">progress_activity</span>
+                  <p className="text-sm text-slate-500">Uploading PDF...</p>
+                </div>
+              ) : isPdfMode ? (
+                <div className="flex flex-col h-full">
+                  <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 shrink-0">
+                    <span className="material-symbols-outlined text-red-500">picture_as_pdf</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                        {editForm.pdf_filename || 'document.pdf'}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        This article will display the PDF instead of markdown content. Save to apply.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setEditForm((f) => ({ ...f, pdf_url: '', pdf_filename: '' }))}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-500 hover:bg-red-500/10 rounded-lg transition-colors border border-red-500/20"
+                    >
+                      <span className="material-symbols-outlined text-sm">close</span>
+                      Remove PDF
+                    </button>
+                  </div>
+                  <iframe
+                    src={`${API_BASE}${editForm.pdf_url}`}
+                    title={editForm.pdf_filename || 'PDF preview'}
+                    className="flex-1 w-full bg-white"
+                  />
+                </div>
+              ) : showPreview ? (
                 <div className="p-6 howto-markdown text-sm text-slate-300 leading-relaxed">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
@@ -442,9 +511,11 @@ export const AdminArticles: React.FC = () => {
                 </div>
               ) : (
                 <textarea
+                  ref={textareaRef}
                   value={editForm.content}
                   onChange={(e) => setEditForm((f) => ({ ...f, content: e.target.value }))}
-                  placeholder="Write your article in Markdown..."
+                  onPaste={handlePaste}
+                  placeholder="Write your article in Markdown... Paste rich text (it converts to Markdown automatically), paste or drop images, or drop a PDF to display the PDF itself."
                   className="w-full h-full bg-transparent border-none resize-none text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:ring-0 text-sm font-mono p-6 outline-none leading-relaxed"
                 />
               )}
@@ -516,6 +587,16 @@ export const AdminArticles: React.FC = () => {
           </div>
         )}
       </div>
+
+      {selected && (
+        <ContentEmailModal
+          open={emailOpen}
+          title={selected.title}
+          previewPath={`/admin/articles/${selected.id}/email-preview`}
+          sendPath={`/admin/articles/${selected.id}/send-email`}
+          onClose={() => setEmailOpen(false)}
+        />
+      )}
     </div>
   );
 };

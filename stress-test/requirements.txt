@@ -1,0 +1,6 @@
+# MST AI Portal — stress-test CLI dependencies
+# Install into a venv:  python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
+httpx>=0.27,<1.0          # async HTTP client (the load engine)
+PyJWT>=2.8                # mint mst_token JWTs locally from JWT_SECRET (HS256)
+rich>=13.7               # live terminal dashboard + pretty summary
+PyYAML>=6.0              # optional YAML config files

@@ -42,10 +42,22 @@ fi
 ENV_FILE="$PROJECT_ROOT/.env"
 POSTGRES_DB="mst_portal"; POSTGRES_USER="portal"; POSTGRES_PASSWORD="portal123"
 if [[ -f "$ENV_FILE" ]]; then
-    source <(grep -E '^(POSTGRES_DB|POSTGRES_USER|POSTGRES_PASSWORD|DB_PORT)=' "$ENV_FILE" \
+    source <(grep -E '^(POSTGRES_DB|POSTGRES_USER|POSTGRES_PASSWORD|DB_PORT|VIDEO_DATA_VOLUME|MEDIA_DATA_VOLUME)=' "$ENV_FILE" \
              | sed 's/[[:space:]]*#.*//')
 fi
 DB_PORT="${DB_PORT:-5432}"
+
+# ── Resolve video/media storage locations ─────────────────────────────────────
+# Priority: backup.conf (BACKUP_VIDEOS_DIR / BACKUP_MEDIA_DIR)
+#         → .env (VIDEO_DATA_VOLUME / MEDIA_DATA_VOLUME, same as docker-compose)
+#         → ./volumes/storage defaults.
+# Relative paths are resolved against the project root.
+VIDEOS_DIR="${BACKUP_VIDEOS_DIR:-${VIDEO_DATA_VOLUME:-./volumes/storage/videos}}"
+MEDIA_DIR="${BACKUP_MEDIA_DIR:-${MEDIA_DATA_VOLUME:-./volumes/storage/media}}"
+[[ "$VIDEOS_DIR" != /* ]] && VIDEOS_DIR="$PROJECT_ROOT/${VIDEOS_DIR#./}"
+[[ "$MEDIA_DIR"  != /* ]] && MEDIA_DIR="$PROJECT_ROOT/${MEDIA_DIR#./}"
+
+data_dir_for() { [[ "$1" == "videos" ]] && echo "$VIDEOS_DIR" || echo "$MEDIA_DIR"; }
 
 # ── Global state for rollback ─────────────────────────────────────────────────
 PRE_RESTORE_SNAPSHOT=""
@@ -85,6 +97,33 @@ list_backups() {
     done
 }
 
+# Extract a backup archive (one top-level directory inside) into the target
+# directory, even if the directory was named differently when the archive was
+# created (e.g. backup taken before the storage location was reconfigured).
+extract_archive_to() {
+    local archive=$1 target=$2
+    local parent top tmp
+    parent=$(dirname "$target")
+    top=$(tar -tzf "$archive" 2>/dev/null | head -1 | cut -d/ -f1 || true)
+    if [[ -z "$top" ]]; then
+        warn "Archive looks empty: $archive — skipping"
+        return 0
+    fi
+    mkdir -p "$parent"
+    tmp=$(mktemp -d "$parent/.restore-tmp.XXXXXX")
+    tar -xzf "$archive" -C "$tmp" \
+        --checkpoint=1000 --checkpoint-action="ttyout=." 2>/dev/null || true
+    echo ""
+    if [[ ! -d "$tmp/$top" ]]; then
+        rm -rf "$tmp"
+        error "Extraction failed for $archive"
+        return 1
+    fi
+    rm -rf "${target:?}"
+    mv "$tmp/$top" "$target"
+    rm -rf "$tmp"
+}
+
 get_backup_by_index() {
     local idx=$1 i=1
     for d in "$BACKUP_LOCAL_DIR"/*/; do
@@ -116,7 +155,7 @@ create_snapshot() {
     fi
 
     for dir in videos media; do
-        local SRC="$PROJECT_ROOT/volumes/storage/$dir"
+        local SRC; SRC=$(data_dir_for "$dir")
         if [[ -d "$SRC" ]]; then
             tar -czf "$PRE_RESTORE_SNAPSHOT/files/$dir.tar.gz" \
                 -C "$(dirname "$SRC")" "$(basename "$SRC")" 2>/dev/null \
@@ -174,11 +213,10 @@ do_rollback() {
     # Restore files from snapshot
     for dir in videos media; do
         local ARCHIVE="$PRE_RESTORE_SNAPSHOT/files/$dir.tar.gz"
-        local DEST_PARENT="$PROJECT_ROOT/volumes/storage"
+        local TARGET; TARGET=$(data_dir_for "$dir")
         if [[ -f "$ARCHIVE" ]]; then
             warn "Rolling back $dir files..."
-            rm -rf "${DEST_PARENT:?}/$dir"
-            tar -xzf "$ARCHIVE" -C "$DEST_PARENT" 2>/dev/null \
+            extract_archive_to "$ARCHIVE" "$TARGET" \
                 && info "$dir files rolled back" \
                 || warn "$dir rollback had errors"
         fi
@@ -273,29 +311,20 @@ do_restore() {
     fi
 
     # ── Step 4: Restore videos ────────────────────────────────────────────────
-    step "Step 4/6  Restoring video files"
-    local STORAGE_DIR="$PROJECT_ROOT/volumes/storage"
-    mkdir -p "$STORAGE_DIR"
-
+    step "Step 4/6  Restoring video files → $VIDEOS_DIR"
     if [[ -f "$BACKUP_DIR/files/videos.tar.gz" ]]; then
         info "Extracting videos (this may take a while)..."
-        rm -rf "${STORAGE_DIR:?}/videos"
-        tar -xzf "$BACKUP_DIR/files/videos.tar.gz" -C "$STORAGE_DIR" \
-            --checkpoint=1000 --checkpoint-action="ttyout=." 2>/dev/null || true
-        echo ""
+        extract_archive_to "$BACKUP_DIR/files/videos.tar.gz" "$VIDEOS_DIR"
         info "Videos restored"
     else
         warn "No videos archive in this backup — skipping"
     fi
 
     # ── Step 5: Restore media ─────────────────────────────────────────────────
-    step "Step 5/6  Restoring media files"
+    step "Step 5/6  Restoring media files → $MEDIA_DIR"
     if [[ -f "$BACKUP_DIR/files/media.tar.gz" ]]; then
         info "Extracting media..."
-        rm -rf "${STORAGE_DIR:?}/media"
-        tar -xzf "$BACKUP_DIR/files/media.tar.gz" -C "$STORAGE_DIR" \
-            --checkpoint=1000 --checkpoint-action="ttyout=." 2>/dev/null || true
-        echo ""
+        extract_archive_to "$BACKUP_DIR/files/media.tar.gz" "$MEDIA_DIR"
         info "Media restored"
     else
         warn "No media archive in this backup — skipping"

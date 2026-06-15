@@ -3,6 +3,7 @@ import { api, toApiError } from '../api/client';
 import { useAuth } from '../api/auth';
 import { AdminArtifacts, GithubConfigPanel } from './AdminArtifacts';
 import { PublishRequests } from '../components/PublishRequests';
+import { ContentEmailModal } from '../components/ContentEmailModal';
 
 // ── Component catalog types ────────────────────────────────────────────────────
 
@@ -181,6 +182,7 @@ export const AdminMarketplace: React.FC = () => {
   const [filterType, setFilterType] = useState('');
   const [editingComp, setEditingComp] = useState<ForgeComponent | null>(null);
   const [creatingComp, setCreatingComp] = useState(false);
+  const [emailComp, setEmailComp] = useState<ForgeComponent | null>(null);
   const [compForm, setCompForm] = useState<ComponentForm>(EMPTY_COMPONENT_FORM);
   const [beautifying, setBeautifying] = useState(false);
   const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
@@ -840,6 +842,9 @@ export const AdminMarketplace: React.FC = () => {
                             <button onClick={() => openEditComp(comp)} className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
                               <span className="material-symbols-outlined text-sm">edit</span>
                             </button>
+                            <button onClick={() => setEmailComp(comp)} title="Email this component" className="p-1.5 rounded hover:bg-primary/20 text-slate-400 hover:text-primary transition-colors">
+                              <span className="material-symbols-outlined text-sm">mail</span>
+                            </button>
                             <button onClick={() => handleToggleActive(comp)} className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
                               <span className="material-symbols-outlined text-sm">{comp.is_active ? 'visibility_off' : 'visibility'}</span>
                             </button>
@@ -1289,6 +1294,14 @@ export const AdminMarketplace: React.FC = () => {
           onClose={() => setShowPublishRequests(false)}
         />
       )}
+
+      <ContentEmailModal
+        open={!!emailComp}
+        title={emailComp?.name || ''}
+        previewPath={`/admin/forge/components/${emailComp?.id}/email-preview`}
+        sendPath={`/admin/forge/components/${emailComp?.id}/send-email`}
+        onClose={() => setEmailComp(null)}
+      />
     </div>
   );
 };

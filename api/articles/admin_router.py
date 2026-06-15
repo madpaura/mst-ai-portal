@@ -2,13 +2,18 @@ import os
 import re
 import uuid
 import bleach
+import asyncpg
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+
+from pydantic import BaseModel
 
 from articles.schemas import (
     ArticleResponse, ArticleListResponse, ArticleCreate, ArticleUpdate,
     BeautifyRequest, BeautifyResponse, AttachmentResponse,
 )
 from articles.llm import call_llm
+from articles.email import generate_email_preview
+from email_utils.utils import send_email_multi
 from auth.dependencies import require_content as require_admin
 from config import settings
 from database import get_db
@@ -16,7 +21,29 @@ import cache
 
 router = APIRouter()
 
-from articles.router import _sanitize  # shared sanitizer
+from articles.router import _sanitize, _validate_pdf_url  # shared sanitizer / validators
+
+
+async def _unique_slug(db, base: str, exclude_id: str | None = None) -> str:
+    """Return a slug that is not already taken, appending -2, -3, … on collision.
+
+    Checks all rows (including soft-deleted ones) because the DB unique
+    constraint on articles.slug covers them too.
+    """
+    base = base.strip("-") or "article"
+    slug = base
+    suffix = 1
+    while True:
+        if exclude_id:
+            taken = await db.fetchval(
+                "SELECT id FROM articles WHERE slug = $1 AND id <> $2", slug, exclude_id
+            )
+        else:
+            taken = await db.fetchval("SELECT id FROM articles WHERE slug = $1", slug)
+        if not taken:
+            return slug
+        suffix += 1
+        slug = f"{base}-{suffix}"
 
 _MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024  # 20 MB
 _ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx"}
@@ -61,6 +88,7 @@ def _row_to_response(r, attachments: list[AttachmentResponse] | None = None) -> 
         summary=r.get("summary"), content=r["content"],
         category=r["category"], author_name=r.get("author_name"),
         is_published=r["is_published"], published_at=r.get("published_at"),
+        pdf_url=r.get("pdf_url"), pdf_filename=r.get("pdf_filename"),
         created_at=r["created_at"], updated_at=r["updated_at"],
         attachments=attachments or [],
     )
@@ -88,22 +116,36 @@ async def admin_list_articles(admin: dict = Depends(require_admin)):
 async def admin_create_article(req: ArticleCreate, admin: dict = Depends(require_admin)):
     db = await get_db()
 
-    slug = req.slug.strip() if req.slug else ""
-    if not slug:
-        slug = re.sub(r'[^a-z0-9]+', '-', req.title.lower()).strip('-')
+    base_slug = req.slug.strip() if req.slug else ""
+    if not base_slug:
+        base_slug = re.sub(r'[^a-z0-9]+', '-', req.title.lower()).strip('-')
 
-    existing = await db.fetchval("SELECT id FROM articles WHERE slug = $1", slug)
-    if existing:
-        slug = f"{slug}-{str(existing)[:8]}"
+    slug = await _unique_slug(db, base_slug)
 
-    row = await db.fetchrow(
-        """
-        INSERT INTO articles (title, slug, summary, content, category, author_id, author_name)
-        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *
-        """,
-        req.title, slug, req.summary, _sanitize(req.content), req.category,
-        admin["id"], admin.get("display_name", "Admin"),
-    )
+    pdf_url = _validate_pdf_url(req.pdf_url)
+    try:
+        row = await db.fetchrow(
+            """
+            INSERT INTO articles (title, slug, summary, content, category, author_id, author_name, pdf_url, pdf_filename)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *
+            """,
+            req.title, slug, req.summary, _sanitize(req.content), req.category,
+            admin["id"], admin.get("display_name", "Admin"),
+            pdf_url, req.pdf_filename,
+        )
+    except asyncpg.UniqueViolationError:
+        # Lost a race for the slug between the check above and the insert.
+        # Retry once with a freshly computed unique slug.
+        slug = await _unique_slug(db, f"{base_slug}-{uuid.uuid4().hex[:6]}")
+        row = await db.fetchrow(
+            """
+            INSERT INTO articles (title, slug, summary, content, category, author_id, author_name, pdf_url, pdf_filename)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *
+            """,
+            req.title, slug, req.summary, _sanitize(req.content), req.category,
+            admin["id"], admin.get("display_name", "Admin"),
+            pdf_url, req.pdf_filename,
+        )
     await cache.bump_version(cache.NS_ARTICLES)
     return _row_to_response(row, [])
 
@@ -148,18 +190,25 @@ async def admin_update_article(
     if not row:
         raise HTTPException(status_code=404, detail="Article not found")
 
-    _ARTICLE_UPDATABLE_FIELDS = frozenset({"title", "slug", "summary", "content", "category"})
+    _ARTICLE_UPDATABLE_FIELDS = frozenset({"title", "slug", "summary", "content", "category", "pdf_url", "pdf_filename"})
     updates = {}
     if req.title is not None:
         updates["title"] = req.title
     if req.slug is not None:
-        updates["slug"] = req.slug
+        new_slug = req.slug.strip()
+        if not new_slug:
+            new_slug = re.sub(r'[^a-z0-9]+', '-', (req.title or row["title"]).lower()).strip('-')
+        updates["slug"] = await _unique_slug(db, new_slug, exclude_id=article_id)
     if req.summary is not None:
         updates["summary"] = req.summary
     if req.content is not None:
         updates["content"] = _sanitize(req.content)
     if req.category is not None:
         updates["category"] = req.category
+    if req.pdf_url is not None:
+        updates["pdf_url"] = _validate_pdf_url(req.pdf_url)
+    if req.pdf_filename is not None:
+        updates["pdf_filename"] = req.pdf_filename or None
     updates = {k: v for k, v in updates.items() if k in _ARTICLE_UPDATABLE_FIELDS}
 
     if updates:
@@ -167,10 +216,16 @@ async def admin_update_article(
         set_clauses.append(f"updated_at = now()")
         values = list(updates.values())
         values.append(article_id)
-        await db.execute(
-            f"UPDATE articles SET {', '.join(set_clauses)} WHERE id = ${len(values)}",
-            *values,
-        )
+        try:
+            await db.execute(
+                f"UPDATE articles SET {', '.join(set_clauses)} WHERE id = ${len(values)}",
+                *values,
+            )
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(
+                status_code=409,
+                detail="That slug is already in use. Please choose a different title or slug.",
+            )
 
     row = await db.fetchrow("SELECT * FROM articles WHERE id = $1", article_id)
     attachments = await _get_attachments(db, article_id)
@@ -286,3 +341,60 @@ async def delete_attachment(
 
     await db.execute("DELETE FROM article_attachments WHERE id = $1", attachment_id)
     return {"message": "Attachment deleted"}
+
+
+# ── Email (send an individual article as a newsletter-style email) ─────────────
+
+class EmailPreviewRequest(BaseModel):
+    custom_content: str = ""
+
+
+class EmailPreviewResponse(BaseModel):
+    subject: str
+    html_content: str
+    plain_text: str
+
+
+class SendEmailRequest(BaseModel):
+    recipient_emails: list[str]
+    subject: str
+    html_content: str
+    plain_text: str = ""
+
+
+class SendEmailResponse(BaseModel):
+    success: bool
+    message: str
+    sent_count: int = 0
+
+
+@router.post("/articles/{article_id}/email-preview", response_model=EmailPreviewResponse)
+async def admin_article_email_preview(
+    article_id: str, req: EmailPreviewRequest, admin: dict = Depends(require_admin)
+):
+    try:
+        preview = await generate_email_preview(article_id, req.custom_content or None)
+        return EmailPreviewResponse(**preview)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate preview: {str(e)}")
+
+
+@router.post("/articles/{article_id}/send-email", response_model=SendEmailResponse)
+async def admin_article_send_email(
+    article_id: str, req: SendEmailRequest, admin: dict = Depends(require_admin)
+):
+    try:
+        total = len(req.recipient_emails)
+        success = await send_email_multi(
+            subject=req.subject,
+            html_content=req.html_content,
+            plain_text=req.plain_text or None,
+            bcc_emails=req.recipient_emails,
+        )
+        if success:
+            return SendEmailResponse(success=True, message=f"Email sent to {total} recipient(s)", sent_count=total)
+        return SendEmailResponse(success=False, message="Failed to send email — check SMTP settings", sent_count=0)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Email send error: {str(e)}")
