@@ -421,8 +421,13 @@ async def saml_acs(request: Request):
     # portal domain, then follows the redirect. No code exchange needed.
     token = create_access_token(str(user["id"]), user["role"])
     portal_origin = settings.PORTAL_URL.rstrip("/")
-    logger.info("SAML ACS: redirecting user to portal | user_id={}", user["id"])
-    resp = RedirectResponse(url=f"{portal_origin}/", status_code=302)
+    # Honor RelayState so shared deep links (e.g. a video URL) return the user
+    # to the originally requested page. Validated against the portal origin to
+    # prevent open redirects; falls back to the landing page.
+    relay_state = (form.get("RelayState") or "").strip()
+    dest = relay_state if _is_allowed_redirect(relay_state) else f"{portal_origin}/"
+    logger.info("SAML ACS: redirecting user to portal | user_id={} dest={}", user["id"], dest)
+    resp = RedirectResponse(url=dest, status_code=302)
     resp.set_cookie(
         key=_COOKIE_NAME,
         value=token,

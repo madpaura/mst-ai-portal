@@ -42,7 +42,10 @@ function SamlGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const location = useLocation();
   if (AUTH_MODE === 'saml' && !loading && !user && location.pathname !== '/login') {
-    return <Navigate to="/login" replace />;
+    // Preserve the originally requested URL (e.g. a shared video link) so the
+    // user lands back on it after SSO instead of on the landing page.
+    const target = encodeURIComponent(location.pathname + location.search + location.hash);
+    return <Navigate to={`/login?next=${target}`} replace />;
   }
   return <>{children}</>;
 }

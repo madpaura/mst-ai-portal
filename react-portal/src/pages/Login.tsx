@@ -18,13 +18,23 @@ export const Login: React.FC = () => {
   const isSamlMode = AUTH_MODE === 'saml';
   const forceLocal = searchParams.get('local') === '1';
 
+  // Where to return after SSO. SamlGuard passes the originally requested
+  // in-app path here; default to the landing page. Reject protocol-relative
+  // ("//evil.com") and absolute URLs to avoid open redirects.
+  const rawNext = searchParams.get('next') || '';
+  const postLoginPath = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/';
+
+  const redirectToSaml = () => {
+    const next = encodeURIComponent(window.location.origin + postLoginPath);
+    window.location.href = `${API_BASE}/saml/login?next=${next}`;
+  };
+
   // SAML mode: auto-redirect to IdP unless we're handling the callback or forced local
   useEffect(() => {
     if (!isSamlMode || forceLocal) return;
     const samlCode = searchParams.get('saml_code');
     if (!samlCode) {
-      const next = encodeURIComponent(window.location.origin + '/login');
-      window.location.href = `${API_BASE}/saml/login?next=${next}`;
+      redirectToSaml();
       return;
     }
     // Callback path — exchange code for JWT
@@ -37,7 +47,7 @@ export const Login: React.FC = () => {
         const data = await res.json();
         if (cancelled) return;
         await loginWithSamlToken(data.access_token);
-        if (!cancelled) navigate('/admin/videos', { replace: true });
+        if (!cancelled) navigate(postLoginPath, { replace: true });
       } catch (err: unknown) {
         if (!cancelled) {
           setError((err as Error).message || 'SSO login failed');
@@ -82,10 +92,7 @@ export const Login: React.FC = () => {
                   {error}
                 </div>
                 <button
-                  onClick={() => {
-                    const next = encodeURIComponent(window.location.origin + '/login');
-                    window.location.href = `${API_BASE}/saml/login?next=${next}`;
-                  }}
+                  onClick={redirectToSaml}
                   className="w-full py-3 flex items-center justify-center gap-3 bg-[#0078d4] hover:bg-[#106ebe] text-white font-bold rounded-lg transition-colors"
                 >
                   <svg className="w-5 h-5" viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg">
