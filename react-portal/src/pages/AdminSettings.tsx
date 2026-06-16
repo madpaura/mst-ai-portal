@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { api, toApiError } from '../api/client';
 import { useTheme } from '../context/theme';
 import type { PortalTheme } from '../context/theme';
+import { PosterSenderCard } from '../components/PosterSenderCard';
 
 export const AdminSettings: React.FC = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -1233,6 +1234,9 @@ export const AdminSettings: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* ── Announcement Poster ───────────────────────────────────── */}
+      <PosterSenderCard onMessage={showMsg} />
 
     </div>
   );
