@@ -27,6 +27,14 @@ POSTER = os.path.join(ROOT, "doc/portal-announcement-poster-offerings.html")
 OUTDIR = os.path.join(ROOT, "react-portal/public/posters/offerings")
 SCALE = 2
 
+# Force a pure-white background for the email render (the web poster keeps its
+# subtle gray gradient + grid; only the emailed image is flattened to white).
+WHITE_OVERRIDE = """<style>
+  body, .poster { background: #ffffff !important; }
+  .poster::before { display: none !important; }
+</style>
+</head>"""
+
 PROBE_JS = """
 <div id="__rects__"></div>
 <script>
@@ -79,9 +87,15 @@ def main():
 
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
         shot = f.name
+    # Render from a temp copy with the white-background override applied.
+    white_html = open(POSTER, encoding="utf-8").read().replace("</head>", WHITE_OVERRIDE)
+    with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False) as f:
+        f.write(white_html)
+        render_src = f.name
     run_chrome([f"--force-device-scale-factor={SCALE}", f"--window-size={W},{H}",
                 "--default-background-color=FFFFFFFF",
-                f"--screenshot={shot}", f"file://{POSTER}"])
+                f"--screenshot={shot}", f"file://{render_src}"])
+    os.unlink(render_src)
 
     from PIL import Image
     im = Image.open(shot).convert("RGB")
