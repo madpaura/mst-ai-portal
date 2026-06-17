@@ -95,12 +95,16 @@ async def mark_failed(pool: asyncpg.Pool, job_id: int, error: str):
 
 
 async def maybe_notify_owner_ready(pool: asyncpg.Pool, video_id: str):
-    """When a video's auto-pipeline has finished, email the owner that it's
-    ready to publish. Sends at most once per video (guarded by
-    auto_ready_notified) and only when the transcript succeeded and no
-    auto-jobs are still in flight.
+    """When a video's auto-pipeline AND transcode have finished, email the owner
+    that it's ready to publish. Sends at most once per video (guarded by
+    auto_ready_notified) and only when the transcript succeeded, the transcode
+    completed (status='ready'), and no auto-jobs are still in flight.
+
+    Called from both workers: the auto-processor (after each LLM job) and the
+    transcoder (after a successful transcode). Whichever finishes last triggers
+    the single email; the atomic claim below guarantees no duplicates.
     """
-    # Still-running jobs? Wait for them to finish first.
+    # Still-running auto jobs? Wait for them to finish first.
     remaining = await pool.fetchval(
         "SELECT COUNT(*) FROM auto_jobs WHERE video_id = $1 AND status IN ('pending', 'processing')",
         video_id,
@@ -109,7 +113,8 @@ async def maybe_notify_owner_ready(pool: asyncpg.Pool, video_id: str):
         return
 
     # Atomically claim the notification: only one worker wins this UPDATE, and
-    # only if auto-mode is on, the transcript is ready, and we haven't notified.
+    # only if auto-mode is on, the transcript is ready, the video is fully
+    # transcoded (status='ready'), and we haven't notified yet.
     row = await pool.fetchrow(
         """
         UPDATE videos
@@ -118,6 +123,7 @@ async def maybe_notify_owner_ready(pool: asyncpg.Pool, video_id: str):
            AND auto_mode = true
            AND auto_ready_notified = false
            AND transcript_status = 'ready'
+           AND status = 'ready'
         RETURNING title, slug, created_by
         """,
         video_id,
@@ -139,7 +145,7 @@ async def maybe_notify_owner_ready(pool: asyncpg.Pool, video_id: str):
     html = f"""
     <div style="font-family:Inter,sans-serif;background:#0a0f14;padding:32px;border-radius:12px;max-width:600px;margin:auto;">
       <h2 style="color:#22c55e;font-size:20px;margin-bottom:4px;">Your content is ready to publish</h2>
-      <p style="color:#64748b;font-size:13px;margin-bottom:24px;">Hi {name}, auto-processing has finished — transcript, chapters, metadata and the how-to guide are all generated.</p>
+      <p style="color:#64748b;font-size:13px;margin-bottom:24px;">Hi {name}, auto-processing has finished — the video is transcoded and ready to play, and the transcript, chapters, metadata and how-to guide are all generated.</p>
       <div style="background:#131a22;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px;margin-bottom:20px;">
         <p style="color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Video</p>
         <p style="color:#f1f5f9;font-size:16px;font-weight:600;margin:0;">{title}</p>

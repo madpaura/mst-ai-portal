@@ -302,6 +302,15 @@ async def process_job(pool: asyncpg.Pool, job):
         pass
     log.info(f"Job #{job_id} completed successfully")
 
+    # Auto-mode videos send a "ready to publish" email only once the transcode
+    # is done. The auto-processor also calls this after its LLM jobs; whichever
+    # worker finishes last wins the atomic claim, so exactly one email is sent.
+    try:
+        from worker.auto_processor import maybe_notify_owner_ready
+        await maybe_notify_owner_ready(pool, job["video_id"])
+    except Exception as exc:
+        log.error(f"Auto-ready notify after transcode failed | video_id={job['video_id']} error={exc}")
+
 
 async def run_worker():
     """Main worker loop — polls for jobs."""

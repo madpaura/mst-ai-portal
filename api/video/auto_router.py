@@ -113,7 +113,13 @@ async def require_video_owner(video_id: str, user: dict = Depends(require_conten
 
 @router.post("/videos/{video_id}/auto-process")
 async def trigger_auto_process(video_id: str, admin: dict = Depends(require_video_owner)):
-    """Kick off the full transcript → LLM pipeline for a video."""
+    """Kick off the full transcript → LLM pipeline for a video.
+
+    Auto-mode also transcodes the video by default (for admins and content
+    creators alike): a transcode_job is queued alongside the transcript job so
+    the HLS rendition is ready, and the "ready to publish" email is only sent
+    once that transcode completes (see maybe_notify_owner_ready in the worker).
+    """
     logger.info("Auto-process triggered | video_id={} admin={}", video_id, admin.get("username"))
     db = await get_db()
     video = await db.fetchrow("SELECT id, status FROM videos WHERE id = $1", video_id)
@@ -126,6 +132,21 @@ async def trigger_auto_process(video_id: str, admin: dict = Depends(require_vide
         video_id,
     )
     await _enqueue_auto_job(db, video_id, "transcript")
+
+    # Transcode by default when auto-mode is on. Skip if the raw file isn't on
+    # disk yet, the video is already transcoded ('ready'), or a transcode is
+    # already in flight — so re-triggering auto-process doesn't double-encode.
+    raw_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original.mp4")
+    if os.path.exists(raw_path) and video["status"] != "ready":
+        active = await db.fetchval(
+            "SELECT COUNT(*) FROM transcode_jobs WHERE video_id = $1 AND status IN ('pending', 'processing')",
+            video_id,
+        )
+        if not active:
+            await db.execute("UPDATE videos SET status = 'processing' WHERE id = $1", video_id)
+            await db.execute("INSERT INTO transcode_jobs (video_id) VALUES ($1)", video_id)
+            logger.info("Auto-process queued transcode | video_id={}", video_id)
+
     return {"message": "Auto-processing queued", "video_id": video_id}
 
 
