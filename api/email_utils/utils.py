@@ -1,8 +1,10 @@
 import smtplib
 import json
 import time
+import base64
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
 from typing import Optional
 from loguru import logger as log
 from config import settings
@@ -163,6 +165,63 @@ async def send_email_multi(
         return True
     except Exception as e:
         log.error(f"send_email_multi failed: {e}")
+        return False
+
+
+async def send_email_multi_inline(
+    subject: str,
+    html_content: str,
+    inline_images: list[dict],
+    to_emails: Optional[list[str]] = None,
+    cc_emails: Optional[list[str]] = None,
+    bcc_emails: Optional[list[str]] = None,
+    plain_text: Optional[str] = None,
+) -> bool:
+    """Send one HTML email with images embedded as CID inline attachments.
+
+    The HTML references images by `src="cid:<id>"`; each entry in inline_images
+    is attached as a related part so the message is fully self-contained (no
+    external hosting). Renders inline in Gmail / Outlook / Apple Mail.
+
+    inline_images: list of {"cid": str, "filename": str, "content_b64": str,
+                            "mime": "image/png"} dicts.
+    """
+    to_emails = to_emails or []
+    cc_emails = cc_emails or []
+    bcc_emails = bcc_emails or []
+    all_recipients = list({*to_emails, *cc_emails, *bcc_emails})
+    if not all_recipients:
+        log.warning("send_email_multi_inline called with no recipients")
+        return False
+    try:
+        cfg = await _get_smtp_cfg()
+        # multipart/related wraps the HTML (in an alternative part) + inline images.
+        root = MIMEMultipart("related")
+        root["Subject"] = _apply_subject_prefix(subject, cfg)
+        root["From"] = f"{cfg['from_name']} <{cfg['from_email']}>"
+        root["To"] = ", ".join(to_emails) if to_emails else f"{cfg['from_name']} <{cfg['from_email']}>"
+        if cc_emails:
+            root["CC"] = ", ".join(cc_emails)
+
+        alt = MIMEMultipart("alternative")
+        if plain_text:
+            alt.attach(MIMEText(plain_text, "plain"))
+        alt.attach(MIMEText(html_content, "html"))
+        root.attach(alt)
+
+        for img in inline_images:
+            cid = img["cid"]
+            subtype = (img.get("mime") or "image/png").split("/")[-1]
+            part = MIMEImage(base64.b64decode(img["content_b64"]), _subtype=subtype)
+            part.add_header("Content-ID", f"<{cid}>")
+            part.add_header("Content-Disposition", "inline",
+                            filename=img.get("filename", f"{cid}.{subtype}"))
+            root.attach(part)
+
+        _send_smtp(cfg, root, all_recipients)
+        return True
+    except Exception as e:
+        log.error(f"send_email_multi_inline failed: {e}")
         return False
 
 

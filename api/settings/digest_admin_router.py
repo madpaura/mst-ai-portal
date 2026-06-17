@@ -14,7 +14,7 @@ from loguru import logger as log
 
 from auth.dependencies import require_admin
 from email_utils.digest import generate_learning_digest
-from email_utils.utils import send_email_multi
+from email_utils.utils import send_email_multi, send_email_multi_inline
 from config import settings
 from database import get_db
 from articles.llm import INHOUSE_LLM_HEADERS
@@ -341,6 +341,49 @@ async def send_html_email(req: SendHtmlEmailRequest, admin: dict = Depends(requi
     success = await send_email_multi(
         subject=req.subject,
         html_content=req.html_content,
+        to_emails=to,
+        cc_emails=cc,
+        bcc_emails=bcc,
+    )
+    if success:
+        return SendHtmlEmailResponse(
+            success=True,
+            message=f"Email sent to {total} recipient(s)",
+            sent_count=total,
+        )
+    return SendHtmlEmailResponse(
+        success=False,
+        message="Send failed — check SMTP settings",
+        sent_count=0,
+    )
+
+
+class InlineImage(BaseModel):
+    cid: str
+    filename: str
+    content_b64: str
+    mime: str = "image/png"
+
+
+class SendHtmlEmailInlineRequest(SendHtmlEmailRequest):
+    inline_images: List[InlineImage] = []
+
+
+@router.post("/send-html-email-inline", response_model=SendHtmlEmailResponse)
+async def send_html_email_inline(req: SendHtmlEmailInlineRequest, admin: dict = Depends(require_admin)):
+    """Send an HTML email with images embedded as CID inline attachments
+    (self-contained — renders inline in Gmail/Outlook/Apple Mail)."""
+    to = req.to_emails or []
+    bcc = req.bcc_emails or []
+    cc = req.cc_emails or []
+    total = len({*to, *bcc, *cc})
+    if total == 0:
+        raise HTTPException(status_code=400, detail="At least one recipient is required")
+
+    success = await send_email_multi_inline(
+        subject=req.subject,
+        html_content=req.html_content,
+        inline_images=[img.model_dump() for img in req.inline_images],
         to_emails=to,
         cc_emails=cc,
         bcc_emails=bcc,
