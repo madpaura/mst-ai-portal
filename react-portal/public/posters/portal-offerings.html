@@ -122,6 +122,13 @@
     -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
   }
   .hero-subtitle { font-size: 15px; color: var(--t2); line-height: 1.6; max-width: 560px; margin: 0 auto; font-weight: 400; }
+  .hero-url {
+    display: inline-flex; align-items: center; gap: 8px; margin-top: 16px;
+    padding: 10px 22px; border-radius: 999px; text-decoration: none;
+    background: rgba(59,130,246,0.09); border: 1px solid rgba(59,130,246,0.28);
+    color: #2563eb; font-size: 16px; font-weight: 700; letter-spacing: 0.2px;
+  }
+  .hero-url .material-symbols-outlined { font-size: 18px; font-variation-settings: 'FILL' 1; }
 
   /* ─── PILLAR FLOW (collaboration loop) ── */
   .pillars { display: flex; gap: 0; padding: 6px 48px 0; justify-content: center; margin-bottom: 6px; }
@@ -282,6 +289,10 @@
       Introducing MST AI Portal
     </div>
     <h1 class="hero-title">Learn. <span class="accent">Leverage</span>. Share.</h1>
+    <a class="hero-url" href="https://mst.ai.samsungds.net/">
+      <span class="material-symbols-outlined">link</span>
+      mst.ai.samsungds.net
+    </a>
   </div>
 
   <!-- ── PILLAR FLOW (collaboration loop) ── -->
