@@ -76,6 +76,31 @@ npx skills add {repo} --skill {slug} --agent claude-code --yes
 | `--global` (`-g`) | `~/.claude/skills/` | Available in all projects |
 | *(no flag)* | `./.claude/skills/` | This project only, committable |
 
+### Manual Install (restricted or self-hosted repos)
+
+If `npx skills add {repo}` can't reach the repo directly — a self-hosted / enterprise
+Git server, a private repo, or one behind a corporate TLS proxy — clone it first and
+install from the local checkout instead.
+
+```bash
+# 1. Clone the repo (drop -c http.sslVerify=false once your cert chain is trusted)
+git -c http.sslVerify=false clone https://github.com/{repo}.git /tmp/{slug}-src
+
+# 2. Install the skill from the local path
+npx skills add /tmp/{slug}-src --skill {slug} --agent claude-code --global --yes
+```
+
+If access is still restricted, download the skill folder manually and copy it
+straight into your skills directory:
+
+```bash
+mkdir -p ~/.claude/skills
+cp -r /tmp/{slug}-src/{slug} ~/.claude/skills/{slug}
+ls ~/.claude/skills/{slug}/SKILL.md   # sanity check
+```
+
+Restart Claude Code, then run `npx skills list --agent claude-code` to confirm.
+
 ### After Installing
 
 ```bash
