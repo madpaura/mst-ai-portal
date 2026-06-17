@@ -7,6 +7,10 @@ import { PublishRequests } from '../components/PublishRequests';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+// Reject video uploads larger than this before they leave the browser.
+const MAX_VIDEO_UPLOAD_MB = 200;
+const MAX_VIDEO_UPLOAD_BYTES = MAX_VIDEO_UPLOAD_MB * 1024 * 1024;
+
 interface Video {
   id: string;
   title: string;
@@ -539,8 +543,22 @@ export const AdminVideos: React.FC = () => {
     }
   };
 
+  // Reject oversized videos before any upload starts.
+  const selectUploadFile = (file: File | null) => {
+    if (file && file.size > MAX_VIDEO_UPLOAD_BYTES) {
+      showMsg('error', `Video is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Maximum allowed is ${MAX_VIDEO_UPLOAD_MB} MB.`);
+      setUploadFile(null);
+      return;
+    }
+    setUploadFile(file);
+  };
+
   const handleUpload = async () => {
     if (!selected || !uploadFile) return;
+    if (uploadFile.size > MAX_VIDEO_UPLOAD_BYTES) {
+      showMsg('error', `Video is too large (${(uploadFile.size / (1024 * 1024)).toFixed(1)} MB). Maximum allowed is ${MAX_VIDEO_UPLOAD_MB} MB.`);
+      return;
+    }
     setUploading(true);
     try {
       await api.upload(`/admin/videos/${selected.id}/upload`, uploadFile);
@@ -1804,7 +1822,7 @@ export const AdminVideos: React.FC = () => {
                     <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-slate-300 dark:border-white/10 hover:border-primary/50 cursor-pointer transition-colors">
                       <span className="material-symbols-outlined text-slate-500 text-sm">cloud_upload</span>
                       <span className="text-xs text-text-muted">{uploadFile ? uploadFile.name : 'Choose video'}</span>
-                      <input type="file" accept="video/*" className="hidden" onChange={(e) => setUploadFile(e.target.files?.[0] || null)} />
+                      <input type="file" accept="video/*" className="hidden" onChange={(e) => selectUploadFile(e.target.files?.[0] || null)} />
                     </label>
                     {uploadFile && (
                       <button onClick={handleUpload} disabled={uploading} className="px-4 py-2 bg-primary hover:bg-blue-500 disabled:opacity-30 text-white text-xs font-bold rounded-lg transition-colors">
@@ -1837,7 +1855,7 @@ export const AdminVideos: React.FC = () => {
                         type="file"
                         accept="video/*"
                         className="hidden"
-                        onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                        onChange={(e) => selectUploadFile(e.target.files?.[0] || null)}
                       />
                     </label>
                     <button
