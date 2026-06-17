@@ -552,7 +552,7 @@ export const AdminVideos: React.FC = () => {
         showMsg('success', 'Video uploaded — queuing auto-processing...');
         await api.post(`/admin/videos/${selected.id}/auto-process`, {});
         startAutoStatusPoll(selected.id);
-        showMsg('success', 'Auto-processing started: transcript → metadata → chapters → how-to');
+        showMsg('success', 'Auto-processing started: transcode + transcript → metadata → chapters → how-to');
       } else {
         showMsg('success', 'Video uploaded successfully');
       }
@@ -1826,7 +1826,7 @@ export const AdminVideos: React.FC = () => {
                     <span className="material-symbols-outlined text-primary text-sm">auto_awesome</span>
                     <div>
                       <span className="text-sm font-bold text-slate-900 dark:text-white">Auto Mode</span>
-                      <span className="text-xs text-text-muted ml-2">— transcribe + auto-generate metadata, chapters &amp; how-to guide</span>
+                      <span className="text-xs text-text-muted ml-2">— transcode + transcribe + auto-generate metadata, chapters &amp; how-to guide</span>
                     </div>
                   </label>
                   <div className="flex items-center gap-4">
