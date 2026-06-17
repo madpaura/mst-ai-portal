@@ -146,7 +146,10 @@
     text-align: center; font-size: 10px; font-weight: 700; letter-spacing: 2px;
     text-transform: uppercase; color: var(--t4); margin: 14px 0 2px;
   }
-  .features { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 12px 48px 16px; }
+  /* Row gap (44px) > column gap (16px): leaves a wide white band between the
+     two card rows so the email slice seam sits in white space — a forwarding
+     client's stray gap then lands on white, never inside a tile. */
+  .features { display: grid; grid-template-columns: 1fr 1fr; gap: 44px 16px; padding: 12px 48px 16px; }
   .feature-card {
     display: block; text-decoration: none; background: var(--card-bg);
     border: 1px solid var(--card-bdr); border-radius: 16px; padding: 20px 22px;
