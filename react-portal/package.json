@@ -14,11 +14,11 @@
   },
   "dependencies": {
     "@fontsource/space-grotesk": "^5.2.10",
-    "@types/dompurify": "^3.0.5",
+    "@types/dompurify": "^3.2.0",
     "@types/jszip": "^3.4.0",
     "@types/react-virtualized-auto-sizer": "^1.0.4",
     "@types/react-window": "^1.8.8",
-    "dompurify": "^3.4.1",
+    "dompurify": "^3.4.11",
     "fuse.js": "^7.4.2",
     "highlight.js": "^11.11.1",
     "hls.js": "^1.6.15",
