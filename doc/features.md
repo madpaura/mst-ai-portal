@@ -8,16 +8,17 @@ High-level summary of all major features.
 
 - HLS adaptive-bitrate streaming (360p / 720p / 1080p quality ladder)
 - Course and chapter organisation — courses contain ordered video lists; each video can have named chapters with timestamps
-- AI auto-mode pipeline: upload a raw video and the system automatically generates a transcript, title/description, chapters, and a how-to guide via Whisper + Ollama LLM
+- AI auto-mode pipeline: upload a raw video and the system automatically queues a transcode job (HLS) **and** generates a transcript, title/description, chapters, and a how-to guide via Whisper + Ollama LLM — the "ready to publish" email fires only after both the LLM jobs **and** the transcode have completed, so the link is always playable
 - Manual chapter editor — admin marks chapters directly on the video timeline
 - Closed captions — auto-generated WebVTT from Whisper transcript; styled with portal font
 - Transcript viewer — full searchable transcript panel alongside the player
 - GPU-accelerated transcoding with NVENC when an NVIDIA GPU is present; falls back to CPU libx264
 - Video trim and cut tool — near-instant re-segment without full re-encode
+- **200 MB client-side upload guard** — oversized video files are rejected immediately on selection with a clear error message showing actual vs. allowed size
 - Course progress tracking per user
 - Related videos sidebar
 - **Per-creator isolation** — content creators see and manage only their own videos; admins see everything
-- **Ready-to-publish email** — when auto-mode finishes all jobs, the creator receives an email with review and preview links (sent once per video)
+- **Ready-to-publish email** — when auto-mode finishes all jobs and the transcode completes, the creator receives an email with review and preview links (sent exactly once per video via atomic DB claim)
 
 ### Browse & Discovery (IgniteBrowse)
 
@@ -52,21 +53,23 @@ High-level summary of all major features.
 
 ## Marketplace (Forge)
 
-- Registry of agents, skills, and MCP servers
+- Registry of agents, skills, and MCP servers exposed as **three separate navbar sections** — **Agents**, **Skills**, **MCP** — each driven by `?type=` on the same catalog page; the in-page category sidebar has been removed in favour of navbar-level navigation
+- **Per-type construction status** — `marketplace_status` setting now carries per-type overrides alongside a global switch; sections can be individually paused with a type-specific message; paused sections are hidden from the navbar automatically via the shared `useVisibleCatalogTypes` hook (fails open so navigation is never lost on transient errors)
 - GitHub repo sync — scans configured repositories for component directories, reads `skill.md` / `README.md`, extracts how-to guides from `skill.md` first, then HOWTO.md, then README sections; parses YAML folded/literal block scalars correctly
 - Per-component how-to guide — displayed as rendered Markdown in a new tab; admin can also set an external URL that overrides the synced guide
 - Zip download — clones the repo on-the-fly and packages the component directory; download counter increments on every ZIP and on install-command copy (deduped per session)
 - Card view (4-column grid) and list view with inline description and action icons
-- Filters by type (Agent / Skill / MCP Server) and verification badge
+- Filters by type (Agent / Skill / MCP Server) and **"Officially Recommended"** badge (formerly "Verified by Intel"; underlying `verified` data value unchanged)
 - Site-wide search integration (name + description + component type)
 - **Install CMD tab** — shows the full install command for the component; uses `npx skills add <owner/repo> --skill <slug> --agent claude-code --global --yes` for skills, `~/.claude/agents/` path for agents, and `claude mcp add` / `mcp.json` instructions for MCP servers (auto-generated from the configured GitHub repo URL)
-- Admin: create, edit, activate/deactivate, delete individual or all components; set contributing guide video; configure how-to URL
+- Admin: create, edit, activate/deactivate, delete individual or all components; set contributing guide video; configure how-to URL; **per-section Agents/Skills/MCP toggles with custom under-construction messages**
 
 ### Artifact Contributions
 
 - Contributors submit new agents, skills, or MCP servers via the **Artifact Hub** submission form
 - **Type picker** — clicking `+New` opens a type-confirm step (Agent / Skill / MCP) before the form; the chosen type is shown as a confirmed chip with a Change action
 - **Admin-controlled allowed types** — admins configure which artifact types contributors may submit from the GitHub config panel; disallowed types are hidden from the picker and rejected server-side
+- **NVIDIA SkillSpector security validation** — skill and MCP submissions are automatically scanned by [NVIDIA SkillSpector](https://github.com/nvidia/skillspector) running as a Docker sidecar (`skillspector-service`); replaces the previous in-house regex scanner. The sidecar runs LangGraph/YARA/LLM analysis and returns a structured risk report; the portal blocks submission only when overall severity is `CRITICAL (DO NOT INSTALL)`. Agents are out of scope. Fails open with a warning when the scanner is unreachable (configurable via `SKILLSPECTOR_FAIL_CLOSED`). The full report (risk score, severity, recommendation, per-finding rule/confidence/explanation/remediation/snippet) is surfaced in the AdminArtifacts UI
 - Submissions go through the Publish Authority review queue; admins can approve directly without queue
 - **Submit Update** — component owner or admin can submit a version update by linking to the existing component via `parent_slug`; the slug and type fields are locked and a version tag field is required
 - **Soft-delete** — component owner or any admin can remove a published component via a Delete button on the marketplace card
@@ -122,16 +125,16 @@ High-level summary of all major features.
 
 - **Videos** — upload, transcode, manage courses, chapters, transcripts, auto-mode jobs; user search/filter; single-featured course toggle
 - **Solutions** — CRUD for solution cards
-- **Articles** — CRUD for knowledge articles; AI beautify button
+- **Articles** — CRUD for knowledge articles; AI beautify button; **Email button** to send any article as a newsletter-style email via `ContentEmailModal`
 - **Memes** — upload and manage meme gallery
 - **News** — manage RSS feeds and individual news items
-- **Marketplace** — component registry management, GitHub sync jobs, contributing guide config; configure allowed artifact types per contributor
+- **Marketplace** — component registry management, GitHub sync jobs, contributing guide config; configure allowed artifact types per contributor; **per-section (Agents / Skills / MCP) construction-status toggles with custom messages**; **Email button** per component to send as a newsletter-style email
 - **Forge Settings** — configure GitHub repo URL, token, branch, and scan paths for sync
 - **Analytics** — page-view counts and trends; **Memes tab** with daily click totals and per-meme breakdown
 - **Digest** — schedule and send learning digest emails (curated content newsletter)
-- **Settings** — SMTP configuration (including subject prefix), portal theme, transcript service URL/key, marketplace under-construction toggle, SAML settings path, **AI assistant enable/disable**, **assistant system prompt**, **In-House LLM** (base URL, API key, model, context/output/temperature — takes priority over Ollama/Forge when enabled)
+- **Settings** — SMTP configuration (including subject prefix), portal theme, transcript service URL/key, marketplace under-construction toggle, SAML settings path, **AI assistant enable/disable**, **assistant system prompt**, **In-House LLM** (base URL, API key, model, context/output/temperature — takes priority over Ollama/Forge when enabled), **Announcement Poster sender** (`PosterSenderCard`) — preview and email the bundled HTML offerings poster directly to To/BCC recipients
 - **Publish Authority** — review submit-for-publish requests from content creators; one-click approve/decline via portal UI or email action links
-- **Artifact Hub** — manage contributor submissions; approve or reject with version tagging; view per-artifact version history
+- **Artifact Hub** — manage contributor submissions; approve or reject with version tagging; view per-artifact version history; view SkillSpector security scan results per submission
 
 ---
 
@@ -164,8 +167,9 @@ High-level summary of all major features.
 - **Subject prefix** — every outgoing email is prefixed with a configurable label (default `MSTAI-TF`); overridable in Admin → Settings → SMTP or via `EMAIL_SUBJECT_PREFIX` env var; blank disables
 - **Contributor request** — admins and the applicant are notified on submission; both are notified on admin decision (approve/decline) with one-click email action buttons
 - **Marketplace submission** — submitter notified when an admin approves or rejects their artifact
-- **Ready to publish** — creator notified once by email when auto-mode pipeline finishes all jobs; links directly to the review and preview pages
+- **Ready to publish** — creator notified once by email when auto-mode pipeline finishes all jobs **and** the HLS transcode completes; links directly to the review and preview pages (atomic claim via `auto_ready_notified` — sent exactly once per video)
 - **Publish Authority review** — Publish Authority admins notified when a creator submits a publish request (see above)
+- **Individual content emails** — admins and content creators can send any article or marketplace component as a newsletter-style email via the reusable `ContentEmailModal`: enter custom intro, generate LLM summary preview, review HTML, download as PDF or .eml, manage recipients (CSV import + saved quick-access), then send in batches (BCC)
 
 ---
 
@@ -188,6 +192,8 @@ Roles:
 | `admin` | Full access including settings, analytics, delete, digest |
 
 SAML users are auto-redirected to `/login` when unauthenticated. Sign Out is hidden in SAML mode.
+
+**SAML deep-link preservation** — shared portal URLs (e.g. a direct video link) are preserved through the SAML SSO flow. `SamlGuard` forwards the requested path as `?next=<path>` on the login redirect; the login page passes a validated same-origin `next` as `RelayState` to the IdP; the ACS validates and honors `RelayState` on return, landing the user on the originally requested page instead of always `/`.
 
 ---
 
@@ -220,6 +226,7 @@ Both themes support light and dark mode toggle independently.
 - **Backup** — `scripts/backup.sh` handles DB dump + video archive + config; supports local, rsync, scp, and rclone remote transfer with configurable retention; storage locations resolved from `backup.conf` → `.env` → default paths so backups track `VIDEO_DATA_VOLUME` / `MEDIA_DATA_VOLUME` moves automatically
 - **Live migration** — `scripts/migrate.sh` handles full server-to-server migration with automatic rollback on failure
 - **Unified log level** — `LOG_LEVEL` env var (`DEBUG` / `INFO` / `WARNING` / `ERROR`) applied consistently to backend, worker, auto-processor, and uvicorn access logs
+- **SkillSpector security sidecar** — a standalone `skillspector-service` container wraps NVIDIA SkillSpector's LangGraph/YARA/LLM pipeline behind a thin FastAPI `/scan` endpoint; backend submits skill/MCP payloads to it and receives a structured risk report without the heavy dependency tree polluting the API image; wired into `docker-compose.yml` (and `docker-compose.hostnet.yml` for host-network mode via `SKILLSPECTOR_PORT`); configurable via `SKILLSPECTOR_SERVICE_URL`, `SKILLSPECTOR_USE_LLM`, `SKILLSPECTOR_FAIL_CLOSED`, `SKILLSPECTOR_TIMEOUT`
 - **Host networking mode** — `HOST_NETWORK=true` + `docker-compose.hostnet.yml` override switches all containers to `network_mode: host`; useful when the Docker bridge network causes Ollama or LDAP connectivity issues (Linux only)
 - **Same-origin API proxy** — nginx `/backend/` location strips the prefix and forwards to the backend, allowing `VITE_API_URL=/backend` for CORS-free access regardless of port layout
 - **Configurable uvicorn workers** — `UVICORN_WORKERS` env var (default `4` in Docker) scales FastAPI across multiple CPU cores; Alembic migrations and the Forge scheduler are each guarded by a Postgres advisory lock so only one worker runs them regardless of worker count

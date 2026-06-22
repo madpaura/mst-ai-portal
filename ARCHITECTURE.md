@@ -27,11 +27,14 @@ FastAPI backend
   └── settings/      Admin SMTP, portal config, assistant enable/disable, system prompt
 
 Workers (separate containers)
-  ├── transcoder      — Polls transcode_jobs, runs FFmpeg HLS pipeline
-  └── auto-processor  — Transcript → metadata/chapters/howto via Ollama; sends ready-to-publish email
+  ├── transcoder      — Polls transcode_jobs, runs FFmpeg HLS pipeline; sends ready-to-publish email after encode if LLM jobs already finished
+  └── auto-processor  — Transcript → metadata/chapters/howto via Ollama; sends ready-to-publish email after LLM jobs if transcode already finished
 
 Transcript service (separate container)
   └── Whisper inference over SSE, job queue
+
+SkillSpector sidecar (separate container)
+  └── NVIDIA SkillSpector — LangGraph/YARA/LLM artifact security scanner; exposes POST /scan; used by artifacts validator for skill/MCP submissions
 
 PostgreSQL — single database (mst_portal)
 Redis      — cache + rate limiting
@@ -52,13 +55,14 @@ Redis      — cache + rate limiting
 ## Data flow: auto-processing pipeline
 
 ```
-1. Transcoder completes → auto_processor picks up video
-2. auto_processor sends audio to transcript-service (Whisper over SSE)
-3. Transcript JSON stored at /data/videos/{uuid}/transcript.json
-4. LLM jobs run sequentially: metadata → chapters → howto
-5. Each result persisted back to DB / filesystem
-6. When all jobs finish, auto_processor sends "ready to publish" email to the creator
-   (guarded by videos.auto_ready_notified — sent at most once per video)
+1. Auto-mode trigger queues BOTH a transcode_job (HLS) AND auto_jobs (transcript/metadata/chapters/howto)
+2. Transcoder and auto-processor run concurrently:
+   a. Transcoder: raw/original.mp4 → HLS; sets status=ready; calls maybe_notify_owner_ready
+   b. auto_processor: audio → transcript-service (Whisper over SSE) → metadata/chapters/howto LLM chain
+3. Whichever finishes last calls maybe_notify_owner_ready which atomically checks both paths are done:
+   - requires transcode done (status=ready) AND LLM jobs done AND auto_ready_notified=false
+4. A single "ready to publish" email is sent to the creator, then auto_ready_notified is set to true
+   (atomic claim in DB — exactly one email per video regardless of race)
 ```
 
 ## Data flow: publish authority
@@ -97,8 +101,9 @@ Redis      — cache + rate limiting
 | Video | FFmpeg + HLS | Browser-compatible adaptive bitrate, GPU via NVENC |
 | Transcription | Whisper (faster-whisper) | Offline, accurate, SSE streaming progress |
 | LLM | Ollama / OpenAI / Anthropic / OpenAI-compatible | Multi-provider; auto-mode uses Ollama; in-house gateway takes priority when enabled; assistant supports all four |
-| Auth | JWT httpOnly cookie | XSS-safe; SAML/LDAP for enterprise SSO |
+| Auth | JWT httpOnly cookie | XSS-safe; SAML/LDAP for enterprise SSO; SAML deep-link preserved via RelayState |
 | Cache | Redis | Per-namespace versioned cache, TTL-based invalidation |
+| Artifact security | NVIDIA SkillSpector sidecar | LangGraph/YARA/LLM scan of skill/MCP submissions; decoupled from API image |
 
 ## Database schema highlights
 

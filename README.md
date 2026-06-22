@@ -8,7 +8,7 @@ Corporate AI learning and tools portal — video courses, solutions showcase, co
 
 - **Ignite** — HLS video library with courses, chapters, AI-generated transcripts, closed captions, auto-metadata pipeline, and per-creator content isolation; **browse/discovery UI** with featured hero, discover modes (Trending, Top Rated, Recently Added), custom playlists, bookmarks, and in-page fuzzy search
 - **Solutions** — filterable solution card showcase (SW / HW / Other)
-- **Marketplace** — agent, skill, and MCP server registry with GitHub sync, type-aware install guides, zip download, contributor submission workflow, version history, and lifecycle management (MANIFEST.json, artifact deletion)
+- **Marketplace** — **three navbar-driven catalog sections** (Agents, Skills, MCP) with per-type construction-status toggles; GitHub sync, type-aware install guides, zip download, contributor submission workflow with **NVIDIA SkillSpector security scanning**, version history, and lifecycle management (MANIFEST.json, artifact deletion)
 - **Discover** — Articles (with likes, trending sort, PDF mode, rich-text paste), Memes (with click analytics), News feed with RSS/ingest support
 - **Search** — site-wide full-text + fuzzy typo-tolerant search across all content types
 - **AI Assistant** — floating chat widget with 21 portal-aware tools, multi-provider LLM (Ollama/OpenAI/Anthropic/in-house OpenAI-compatible gateway), admin-configurable system prompt
@@ -122,6 +122,7 @@ mst-ai-portal/
 | `worker` | FFmpeg transcoding worker |
 | `auto-processor` | Transcript → metadata/chapters LLM pipeline |
 | `frontend` | Nginx serving the built React app |
+| `skillspector` | NVIDIA SkillSpector security scanner sidecar (artifact validation) |
 | `transcript-service` | Whisper speech-to-text (separate compose file) |
 
 ---
@@ -146,6 +147,11 @@ See [.env.example](.env.example) for the full annotated list. Critical variables
 | `HOST_NETWORK` | `false` | `true` enables host networking (Linux only; use when Docker bridge causes issues) |
 | `REDIS_ENABLED` | `true` | Set `false` for local dev without Redis |
 | `UVICORN_WORKERS` | `4` *(Docker)* | Number of uvicorn worker processes; Alembic and the scheduler are advisory-lock-guarded so multi-worker is safe |
+| `SKILLSPECTOR_SERVICE_URL` | `http://skillspector:9200` | URL of the SkillSpector sidecar; overridden to `http://127.0.0.1:${SKILLSPECTOR_PORT}` in host-network mode |
+| `SKILLSPECTOR_USE_LLM` | `true` | Enable the LLM semantic analysis stage in SkillSpector (uses the portal's in-house LLM) |
+| `SKILLSPECTOR_FAIL_CLOSED` | `false` | Block artifact submission when the scanner is unreachable; default is fail-open (warn only) |
+| `SKILLSPECTOR_TIMEOUT` | `120` | Seconds to wait for a SkillSpector scan response |
+| `SKILLSPECTOR_PORT` | `9200` | Port for the SkillSpector sidecar (used in host-network mode) |
 
 ---
 

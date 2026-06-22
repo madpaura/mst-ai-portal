@@ -22,6 +22,11 @@ Edit `.env` — at minimum set:
 | `EMAIL_SUBJECT_PREFIX` | No | Prepended to every outgoing email subject (default `MSTAI-TF`; blank to disable) |
 | `LOG_LEVEL` | No | `DEBUG` \| `INFO` (default) \| `WARNING` \| `ERROR` — applies to all services |
 | `UVICORN_WORKERS` | No | Number of FastAPI worker processes (default `4`); increase for high-concurrency deployments; migrations and the scheduler are advisory-lock-guarded |
+| `SKILLSPECTOR_SERVICE_URL` | No | URL of the SkillSpector sidecar (default `http://skillspector:9200`); set to `http://127.0.0.1:${SKILLSPECTOR_PORT}` in host-network mode |
+| `SKILLSPECTOR_USE_LLM` | No | Enable LLM semantic stage in SkillSpector (default `true`); uses the portal's in-house LLM endpoint |
+| `SKILLSPECTOR_FAIL_CLOSED` | No | Block artifact submission when scanner is unreachable (default `false` = fail-open with warning) |
+| `SKILLSPECTOR_TIMEOUT` | No | Seconds to wait for a scan response (default `120`) |
+| `SKILLSPECTOR_PORT` | No | Port for the SkillSpector sidecar in host-network mode (default `9200`) |
 
 ### 2. Deploy
 
