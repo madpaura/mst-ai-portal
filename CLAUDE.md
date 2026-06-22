@@ -38,9 +38,11 @@ mst-ai-portal/
 │       ├── api/client.ts   # Typed fetch wrapper (api.get/post/put/delete)
 │       └── index.css       # Tailwind + custom animations
 ├── transcript-service/     # Standalone FastAPI service — Whisper inference over SSE
+├── skillspector-service/   # NVIDIA SkillSpector sidecar — LangGraph/YARA/LLM artifact security scanner
 ├── db/init.sql             # Schema for fresh installs
-├── docker-compose.yml      # Core services (db, backend, worker, auto-processor, frontend)
+├── docker-compose.yml      # Core services (db, backend, worker, auto-processor, skillspector, frontend)
 ├── docker-compose.gpu.yml  # GPU override for worker (NVENC)
+├── docker-compose.hostnet.yml        # Host networking override (Linux; includes skillspector on SKILLSPECTOR_PORT)
 ├── docker-compose.transcript.yml     # CPU Whisper service
 ├── docker-compose.transcript.gpu.yml # GPU Whisper service
 └── .env.example            # All environment variables with comments
