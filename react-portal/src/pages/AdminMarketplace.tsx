@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api, toApiError } from '../api/client';
 import { useAuth } from '../api/auth';
 import { AdminArtifacts, GithubConfigPanel } from './AdminArtifacts';
@@ -166,7 +167,13 @@ export const AdminMarketplace: React.FC = () => {
   const { user, isAdmin } = useAuth();
   const isContent = !isAdmin && !!user;
 
-  const [activeTab, setActiveTab] = useState<Tab>(isContent ? 'contribute' : 'overview');
+  const [searchParams] = useSearchParams();
+  // A "Submit Update" deep-link (?tab=contribute&parent_slug=…) must open the
+  // Contribute tab so the embedded Artifact Hub can show the update form.
+  const wantsContribute = searchParams.get('tab') === 'contribute' || !!searchParams.get('parent_slug');
+  const [activeTab, setActiveTab] = useState<Tab>(
+    wantsContribute ? 'contribute' : (isContent ? 'contribute' : 'overview'),
+  );
   const [showPublishRequests, setShowPublishRequests] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 

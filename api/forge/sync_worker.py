@@ -188,7 +188,8 @@ async def run_sync_job(job_id: int, db_url: str):
                     # (skill = npx skills, agent = ~/.claude/agents, mcp = claude mcp add).
                     owner_repo = _extract_owner_repo(git_url)
                     howto = generate_howto_guide(
-                        comp["slug"], comp["name"], comp["component_type"], owner_repo
+                        comp["slug"], comp["name"], comp["component_type"],
+                        owner_repo, repo_url=git_url,
                     )
 
                     # About text: LLM-polished (≤200 words), regenerated only when the

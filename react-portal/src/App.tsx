@@ -50,6 +50,16 @@ function SamlGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Legacy /admin/artifacts entry point — fold into the Marketplace "Contribute"
+// tab while preserving any deep-link params (?parent_slug=…) so the Artifact Hub
+// can open the right update form.
+function ArtifactsRedirect() {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  if (!params.get('tab')) params.set('tab', 'contribute');
+  return <Navigate to={`/admin/marketplace?${params.toString()}`} replace />;
+}
+
 function App() {
   useEffect(() => {
     if (BETA_TAG) document.title = `MST AI Portal [${BETA_TAG.toUpperCase()}]`;
@@ -96,7 +106,7 @@ function App() {
             <Route path="audit-log" element={<AdminAuditLog />} />
             <Route path="contacts" element={<AdminContacts />} />
             <Route path="memes" element={<AdminMemes />} />
-            <Route path="artifacts" element={<Navigate to="/admin/marketplace" replace />} />
+            <Route path="artifacts" element={<ArtifactsRedirect />} />
             <Route path="html-mailer" element={<AdminHtmlMailer />} />
           </Route>
 

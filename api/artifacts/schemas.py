@@ -3,6 +3,8 @@ from typing import Optional
 from datetime import datetime
 import re
 
+from config import settings
+
 
 class ArtifactFile(BaseModel):
     name: str
@@ -34,6 +36,9 @@ class ArtifactGithubConfig(BaseModel):
 
 class ArtifactAllowedTypes(BaseModel):
     allowed: list[str] = ["agent", "skill", "mcp"]
+    # Combined upload limit (MB) for a submission — surfaced so the New/Edit
+    # forms can enforce the same cap as the backend. Ignored on write.
+    max_files_mb: int = settings.ARTIFACT_MAX_FILES_MB
 
     @field_validator("allowed")
     @classmethod
@@ -85,11 +90,12 @@ class ArtifactSubmissionCreate(BaseModel):
     @field_validator("files")
     @classmethod
     def check_total_size(cls, v: list) -> list:
-        _MAX = 2 * 1024 * 1024  # 2 MB
+        limit_mb = settings.ARTIFACT_MAX_FILES_MB
+        max_bytes = limit_mb * 1024 * 1024
         total = sum(len(f.content.encode("utf-8")) for f in v)
-        if total > _MAX:
+        if total > max_bytes:
             raise ValueError(
-                f"Total file content exceeds 2 MB ({total / 1024 / 1024:.1f} MB). "
+                f"Total file content exceeds {limit_mb} MB ({total / 1024 / 1024:.1f} MB). "
                 "Remove large files or split the submission."
             )
         return v
@@ -113,6 +119,20 @@ class ArtifactSubmissionUpdate(BaseModel):
     files: Optional[list[ArtifactFile]] = None
     tags: Optional[list[str]] = None
     version_tag: Optional[str] = None
+
+    @field_validator("files")
+    @classmethod
+    def check_total_size(cls, v: Optional[list]) -> Optional[list]:
+        if not v:
+            return v
+        limit_mb = settings.ARTIFACT_MAX_FILES_MB
+        total = sum(len(f.content.encode("utf-8")) for f in v)
+        if total > limit_mb * 1024 * 1024:
+            raise ValueError(
+                f"Total file content exceeds {limit_mb} MB ({total / 1024 / 1024:.1f} MB). "
+                "Remove large files or split the submission."
+            )
+        return v
 
 
 class ArtifactVersionResponse(BaseModel):
