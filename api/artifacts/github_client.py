@@ -1,6 +1,10 @@
+import os
 import re
 import json
-import base64
+import shutil
+import asyncio
+import tempfile
+import subprocess
 import httpx
 from typing import Optional
 from loguru import logger as log
@@ -8,6 +12,10 @@ from loguru import logger as log
 
 # Per-type key used inside the repo-root MANIFEST.json (mirrors madpaura/skills).
 _MANIFEST_KEYS = {"skill": "skills", "agent": "agents", "mcp": "mcp"}
+
+# Per-git-command wall-clock cap. The overall publish/delete budget is enforced
+# by the caller (settings.ARTIFACT_*_TIMEOUT); this is a per-step safety net.
+_GIT_CMD_TIMEOUT = 180
 
 
 def _manifest_key(artifact_type: str) -> str:
@@ -133,65 +141,89 @@ async def test_connection(config: dict) -> dict:
     return {"ok": True, "checks": checks, "error": None}
 
 
-def _resolve_target(config: dict) -> tuple:
-    """Validate config and return (host, owner, repo, api, headers, base_api, branch, base_folder)."""
+# ── Git plumbing (clone → edit locally → single commit/push) ──────────────────
+
+def _authed_https_url(url: str, token: str) -> str:
+    """Return an HTTPS clone URL with the token embedded (handles SSH input too)."""
+    url = url.strip()
+    m = re.match(r'git@([^:]+):(.+)', url)  # git@host:owner/repo(.git) → https
+    if m:
+        url = f"https://{m.group(1)}/{m.group(2)}"
+    url = re.sub(r'^(https?://)[^@/]+@', r'\1', url)  # strip any existing creds
+    url = url.rstrip('/')
+    if url.endswith('.git'):
+        url = url[:-4]
+    url = f"{url}.git"
+    cred = f"oauth2:{token}" if "gitlab" in url.lower() else f"x-access-token:{token}"
+    return re.sub(r'^(https?://)', rf'\1{cred}@', url)
+
+
+def _redact(text: str) -> str:
+    """Strip embedded credentials (https://user:token@host) from git output."""
+    return re.sub(r'(https?://)[^@/\s]+@', r'\1***@', text or '')
+
+
+def _run_git(args: list[str], cwd: Optional[str] = None):
+    """Run a git command, raising ValueError (with redacted output) on failure."""
+    env = {
+        **os.environ,
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_SSL_NO_VERIFY": "true",
+    }
+    proc = subprocess.run(
+        ["git", "-c", "http.sslVerify=false", *args],
+        cwd=cwd, capture_output=True, text=True,
+        timeout=_GIT_CMD_TIMEOUT, env=env,
+    )
+    if proc.returncode != 0:
+        detail = _redact((proc.stderr or proc.stdout or "").strip())[:400]
+        raise ValueError(f"git {args[0]} failed: {detail}")
+    return proc
+
+
+def _git_target(config: dict) -> tuple:
+    """Validate config and return (host, owner, repo, branch, base_folder, clone_url)."""
     token = (config.get("token") or "").strip()
     branch = (config.get("branch") or "main").strip()
     base_folder = (config.get("folder") or "").strip().strip("/")
-
     if not token:
         raise ValueError("GitHub token is not configured for this artifact type")
     if not config.get("url"):
         raise ValueError("GitHub URL is not configured for this artifact type")
-
     host, owner, repo = _parse_github_url(config["url"])
-    api = _api_base(host)
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-    base_api = f"{api}/repos/{owner}/{repo}/contents"
-    return host, owner, repo, api, headers, base_api, branch, base_folder
+    clone_url = _authed_https_url(config["url"], token)
+    return host, owner, repo, branch, base_folder, clone_url
 
 
-async def _get_content(client, base_api, path, branch, headers) -> tuple:
-    """Returns (text, sha) for a repo file, or (None, None) when it does not exist."""
-    r = await client.get(f"{base_api}/{path}", headers=headers, params={"ref": branch})
-    if r.status_code == 200:
-        data = r.json()
-        text = base64.b64decode(data["content"]).decode("utf-8")
-        return text, data["sha"]
-    return None, None
+def _safe_join(base: str, rel: str) -> str:
+    """Join repo-relative path safely, rejecting traversal outside the artifact dir."""
+    dest = os.path.normpath(os.path.join(base, rel))
+    base_norm = os.path.normpath(base)
+    if dest != base_norm and not dest.startswith(base_norm + os.sep):
+        raise ValueError(f"Unsafe file path in submission: {rel!r}")
+    return dest
 
 
-async def _put_content(client, base_api, path, branch, headers, text, message, sha=None):
-    payload: dict = {
-        "message": message,
-        "content": base64.b64encode(text.encode("utf-8")).decode("ascii"),
-        "branch": branch,
-    }
-    if sha:
-        payload["sha"] = sha
-    r = await client.put(f"{base_api}/{path}", headers=headers, json=payload)
-    if r.status_code not in (200, 201):
-        msg = r.json().get("message", "unknown error")
-        log.error("GitHub put failed {} for {}: {}", r.status_code, path, msg)
-        raise ValueError(f"GitHub API error {r.status_code}: {msg}")
-    log.info("Wrote GitHub file: {}", path)
+def _commit_and_push(repo_dir: str, branch: str, message: str) -> bool:
+    """Stage everything and push one commit. Returns False if there was nothing to do."""
+    _run_git(["add", "-A"], cwd=repo_dir)
+    status = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=repo_dir,
+        capture_output=True, text=True, timeout=30,
+    )
+    if not status.stdout.strip():
+        log.info("No changes to push for {}", repo_dir)
+        return False
+    _run_git(
+        ["-c", "user.email=portal@mst-ai", "-c", "user.name=MST AI Portal",
+         "commit", "-m", message],
+        cwd=repo_dir,
+    )
+    _run_git(["push", "origin", f"HEAD:{branch}"], cwd=repo_dir)
+    return True
 
 
-async def _delete_content(client, base_api, path, branch, headers, sha, message):
-    payload = {"message": message, "sha": sha, "branch": branch}
-    r = await client.request("DELETE", f"{base_api}/{path}", headers=headers, json=payload)
-    if r.status_code not in (200,):
-        msg = r.json().get("message", "unknown error")
-        log.error("GitHub delete failed {} for {}: {}", r.status_code, path, msg)
-        raise ValueError(f"GitHub API error {r.status_code}: {msg}")
-    log.info("Deleted GitHub file: {}", path)
-
-
-# ── Manifest / README maintenance ─────────────────────────────────────────────
+# ── Manifest / README maintenance (pure, operate on local files) ──────────────
 
 def _pick_entry(file_names: list[str]) -> str:
     lower = {f.lower(): f for f in file_names}
@@ -224,14 +256,15 @@ def _build_manifest_entry(
     }
 
 
-async def _update_manifest(client, base_api, branch, headers, artifact_type, entry):
+def _write_manifest(repo_dir: str, artifact_type: str, entry: dict):
     key = _manifest_key(artifact_type)
-    raw, sha = await _get_content(client, base_api, "MANIFEST.json", branch, headers)
+    path = os.path.join(repo_dir, "MANIFEST.json")
     manifest: dict = {}
-    if raw:
+    if os.path.isfile(path):
         try:
-            manifest = json.loads(raw)
-        except json.JSONDecodeError:
+            with open(path, "r", encoding="utf-8") as fh:
+                manifest = json.loads(fh.read()) or {}
+        except (json.JSONDecodeError, OSError):
             manifest = {}
     arr = manifest.get(key)
     if not isinstance(arr, list):
@@ -240,21 +273,19 @@ async def _update_manifest(client, base_api, branch, headers, artifact_type, ent
     arr.append(entry)
     arr.sort(key=lambda e: e.get("name", ""))
     manifest[key] = arr
-    content = json.dumps(manifest, indent=2) + "\n"
-    await _put_content(
-        client, base_api, "MANIFEST.json", branch, headers, content,
-        f"chore(manifest): update {entry['name']} v{entry['version']}", sha,
-    )
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(manifest, indent=2) + "\n")
 
 
-async def _remove_from_manifest(client, base_api, branch, headers, artifact_type, name):
+def _remove_from_manifest(repo_dir: str, artifact_type: str, name: str):
     key = _manifest_key(artifact_type)
-    raw, sha = await _get_content(client, base_api, "MANIFEST.json", branch, headers)
-    if not raw:
+    path = os.path.join(repo_dir, "MANIFEST.json")
+    if not os.path.isfile(path):
         return
     try:
-        manifest = json.loads(raw)
-    except json.JSONDecodeError:
+        with open(path, "r", encoding="utf-8") as fh:
+            manifest = json.loads(fh.read())
+    except (json.JSONDecodeError, OSError):
         return
     arr = manifest.get(key)
     if not isinstance(arr, list):
@@ -263,11 +294,8 @@ async def _remove_from_manifest(client, base_api, branch, headers, artifact_type
     if len(new_arr) == len(arr):
         return
     manifest[key] = new_arr
-    content = json.dumps(manifest, indent=2) + "\n"
-    await _put_content(
-        client, base_api, "MANIFEST.json", branch, headers, content,
-        f"chore(manifest): remove {name}", sha,
-    )
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(manifest, indent=2) + "\n")
 
 
 def _upsert_readme_bullet(raw: str, name: str, bullet: str) -> str:
@@ -295,10 +323,12 @@ def _remove_readme_bullet(raw: str, name: str) -> str:
     return "\n".join(ln for ln in raw.split("\n") if not ln.strip().startswith(needle))
 
 
-async def _update_readme(client, base_api, branch, headers, artifact_type, name, description):
+def _write_readme(repo_dir: str, artifact_type: str, name: str, description: Optional[str]):
     bullet = f"- **{name}** — {description or 'No description provided.'}"
-    raw, sha = await _get_content(client, base_api, "README.md", branch, headers)
-    if raw:
+    path = os.path.join(repo_dir, "README.md")
+    if os.path.isfile(path):
+        with open(path, "r", encoding="utf-8") as fh:
+            raw = fh.read()
         content = _upsert_readme_bullet(raw, name, bullet)
         if content == raw:
             return
@@ -309,31 +339,82 @@ async def _update_readme(client, base_api, branch, headers, artifact_type, name,
             f"# {title}\n\nA curated collection of {artifact_type}s "
             f"published from the MST AI Portal.\n\n## Contents\n\n{bullet}\n"
         )
-    await _put_content(
-        client, base_api, "README.md", branch, headers, content,
-        f"docs(readme): list {name}", sha,
-    )
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(content)
 
 
-async def _delete_tree(client, base_api, branch, headers, path):
-    """Recursively delete every file under a repo path. No-op if the path is absent."""
-    r = await client.get(f"{base_api}/{path}", headers=headers, params={"ref": branch})
-    if r.status_code == 404:
+def _remove_readme(repo_dir: str, name: str):
+    path = os.path.join(repo_dir, "README.md")
+    if not os.path.isfile(path):
         return
-    if r.status_code != 200:
-        msg = r.json().get("message", "unknown error")
-        raise ValueError(f"GitHub API error {r.status_code}: {msg}")
-    items = r.json()
-    if isinstance(items, dict):  # a single file was returned
-        items = [items]
-    for it in items:
-        if it.get("type") == "dir":
-            await _delete_tree(client, base_api, branch, headers, it["path"])
-        else:
-            await _delete_content(
-                client, base_api, it["path"], branch, headers, it["sha"],
-                f"chore(artifacts): remove {it['path']}",
-            )
+    with open(path, "r", encoding="utf-8") as fh:
+        raw = fh.read()
+    new = _remove_readme_bullet(raw, name)
+    if new != raw:
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(new)
+
+
+# ── Sync workers (run off the event loop via asyncio.to_thread) ────────────────
+
+def _push_sync(
+    config: dict, artifact_name: str, files: list[dict],
+    version: Optional[str], description: Optional[str], tags: Optional[list],
+    author: Optional[str], artifact_type: str,
+) -> str:
+    host, owner, repo, branch, base_folder, clone_url = _git_target(config)
+    folder_rel = f"{base_folder}/{artifact_name}" if base_folder else artifact_name
+
+    tmp = tempfile.mkdtemp(prefix="artifact_push_")
+    try:
+        _run_git(["clone", "--depth", "1", "--branch", branch, clone_url, tmp])
+
+        # Rewrite the artifact folder from scratch so add / update / delete across
+        # versions all land in one commit (stale files are pruned by the wipe).
+        target_dir = _safe_join(tmp, folder_rel)
+        if os.path.isdir(target_dir):
+            shutil.rmtree(target_dir)
+        for file_obj in files:
+            dest = _safe_join(target_dir, file_obj["name"])
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with open(dest, "w", encoding="utf-8") as fh:
+                fh.write(file_obj["content"])
+
+        # Refresh repo-root MANIFEST.json + README.md (madpaura/skills format).
+        _write_manifest(
+            tmp, artifact_type,
+            _build_manifest_entry(
+                artifact_name, version or "1.0.0", description or "",
+                tags or [], [f["name"] for f in files], author or "admin",
+            ),
+        )
+        _write_readme(tmp, artifact_type, artifact_name, description)
+
+        msg = f"feat(artifacts): publish {artifact_name}" + (f" v{version}" if version else "")
+        _commit_and_push(tmp, branch, msg)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    return f"https://{host}/{owner}/{repo}/tree/{branch}/{folder_rel}"
+
+
+def _delete_sync(config: dict, artifact_type: str, artifact_name: str):
+    host, owner, repo, branch, base_folder, clone_url = _git_target(config)
+    folder_rel = f"{base_folder}/{artifact_name}" if base_folder else artifact_name
+
+    tmp = tempfile.mkdtemp(prefix="artifact_del_")
+    try:
+        _run_git(["clone", "--depth", "1", "--branch", branch, clone_url, tmp])
+
+        target_dir = _safe_join(tmp, folder_rel)
+        if os.path.isdir(target_dir):
+            shutil.rmtree(target_dir)
+        _remove_from_manifest(tmp, artifact_type, artifact_name)
+        _remove_readme(tmp, artifact_name)
+
+        _commit_and_push(tmp, branch, f"chore(artifacts): remove {artifact_name}")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 # ── Public operations ─────────────────────────────────────────────────────────
@@ -349,51 +430,16 @@ async def push_artifact(
     artifact_type: str = "skill",
 ) -> str:
     """
-    Creates/updates files under {folder}/{artifact_name}/ in the configured repo,
-    then refreshes the repo-root MANIFEST.json and README.md (madpaura/skills format).
-    Returns the URL of the created folder on GitHub.
+    Clone the configured repo, write {folder}/{artifact_name}/ (add/update/delete in
+    one shot), refresh the repo-root MANIFEST.json + README.md, and push a single
+    commit. Returns the URL of the artifact folder on GitHub.
     """
-    host, owner, repo, api, headers, base_api, branch, base_folder = _resolve_target(config)
-
-    async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
-        for file_obj in files:
-            fname = file_obj["name"]
-            content = file_obj["content"]
-            rel_path = f"{base_folder}/{artifact_name}/{fname}" if base_folder else f"{artifact_name}/{fname}"
-
-            _, sha = await _get_content(client, base_api, rel_path, branch, headers)
-            version_suffix = f" (v{version})" if version else ""
-            action = "update" if sha else "add"
-            await _put_content(
-                client, base_api, rel_path, branch, headers, content,
-                f"feat(artifacts): {action} {artifact_name}/{fname}{version_suffix}", sha,
-            )
-
-        # Maintain repo-level manifest + readme so the repo stays in the expected format.
-        entry = _build_manifest_entry(
-            artifact_name, version or "1.0.0", description or "",
-            tags or [], [f["name"] for f in files], author or "admin",
-        )
-        await _update_manifest(client, base_api, branch, headers, artifact_type, entry)
-        await _update_readme(client, base_api, branch, headers, artifact_type, artifact_name, description)
-
-    folder_path = f"{base_folder}/{artifact_name}" if base_folder else artifact_name
-    return f"https://{host}/{owner}/{repo}/tree/{branch}/{folder_path}"
+    return await asyncio.to_thread(
+        _push_sync, config, artifact_name, files,
+        version, description, tags, author, artifact_type,
+    )
 
 
 async def delete_artifact(config: dict, artifact_type: str, artifact_name: str):
-    """Remove an artifact's folder from GitHub and drop it from MANIFEST.json + README.md."""
-    host, owner, repo, api, headers, base_api, branch, base_folder = _resolve_target(config)
-    folder_path = f"{base_folder}/{artifact_name}" if base_folder else artifact_name
-
-    async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
-        await _delete_tree(client, base_api, branch, headers, folder_path)
-        await _remove_from_manifest(client, base_api, branch, headers, artifact_type, artifact_name)
-        raw, sha = await _get_content(client, base_api, "README.md", branch, headers)
-        if raw:
-            new = _remove_readme_bullet(raw, artifact_name)
-            if new != raw:
-                await _put_content(
-                    client, base_api, "README.md", branch, headers, new,
-                    f"docs(readme): remove {artifact_name}", sha,
-                )
+    """Remove an artifact's folder from GitHub and drop it from MANIFEST.json + README.md (one commit)."""
+    await asyncio.to_thread(_delete_sync, config, artifact_type, artifact_name)

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 from typing import Optional
@@ -20,7 +21,10 @@ from artifacts.schemas import (
 )
 from artifacts.validator import validate_files
 from artifacts.github_client import push_artifact, test_connection, delete_artifact as gh_delete_artifact
-from howto_guides import generate_howto_guide, build_about_prompt, clamp_words, about_source_hash
+from howto_guides import (
+    generate_howto_guide, build_about_prompt, clamp_words, about_source_hash,
+    _resolve_repo,
+)
 from auth.dependencies import require_admin, require_content, get_current_user
 from database import get_db
 from publish.router import _notify_reviewers
@@ -52,9 +56,10 @@ def _extract_owner_repo_url(git_url: str) -> Optional[str]:
 
 def _generate_skill_instructions(
     display_name: str, slug: str, owner_repo: str, artifact_type: str = "skill",
+    repo_url: Optional[str] = None,
 ) -> str:
     """Type-aware install how-to guide for an artifact (delegates to the shared module)."""
-    return generate_howto_guide(slug, display_name, artifact_type, owner_repo)
+    return generate_howto_guide(slug, display_name, artifact_type, owner_repo, repo_url=repo_url)
 
 
 async def _make_about(name: str, artifact_type: str, source_text: str) -> Optional[str]:
@@ -290,7 +295,8 @@ async def analyze_artifact_files(
     github_config = await _load_github_config(db)
     skill_repo_url = github_config.get("skill", {}).get("url", "")
     owner_repo = _extract_owner_repo_url(skill_repo_url) or "madpaura/skills"
-    install_cmd_example = f"npx skills add {owner_repo} --skill {suggested_slug} --agent claude-code --global --yes"
+    repo_ref, _clone, _browse = _resolve_repo(owner_repo, skill_repo_url)
+    install_cmd_example = f"npx skills add {repo_ref} --skill {suggested_slug} --agent claude-code --global --yes"
 
     # ── Build LLM prompt ──────────────────────────────────────────────────────
     file_list = ", ".join(f.name for f in files[:15])
@@ -338,7 +344,9 @@ async def analyze_artifact_files(
     # If instructions are still empty (LLM failed or returned null with no howto file),
     # fall back to the generated template so the field is never left blank.
     if not instructions:
-        instructions = _generate_skill_instructions(display_name, suggested_slug, owner_repo)
+        instructions = _generate_skill_instructions(
+            display_name, suggested_slug, owner_repo, repo_url=skill_repo_url
+        )
 
     return ArtifactAnalyzeResponse(
         display_name=display_name,
@@ -455,8 +463,10 @@ async def create_artifact(req: ArtifactSubmissionCreate, user: dict = Depends(re
         if existing:
             raise HTTPException(400, f"An artifact named '{req.name}' of type '{req.artifact_type}' already exists")
 
-    # Admins submitting updates skip the approval queue — start at 'approved'
-    initial_status = "approved" if (is_admin and is_update) else "draft"
+    # Admins skip the review queue entirely (new submissions and updates alike) —
+    # they start at 'approved' and can publish directly. Contributors start at
+    # 'draft' and go through validate → submit → approve.
+    initial_status = "approved" if is_admin else "draft"
 
     # Auto-generate instructions if the creator didn't provide them (Issue #167)
     instructions = req.instructions
@@ -465,7 +475,7 @@ async def create_artifact(req: ArtifactSubmissionCreate, user: dict = Depends(re
         type_repo_url = github_config.get(req.artifact_type, {}).get("url", "")
         owner_repo = _extract_owner_repo_url(type_repo_url) or "madpaura/skills"
         instructions = _generate_skill_instructions(
-            req.display_name, req.name, owner_repo, req.artifact_type
+            req.display_name, req.name, owner_repo, req.artifact_type, repo_url=type_repo_url
         )
 
     files_json = json.dumps([f.model_dump() for f in req.files])
@@ -632,8 +642,18 @@ async def delete_artifact(
         type_config = config.get(row["artifact_type"], {})
         if type_config.get("url") and type_config.get("token"):
             try:
-                await gh_delete_artifact(type_config, row["artifact_type"], row["name"])
+                await asyncio.wait_for(
+                    gh_delete_artifact(type_config, row["artifact_type"], row["name"]),
+                    timeout=settings.ARTIFACT_DELETE_TIMEOUT,
+                )
                 github_cleaned = True
+            except asyncio.TimeoutError:
+                if not force:
+                    raise HTTPException(
+                        504,
+                        f"GitHub cleanup timed out after {settings.ARTIFACT_DELETE_TIMEOUT}s. "
+                        "Re-try, or pass force=true to delete the portal record only.",
+                    )
             except ValueError as exc:
                 if not force:
                     raise HTTPException(
@@ -704,9 +724,18 @@ async def submit_artifact(
     if not files_raw:
         raise HTTPException(400, "Submission must contain at least one file")
 
-    # Auto-run validation on submit
-    results = await validate_files(files_raw, row["artifact_type"])
-    if not results["passed"]:
+    # Reuse a fresh prior validation when one exists. Any edit clears
+    # validation_results (see update_artifact), so a stored result always
+    # reflects the current files — re-running the full SkillSpector scan on
+    # submit would just duplicate the (slow, LLM-backed) work the contributor
+    # already paid for via the Validate button. Only scan when none is cached.
+    existing_val = row["validation_results"]
+    if existing_val:
+        results = existing_val if isinstance(existing_val, dict) else json.loads(existing_val)
+    else:
+        results = await validate_files(files_raw, row["artifact_type"])
+
+    if not results.get("passed"):
         raise HTTPException(422, {
             "message": "Submission blocked: SkillSpector flagged this artifact as CRITICAL risk. Review the report and address the findings first.",
             "validation": results,
@@ -885,13 +914,22 @@ async def publish_artifact(artifact_id: str, admin: dict = Depends(require_admin
     author = await db.fetchval("SELECT display_name FROM users WHERE id = $1", row.get("submitted_by"))
 
     try:
-        github_url = await push_artifact(
-            type_config, row["name"], files_raw,
-            version=version,
-            description=row.get("description"),
-            tags=list(row.get("tags") or []),
-            author=author,
-            artifact_type=row["artifact_type"],
+        github_url = await asyncio.wait_for(
+            push_artifact(
+                type_config, row["name"], files_raw,
+                version=version,
+                description=row.get("description"),
+                tags=list(row.get("tags") or []),
+                author=author,
+                artifact_type=row["artifact_type"],
+            ),
+            timeout=settings.ARTIFACT_PUBLISH_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            504,
+            f"GitHub publish timed out after {settings.ARTIFACT_PUBLISH_TIMEOUT}s. "
+            "Some files may have been pushed — retry to finish publishing.",
         )
     except ValueError as exc:
         raise HTTPException(502, f"GitHub push failed: {exc}")

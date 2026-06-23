@@ -258,7 +258,11 @@ export const Marketplace: React.FC = () => {
     // Map component_type to artifact_type
     const typeMap: Record<string, string> = { agent: 'agent', skill: 'skill', mcp_server: 'mcp' };
     const artifactType = typeMap[card.component_type] || 'skill';
-    navigate(`/admin/artifacts?parent_slug=${card.slug}&parent_type=${artifactType}`);
+    // Land directly on the Contribute tab's update form for THIS component
+    // (the bare /admin/artifacts redirect used to drop these query params).
+    navigate(
+      `/admin/marketplace?tab=contribute&parent_slug=${encodeURIComponent(card.slug)}&parent_type=${artifactType}`,
+    );
   };
 
   const filteredCards = components.filter((c) => {

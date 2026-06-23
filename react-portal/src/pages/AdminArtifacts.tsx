@@ -121,6 +121,9 @@ const STATUS_COLORS: Record<ArtifactStatus, string> = {
   rejected:  'text-red-600 dark:text-red-400 bg-red-400/10 border-red-400/30',
 };
 
+// Fallback submission size cap (MB) used until the backend value is fetched.
+const DEFAULT_MAX_FILES_MB = 25;
+
 const EMPTY_GITHUB_CONFIG: GithubConfig = {
   agent: { url: '', branch: 'main', folder: 'agents', token: '' },
   skill: { url: '', branch: 'main', folder: 'skills', token: '' },
@@ -157,10 +160,14 @@ export const AdminArtifacts: React.FC<{ embedded?: boolean }> = ({ embedded = fa
   const [isEditing, setIsEditing] = useState(false);
   const [allowedTypes, setAllowedTypes] = useState<ArtifactType[]>(['agent', 'skill', 'mcp']);
   const [pickedType, setPickedType] = useState<ArtifactType>('agent');
+  const [maxFilesMb, setMaxFilesMb] = useState(DEFAULT_MAX_FILES_MB);
 
   useEffect(() => {
-    api.get<{ allowed: ArtifactType[] }>('/admin/artifacts/allowed-types')
-      .then(d => { if (d.allowed?.length) setAllowedTypes(d.allowed); })
+    api.get<{ allowed: ArtifactType[]; max_files_mb?: number }>('/admin/artifacts/allowed-types')
+      .then(d => {
+        if (d.allowed?.length) setAllowedTypes(d.allowed);
+        if (d.max_files_mb) setMaxFilesMb(d.max_files_mb);
+      })
       .catch(() => {});
   }, []);
 
@@ -308,12 +315,14 @@ export const AdminArtifacts: React.FC<{ embedded?: boolean }> = ({ embedded = fa
             initialParentType={initialParentType}
             initialType={pickedType}
             canChangeType={allowedTypes.length > 1}
+            maxFilesMb={maxFilesMb}
           />
         ) : selected ? (
           <ArtifactDetail
             artifact={selected}
             isAdmin={isAdmin}
             currentUserId={user?.id || ''}
+            maxFilesMb={maxFilesMb}
             onEditModeChange={setIsEditing}
             onRefresh={async () => {
               await fetchArtifacts();
@@ -339,10 +348,11 @@ const ArtifactDetail: React.FC<{
   artifact: Artifact;
   isAdmin: boolean;
   currentUserId: string;
+  maxFilesMb: number;
   onEditModeChange: (v: boolean) => void;
   onRefresh: () => Promise<void>;
   onDelete: () => void;
-}> = ({ artifact, isAdmin, currentUserId, onEditModeChange, onRefresh, onDelete }) => {
+}> = ({ artifact, isAdmin, currentUserId, maxFilesMb, onEditModeChange, onRefresh, onDelete }) => {
   const [detailTab, setDetailTab] = useState<'overview' | 'files' | 'instructions' | 'history'>('overview');
   const [versions, setVersions] = useState<ArtifactVersion[] | null>(null);
   const [editMode, setEditMode] = useState(false);
@@ -352,6 +362,15 @@ const ArtifactDetail: React.FC<{
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectBox, setShowRejectBox] = useState(false);
   const [toast, setToast] = useState('');
+
+  // Publish flow (blocking modal + retry)
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState('');
+
+  // Delete flow (confirm → running → error, with retry + force option)
+  const [deleteStep, setDeleteStep] = useState<'idle' | 'confirm' | 'running' | 'error'>('idle');
+  const [deleteError, setDeleteError] = useState('');
   const [editData, setEditData] = useState({
     display_name: artifact.display_name,
     description: artifact.description || '',
@@ -418,16 +437,37 @@ const ArtifactDetail: React.FC<{
     } finally { setSaving(false); }
   };
 
-  const handleDelete = async () => {
-    const wasPublished = artifact.status === 'published' || !!artifact.github_url;
-    const msg = wasPublished
-      ? `Delete "${artifact.display_name}"?\n\nThis also removes its folder from GitHub (and its MANIFEST.json / README.md entry) and deactivates the marketplace card. This cannot be undone.`
-      : 'Delete this submission?';
-    if (!confirm(msg)) return;
+  // Publish — synchronous push to GitHub, surfaced through a blocking modal so
+  // the admin sees progress and can retry on failure/timeout.
+  const runPublish = async () => {
+    setShowPublishModal(true);
+    setPublishing(true);
+    setPublishError('');
     try {
-      await api.delete(`/admin/artifacts/${artifact.id}`);
+      await api.post(`/admin/artifacts/${artifact.id}/publish`, {});
+      await onRefresh();
+      setShowPublishModal(false);
+      showToast('Published to GitHub');
+    } catch (e: unknown) {
+      setPublishError(toApiError(e) || 'Publish failed');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const wasPublished = artifact.status === 'published' || !!artifact.github_url;
+
+  const runDelete = async (force = false) => {
+    setDeleteStep('running');
+    setDeleteError('');
+    try {
+      await api.delete(`/admin/artifacts/${artifact.id}${force ? '?force=true' : ''}`);
+      setDeleteStep('idle');
       onDelete();
-    } catch (e: unknown) { showToast(toApiError(e) || 'Delete failed'); }
+    } catch (e: unknown) {
+      setDeleteError(toApiError(e) || 'Delete failed');
+      setDeleteStep('error');
+    }
   };
 
   const vr = artifact.validation_results;
@@ -437,6 +477,126 @@ const ArtifactDetail: React.FC<{
       {toast && (
         <div className="fixed top-4 right-4 z-50 px-4 py-2 rounded-lg bg-primary text-white text-sm shadow-lg">
           {toast}
+        </div>
+      )}
+
+      {/* Publish progress / error modal */}
+      {showPublishModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-2xl p-6">
+            {publishing ? (
+              <div className="flex flex-col items-center text-center gap-3">
+                <span className="material-symbols-outlined text-4xl text-emerald-500 animate-spin">progress_activity</span>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Publishing to GitHub…</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Pushing files and updating <code className="font-mono">MANIFEST.json</code> &amp; <code className="font-mono">README.md</code>.
+                  This can take up to a couple of minutes — please keep this tab open.
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center text-center gap-3">
+                <span className="material-symbols-outlined text-4xl text-red-500">error</span>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Publish failed</h3>
+                <p className="text-sm text-red-600 dark:text-red-400 break-words">{publishError}</p>
+                <div className="flex items-center gap-2 mt-2">
+                  <button
+                    onClick={() => setShowPublishModal(false)}
+                    className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 text-sm hover:bg-slate-200 dark:hover:bg-white/20 transition-colors"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={runPublish}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-sm">refresh</span>
+                    Retry
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirm / progress / error modal */}
+      {deleteStep !== 'idle' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-2xl p-6">
+            {deleteStep === 'running' ? (
+              <div className="flex flex-col items-center text-center gap-3">
+                <span className="material-symbols-outlined text-4xl text-red-500 animate-spin">progress_activity</span>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Deleting…</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {wasPublished
+                    ? 'Removing the GitHub folder, MANIFEST.json / README.md entries and deactivating the marketplace card.'
+                    : 'Removing this submission.'}
+                </p>
+              </div>
+            ) : deleteStep === 'error' ? (
+              <div className="flex flex-col items-center text-center gap-3">
+                <span className="material-symbols-outlined text-4xl text-red-500">error</span>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Delete failed</h3>
+                <p className="text-sm text-red-600 dark:text-red-400 break-words">{deleteError}</p>
+                <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+                  <button
+                    onClick={() => setDeleteStep('idle')}
+                    className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 text-sm hover:bg-slate-200 dark:hover:bg-white/20 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => runDelete(false)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-sm">refresh</span>
+                    Retry
+                  </button>
+                  {wasPublished && (
+                    <button
+                      onClick={() => runDelete(true)}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-500/20 border border-red-500/30 text-red-700 dark:text-red-300 text-sm font-medium hover:bg-red-500/30 transition-colors"
+                    >
+                      Force delete (portal only)
+                    </button>
+                  )}
+                </div>
+                {wasPublished && (
+                  <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
+                    Force delete removes the portal record even if GitHub cleanup keeps failing.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <div className="flex items-start gap-3">
+                  <span className="material-symbols-outlined text-2xl text-red-500">delete</span>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Delete “{artifact.display_name}”?</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                      {wasPublished
+                        ? 'This also removes its folder from GitHub (and its MANIFEST.json / README.md entry) and deactivates the marketplace card. This cannot be undone.'
+                        : 'This permanently removes the submission.'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => setDeleteStep('idle')}
+                    className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 text-sm hover:bg-slate-200 dark:hover:bg-white/20 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => runDelete(false)}
+                    className="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -491,7 +651,7 @@ const ArtifactDetail: React.FC<{
           )}
           {(isAdmin || isOwner) && (
             <button
-              onClick={handleDelete}
+              onClick={() => { setDeleteError(''); setDeleteStep('confirm'); }}
               className="flex items-center gap-1 px-2 py-1.5 rounded text-red-400 hover:bg-red-400/10 text-xs transition-colors"
             >
               <span className="material-symbols-outlined text-sm">delete</span>
@@ -546,12 +706,12 @@ const ArtifactDetail: React.FC<{
 
         {isAdmin && artifact.status === 'approved' && (
           <button
-            onClick={() => handleAction('publish')}
-            disabled={!!actionLoading}
+            onClick={runPublish}
+            disabled={!!actionLoading || publishing}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-medium hover:bg-emerald-500/30 transition-colors disabled:opacity-50"
           >
             <span className="material-symbols-outlined text-sm">rocket_launch</span>
-            {actionLoading === 'publish' ? 'Publishing…' : 'Publish to GitHub'}
+            {publishing ? 'Publishing…' : 'Publish to GitHub'}
           </button>
         )}
 
@@ -747,6 +907,7 @@ const ArtifactDetail: React.FC<{
             <FilesEditor
               files={editData.files}
               onChange={files => setEditData(d => ({ ...d, files }))}
+              maxFilesMb={maxFilesMb}
             />
           ) : (
             <FilesViewer files={artifact.files} />
@@ -964,36 +1125,48 @@ const FilesEditor: React.FC<{
   files: ArtifactFile[];
   onChange: (files: ArtifactFile[]) => void;
   onZipDrop?: (zipName: string, files: ArtifactFile[]) => void;
-}> = ({ files, onChange, onZipDrop }) => {
+  maxFilesMb?: number;
+}> = ({ files, onChange, onZipDrop, maxFilesMb = DEFAULT_MAX_FILES_MB }) => {
   const [activeIdx, setActiveIdx] = useState(0);
   const [newName, setNewName] = useState('');
   const [dragging, setDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [dropMsg, setDropMsg] = useState('');
+  const [dropErr, setDropErr] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
 
-  const _2MB = 2 * 1024 * 1024;
+  const maxBytes = maxFilesMb * 1024 * 1024;
 
   const totalBytes = (list: ArtifactFile[]) =>
     list.reduce((sum, f) => sum + new TextEncoder().encode(f.content).length, 0);
 
-  const mergeFiles = (incoming: ArtifactFile[]) => {
+  // Returns true when the merged set was accepted (within the size cap).
+  const mergeFiles = (incoming: ArtifactFile[]): boolean => {
     const map = new Map(files.map(f => [f.name, f]));
     incoming.forEach(f => map.set(f.name, f));
     const merged = Array.from(map.values());
     const size = totalBytes(merged);
-    if (size > _2MB) {
-      setDropMsg(`⚠ Total size ${(size / 1024 / 1024).toFixed(1)} MB exceeds the 2 MB limit. Remove some files and try again.`);
-      return;
+    if (size > maxBytes) {
+      const big = [...incoming].sort((a, b) => b.content.length - a.content.length)[0];
+      setDropErr(
+        `Total size ${(size / 1024 / 1024).toFixed(1)} MB exceeds the ${maxFilesMb} MB limit` +
+        (big ? ` — the largest file is "${big.name}" (${(new TextEncoder().encode(big.content).length / 1024 / 1024).toFixed(1)} MB).` : '.') +
+        ' Remove large data files and try again.'
+      );
+      return false;
     }
     onChange(merged);
     setActiveIdx(Math.max(0, merged.length - 1));
+    return true;
   };
 
   const processDropResult = (result: DropResult) => {
     const { files: incoming, skipped, zipName } = result;
-    mergeFiles(incoming);
+    // If the merge is rejected (over the size cap), surface the reason and stop —
+    // don't report a false "Added N files" success or run LLM analysis on files
+    // that were never actually added.
+    if (!mergeFiles(incoming)) return;
     if (zipName && onZipDrop) onZipDrop(zipName, incoming);
     if (skipped.length) setDropMsg(`Added ${incoming.length} file(s). Skipped ${skipped.length} (binary/cache): ${skipped.slice(0, 3).join(', ')}${skipped.length > 3 ? '…' : ''}`);
     else setDropMsg(`Added ${incoming.length} file(s)`);
@@ -1006,11 +1179,12 @@ const FilesEditor: React.FC<{
     setDragging(false);
     setProcessing(true);
     setDropMsg('');
+    setDropErr('');
     try {
       const result = await readFilesFromDrop(Array.from(e.dataTransfer.files));
       processDropResult(result);
     } catch (err: unknown) {
-      setDropMsg(`Error reading files: ${toApiError(err) || 'unknown'}`);
+      setDropErr(`Error reading files: ${toApiError(err) || 'unknown'}`);
     } finally { setProcessing(false); }
   };
 
@@ -1019,11 +1193,12 @@ const FilesEditor: React.FC<{
     if (!fileList.length) return;
     setProcessing(true);
     setDropMsg('');
+    setDropErr('');
     try {
       const result = await readFilesFromDrop(fileList);
       processDropResult(result);
     } catch (err: unknown) {
-      setDropMsg(`Error: ${toApiError(err) || 'unknown'}`);
+      setDropErr(`Error: ${toApiError(err) || 'unknown'}`);
     } finally {
       setProcessing(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -1093,6 +1268,16 @@ const FilesEditor: React.FC<{
         )}
       </div>
 
+      {dropErr && (
+        <div className="flex items-start gap-2 px-3 py-2 rounded bg-red-500/10 border border-red-500/30 text-xs text-red-600 dark:text-red-400">
+          <span className="material-symbols-outlined text-sm shrink-0">error</span>
+          <span className="flex-1">{dropErr}</span>
+          <button onClick={() => setDropErr('')} className="shrink-0 text-red-400 hover:text-red-300">
+            <span className="material-symbols-outlined text-sm">close</span>
+          </button>
+        </div>
+      )}
+
       {dropMsg && (
         <div className="flex items-center gap-2 px-3 py-2 rounded bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-600 dark:text-emerald-400">
           <span className="material-symbols-outlined text-sm">check_circle</span>
@@ -1103,8 +1288,9 @@ const FilesEditor: React.FC<{
       {/* Size indicator */}
       {files.length > 0 && (() => {
         const used = totalBytes(files);
-        const pct = Math.min(100, (used / _2MB) * 100);
-        const overLimit = used > _2MB;
+        const pct = Math.min(100, (used / maxBytes) * 100);
+        const overLimit = used > maxBytes;
+        const maxKb = Math.round(maxBytes / 1024);
         return (
           <div className="flex items-center gap-2">
             <div className="flex-1 h-1 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden">
@@ -1114,7 +1300,7 @@ const FilesEditor: React.FC<{
               />
             </div>
             <span className={`text-xs tabular-nums ${overLimit ? 'text-red-400' : 'text-slate-500'}`}>
-              {(used / 1024).toFixed(0)} KB / 2048 KB
+              {(used / 1024).toFixed(0)} KB / {maxKb.toLocaleString()} KB
             </span>
           </div>
         );
@@ -1260,7 +1446,9 @@ const NewArtifactForm: React.FC<{
   initialParentType?: ArtifactType;
   initialType?: ArtifactType;
   canChangeType?: boolean;
-}> = ({ onCreated, onCancel, onChangeType, initialParentSlug = '', initialParentType = 'skill', initialType = 'agent', canChangeType = false }) => {
+  maxFilesMb?: number;
+}> = ({ onCreated, onCancel, onChangeType, initialParentSlug = '', initialParentType = 'skill', initialType = 'agent', canChangeType = false, maxFilesMb = DEFAULT_MAX_FILES_MB }) => {
+  const { isAdmin } = useAuth();
   const isUpdateMode = !!initialParentSlug;
   const [form, setForm] = useState({
     name: initialParentSlug || '',
@@ -1371,7 +1559,7 @@ const NewArtifactForm: React.FC<{
           Files
           <span className="ml-2 text-slate-600 normal-case font-normal">— drop a ZIP to auto-fill name &amp; description</span>
         </label>
-        <FilesEditor files={files} onChange={setFiles} onZipDrop={handleZipDrop} />
+        <FilesEditor files={files} onChange={setFiles} onZipDrop={handleZipDrop} maxFilesMb={maxFilesMb} />
       </div>
 
       {/* Analyzing banner */}
@@ -1509,7 +1697,9 @@ const NewArtifactForm: React.FC<{
           disabled={saving}
           className="px-6 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
-          {saving ? (isUpdateMode ? 'Submitting…' : 'Creating…') : (isUpdateMode ? 'Submit Update' : 'Create Draft')}
+          {saving
+            ? (isUpdateMode ? 'Submitting…' : 'Creating…')
+            : (isUpdateMode ? 'Submit Update' : isAdmin ? 'Create' : 'Create Draft')}
         </button>
         <button
           type="button"
@@ -1518,7 +1708,11 @@ const NewArtifactForm: React.FC<{
         >
           Cancel
         </button>
-        <p className="text-xs text-slate-600">Saved as draft — validate and submit when ready.</p>
+        <p className="text-xs text-slate-600">
+          {isAdmin
+            ? 'Admins skip the review queue — approved on create, ready to publish.'
+            : 'Saved as draft — validate and submit when ready.'}
+        </p>
       </div>
     </form>
   );

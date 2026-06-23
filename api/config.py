@@ -82,6 +82,16 @@ class Settings(BaseSettings):
     SKILLSPECTOR_FAIL_CLOSED: bool = False
     SKILLSPECTOR_TIMEOUT: float = 180.0
 
+    # Overall wall-clock budget (seconds) for a GitHub publish / delete round-trip
+    # in the Artifact Hub. A single push touches every file plus MANIFEST.json +
+    # README.md, so allow generous headroom over the per-request httpx timeout
+    # before giving up and letting the caller retry.
+    ARTIFACT_PUBLISH_TIMEOUT: int = 120
+    ARTIFACT_DELETE_TIMEOUT: int = 90
+    # Max combined size (MB) of all files in a single artifact submission. Skills
+    # can ship sizeable data files (shape indexes, datasets), so this is generous.
+    ARTIFACT_MAX_FILES_MB: int = 25
+
     # Portal frontend URL (used for links in emails/newsletters)
     PORTAL_URL: str = "http://localhost:9810"
 

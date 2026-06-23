@@ -22,9 +22,54 @@ def normalize_type(t: Optional[str]) -> str:
     return "skill"
 
 
+# ── Repo-URL helpers (host-aware install commands) ────────────────────────────
+
+def clean_repo_url(git_url: Optional[str]) -> Optional[str]:
+    """Return a clean, browsable HTTPS repo URL (no credentials, no trailing .git)."""
+    if not git_url:
+        return None
+    url = git_url.strip()
+    # Normalise SSH form: git@host:owner/repo(.git) → https://host/owner/repo
+    m = re.match(r'git@([^:]+):(.+)', url)
+    if m:
+        url = f"https://{m.group(1)}/{m.group(2)}"
+    # Strip any embedded credentials (https://user:token@host/…)
+    url = re.sub(r'^(https?://)[^@/]+@', r'\1', url)
+    url = url.rstrip('/')
+    if url.endswith('.git'):
+        url = url[:-4]
+    return url or None
+
+
+def _resolve_repo(owner_repo: Optional[str], repo_url: Optional[str]) -> tuple[str, str, str]:
+    """Resolve the repo references used inside install guides.
+
+    Returns ``(repo_ref, clone_url, browse_url)`` where:
+    - ``repo_ref`` is what `npx skills add` / discovery commands use — the
+      ``owner/repo`` shorthand for github.com, or the full HTTPS URL for any
+      other (self-hosted / enterprise) host so the CLI hits the right server.
+    - ``clone_url`` is the ``git clone`` target (``…​.git``).
+    - ``browse_url`` is the clean HTTPS URL for links.
+    """
+    clean = clean_repo_url(repo_url)
+    if not clean and owner_repo:
+        clean = f"https://github.com/{owner_repo}"
+    if not clean:
+        clean = "https://github.com/<owner>/<repo>"
+
+    m = re.match(r'https?://([^/]+)/(.+)', clean)
+    host = m.group(1).lower() if m else "github.com"
+    path = m.group(2) if m else (owner_repo or "<owner>/<repo>")
+
+    is_github_com = host in ("github.com", "www.github.com")
+    repo_ref = path if is_github_com else clean
+    clone_url = f"{clean}.git"
+    return repo_ref, clone_url, clean
+
+
 # ── Install how-to guides ─────────────────────────────────────────────────────
 
-def _skill_guide(slug: str, name: str, repo: str) -> str:
+def _skill_guide(slug: str, name: str, repo: str, clone_url: str) -> str:
     return f"""## How to Install {name}
 
 > Agent skills extend what Claude Code and other AI coding agents can do.
@@ -84,7 +129,7 @@ install from the local checkout instead.
 
 ```bash
 # 1. Clone the repo (drop -c http.sslVerify=false once your cert chain is trusted)
-git -c http.sslVerify=false clone https://github.com/{repo}.git /tmp/{slug}-src
+git -c http.sslVerify=false clone {clone_url} /tmp/{slug}-src
 
 # 2. Install the skill from the local path
 npx skills add /tmp/{slug}-src --skill {slug} --agent claude-code --global --yes
@@ -122,7 +167,7 @@ npx skills remove {slug}
 """
 
 
-def _agent_guide(slug: str, name: str, repo: str) -> str:
+def _agent_guide(slug: str, name: str, repo: str, clone_url: str) -> str:
     return f"""## How to Install {name}
 
 > Agents are role-configured AI personas for Claude Code, stored under `~/.claude/agents/`.
@@ -135,7 +180,7 @@ def _agent_guide(slug: str, name: str, repo: str) -> str:
 ### Install (global — all projects)
 
 ```bash
-git clone https://github.com/{repo}.git /tmp/{slug}-src
+git clone {clone_url} /tmp/{slug}-src
 cp -r /tmp/{slug}-src/{slug} ~/.claude/agents/
 ```
 
@@ -226,16 +271,23 @@ claude mcp remove {slug}
 
 
 def generate_howto_guide(
-    slug: str, name: str, artifact_type: str, owner_repo: Optional[str] = None,
+    slug: str, name: str, artifact_type: str,
+    owner_repo: Optional[str] = None, repo_url: Optional[str] = None,
 ) -> str:
-    """Return a type-appropriate install how-to guide for an artifact/component."""
-    repo = owner_repo or "<owner/repo>"
+    """Return a type-appropriate install how-to guide for an artifact/component.
+
+    ``repo_url`` (the actual sync/publish source, e.g. an enterprise GitHub host)
+    takes precedence so manual `git clone` / `npx skills add` steps point at the
+    real host rather than always defaulting to github.com. ``owner_repo`` is the
+    legacy ``owner/repo`` shorthand, used as a fallback.
+    """
+    repo_ref, clone_url, _browse = _resolve_repo(owner_repo, repo_url)
     t = normalize_type(artifact_type)
     if t == "agent":
-        return _agent_guide(slug, name, repo)
+        return _agent_guide(slug, name, repo_ref, clone_url)
     if t == "mcp":
-        return _mcp_guide(slug, name, repo)
-    return _skill_guide(slug, name, repo)
+        return _mcp_guide(slug, name, repo_ref)
+    return _skill_guide(slug, name, repo_ref, clone_url)
 
 
 # ── About section (LLM) ───────────────────────────────────────────────────────
