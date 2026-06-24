@@ -1,9 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api, toApiError } from '../api/client';
 
-// Self-contained announcement poster, served statically from public/posters/.
-// Generated from doc/portal-announcement-poster-offerings.html (fonts embedded).
-const POSTER_URL = '/posters/portal-offerings.html';
+// Image-based announcement email (sliced poster with per-region links). The HTML
+// references each slice by src="cid:<name>"; on send we fetch the matching PNGs
+// and attach them as CID inline images so the email is fully self-contained.
+// Built by scripts/build_poster_email.py.
+const POSTER_URL = '/posters/portal-offerings-email.html';
+const SLICE_BASE = '/posters/offerings';
+const CID_RE = /src="cid:([a-z0-9-]+)"/g;
 
 interface PosterSenderCardProps {
   onMessage: (type: 'success' | 'error', text: string) => void;
@@ -12,10 +16,22 @@ interface PosterSenderCardProps {
 const parseEmails = (raw: string) =>
   raw.split(/[\n,;]+/).map(e => e.trim()).filter(e => e.includes('@'));
 
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const CHUNK = 8192;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
 /**
  * "Announcement Poster" sender (Admin → Settings).
- * Loads the bundled, self-contained offerings poster and sends it as the
- * email body (not an attachment) to To/BCC recipients via /admin/send-html-email.
+ * Loads the sliced, image-based offerings poster and sends it to To/BCC
+ * recipients via /admin/send-html-email-inline — the slice PNGs ride along as
+ * CID inline attachments, so the email is self-contained and renders in
+ * Gmail/Outlook/Apple Mail with per-section links intact.
  */
 export const PosterSenderCard: React.FC<PosterSenderCardProps> = ({ onMessage }) => {
   const [html, setHtml] = useState('');
@@ -40,9 +56,14 @@ export const PosterSenderCard: React.FC<PosterSenderCardProps> = ({ onMessage })
     return () => { cancelled = true; };
   }, []);
 
-  const previewUrl = useMemo(
-    () => (html ? URL.createObjectURL(new Blob([html], { type: 'text/html' })) : null),
+  // Rewrite cid: refs → same-origin slice URLs so the preview iframe can show them.
+  const previewHtml = useMemo(
+    () => html.replace(CID_RE, (_m, name) => `src="${SLICE_BASE}/${name}.png"`),
     [html],
+  );
+  const previewUrl = useMemo(
+    () => (previewHtml ? URL.createObjectURL(new Blob([previewHtml], { type: 'text/html' })) : null),
+    [previewHtml],
   );
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
@@ -60,9 +81,17 @@ export const PosterSenderCard: React.FC<PosterSenderCardProps> = ({ onMessage })
     }
     setSending(true);
     try {
+      // Fetch each cid: slice and embed it as a CID inline attachment.
+      const cids = [...new Set([...html.matchAll(CID_RE)].map(m => m[1]))];
+      const inline_images = await Promise.all(cids.map(async (cid) => {
+        const resp = await fetch(`${SLICE_BASE}/${cid}.png`);
+        if (!resp.ok) throw new Error(`Missing slice image: ${cid}.png`);
+        const buf = await resp.arrayBuffer();
+        return { cid, filename: `${cid}.png`, content_b64: arrayBufferToBase64(buf), mime: 'image/png' };
+      }));
       const res = await api.post<{ success: boolean; message: string; sent_count: number }>(
-        '/admin/send-html-email',
-        { subject, html_content: html, to_emails: to, bcc_emails: bcc },
+        '/admin/send-html-email-inline',
+        { subject, html_content: html, to_emails: to, bcc_emails: bcc, inline_images },
       );
       onMessage(res.success ? 'success' : 'error', res.message);
     } catch (err: unknown) {
@@ -79,7 +108,7 @@ export const PosterSenderCard: React.FC<PosterSenderCardProps> = ({ onMessage })
         <div className="flex-1">
           <h2 className="text-base font-bold text-slate-900 dark:text-white">Announcement Poster</h2>
           <p className="text-xs text-text-muted mt-0.5">
-            Send the self-contained portal offerings poster as an email — embedded in the body, not attached
+            Send the portal offerings poster as an email — image-based with per-section links, renders the same in every client
           </p>
         </div>
         {html && (
