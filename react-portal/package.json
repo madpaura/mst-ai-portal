@@ -24,7 +24,7 @@
     "hls.js": "^1.6.15",
     "html2pdf.js": "^0.14.0",
     "jszip": "^3.10.1",
-    "material-symbols": "^0.44.12",
+    "material-symbols": "^0.45.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",
