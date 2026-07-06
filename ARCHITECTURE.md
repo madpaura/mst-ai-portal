@@ -104,6 +104,7 @@ Redis      — cache + rate limiting
 | Auth | JWT httpOnly cookie | XSS-safe; SAML/LDAP for enterprise SSO; SAML deep-link preserved via RelayState |
 | Cache | Redis | Per-namespace versioned cache, TTL-based invalidation |
 | Artifact security | NVIDIA SkillSpector sidecar | LangGraph/YARA/LLM scan of skill/MCP submissions; decoupled from API image |
+| Artifact publish | Git clone → edit locally → single commit/push | Replaces the old file-by-file GitHub Contents API; one commit per publish/delete instead of many; git subprocess runs off the event loop, embedded credentials redacted from errors |
 
 ## Database schema highlights
 
