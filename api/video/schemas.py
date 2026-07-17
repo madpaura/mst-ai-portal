@@ -32,6 +32,13 @@ class CourseResponse(BaseModel):
     video_count: int = 0
     thumbnail: Optional[str] = None
     is_featured: bool = False
+    # authored metadata for the Courses section (issue #239)
+    level: Optional[str] = None
+    tags: list[str] = []
+    cover_image: Optional[str] = None
+    objectives: list[str] = []
+    prerequisites: Optional[str] = None
+    curriculum_published: bool = False
 
 
 class CourseCreate(BaseModel):
@@ -40,6 +47,10 @@ class CourseCreate(BaseModel):
     description: Optional[str] = None
     sort_order: int = 0
     is_featured: bool = False
+    level: Optional[str] = None
+    tags: list[str] = []
+    objectives: list[str] = []
+    prerequisites: Optional[str] = None
 
 
 class CourseUpdate(BaseModel):
@@ -48,6 +59,91 @@ class CourseUpdate(BaseModel):
     description: Optional[str] = None
     sort_order: Optional[int] = None
     is_featured: Optional[bool] = None
+    level: Optional[str] = None
+    tags: Optional[list[str]] = None
+    objectives: Optional[list[str]] = None
+    prerequisites: Optional[str] = None
+
+
+# ── Curriculum (issue #239) ─────────────────────────────────
+
+ITEM_TYPES = ("video", "exercise", "reading", "link")
+
+
+class ItemLink(BaseModel):
+    label: str
+    url: str
+
+
+class CourseItemResponse(BaseModel):
+    id: str
+    module_id: str
+    item_type: str
+    title: str
+    description: Optional[str] = None
+    duration_min: int = 0
+    video_id: Optional[str] = None
+    video_slug: Optional[str] = None
+    video_title: Optional[str] = None
+    external_url: Optional[str] = None
+    links: list[ItemLink] = []
+    sort_order: int = 0
+
+
+class CourseItemCreate(BaseModel):
+    item_type: str
+    title: str
+    description: Optional[str] = None
+    duration_min: Optional[int] = None
+    video_id: Optional[str] = None
+    external_url: Optional[str] = None
+    links: list[ItemLink] = []
+
+
+class CourseItemUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    duration_min: Optional[int] = None
+    video_id: Optional[str] = None
+    external_url: Optional[str] = None
+    links: Optional[list[ItemLink]] = None
+
+
+class CourseModuleResponse(BaseModel):
+    id: str
+    course_id: str
+    week_number: int
+    title: str
+    summary: Optional[str] = None
+    sort_order: int = 0
+    total_duration_min: int = 0
+    items: list[CourseItemResponse] = []
+
+
+class CourseModuleCreate(BaseModel):
+    title: str
+    summary: Optional[str] = None
+
+
+class CourseModuleUpdate(BaseModel):
+    title: Optional[str] = None
+    summary: Optional[str] = None
+
+
+class CurriculumResponse(BaseModel):
+    course_id: str
+    curriculum_published: bool = False
+    total_duration_min: int = 0
+    item_count: int = 0
+    modules: list[CourseModuleResponse] = []
+
+
+class ReorderRequest(BaseModel):
+    ids: list[str]
+
+
+class CurriculumPublishRequest(BaseModel):
+    published: bool
 
 
 class VideoResponse(BaseModel):

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { api, toApiError } from '../api/client';
 import { HlsPlayer, type HlsPlayerHandle } from '../components/HlsPlayer';
@@ -1625,6 +1626,14 @@ export const AdminVideos: React.FC = () => {
                       >
                         <span className="material-symbols-outlined text-[14px]">edit</span>
                       </button>
+                      <Link
+                        to={`/admin/courses/${group.course!.id}/curriculum`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-primary transition-colors"
+                        title="Edit curriculum (weeks, items, publish)"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">view_timeline</span>
+                      </Link>
                       <button
                         onClick={(e) => openDeleteCourse(group.course!, e)}
                         className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-500/20 text-slate-400 hover:text-red-500 transition-colors"
