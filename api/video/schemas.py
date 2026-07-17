@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
@@ -144,6 +144,79 @@ class ReorderRequest(BaseModel):
 
 class CurriculumPublishRequest(BaseModel):
     published: bool
+
+
+# ── Public Courses section (issue #239, PR 2) ───────────────
+
+class CourseCardResponse(BaseModel):
+    """Browse card for the public Courses section."""
+    id: str
+    slug: str
+    title: str
+    description: Optional[str] = None
+    level: Optional[str] = None
+    tags: list[str] = []
+    cover_image: Optional[str] = None
+    week_count: int = 0
+    item_count: int = 0
+    total_duration_min: int = 0
+    rating_avg: Optional[float] = None
+    rating_count: int = 0
+    is_enrolled: bool = False
+    completed_items: int = 0
+    progress_pct: float = 0
+
+
+class CourseUserState(BaseModel):
+    """Per-user state on the course detail page (only when logged in)."""
+    is_enrolled: bool = False
+    enrolled_at: Optional[str] = None
+    suggested_week: Optional[int] = None
+    completed_item_ids: list[str] = []
+    completed: int = 0
+    total: int = 0
+    pct: float = 0
+    feedback_rating: Optional[int] = None
+    feedback_comment: Optional[str] = None
+
+
+class CourseDetailResponse(BaseModel):
+    course: CourseResponse
+    curriculum: CurriculumResponse
+    rating_avg: Optional[float] = None
+    rating_count: int = 0
+    user: Optional[CourseUserState] = None
+
+
+class ItemProgressRequest(BaseModel):
+    completed: bool = True
+
+
+class ItemProgressResponse(BaseModel):
+    item_id: str
+    completed: bool
+    auto_enrolled: bool = False
+    completed_items: int = 0
+    total_items: int = 0
+    progress_pct: float = 0
+
+
+class CourseFeedbackSubmit(BaseModel):
+    rating: int = Field(ge=1, le=5)
+    comment: Optional[str] = None
+
+
+class CourseFeedbackResponse(BaseModel):
+    rating: int
+    comment: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+
+class CourseFeedbackAdminEntry(BaseModel):
+    user_display_name: str
+    rating: int
+    comment: Optional[str] = None
+    updated_at: Optional[datetime] = None
 
 
 class VideoResponse(BaseModel):
