@@ -27,6 +27,9 @@ Edit `.env` — at minimum set:
 | `SKILLSPECTOR_FAIL_CLOSED` | No | Block artifact submission when scanner is unreachable (default `false` = fail-open with warning) |
 | `SKILLSPECTOR_TIMEOUT` | No | Seconds to wait for a scan response (default `120`) |
 | `SKILLSPECTOR_PORT` | No | Port for the SkillSpector sidecar in host-network mode (default `9200`) |
+| `ARTIFACT_PUBLISH_TIMEOUT` | No | Wall-clock budget in seconds for an Artifact Hub GitHub publish round-trip before returning a retriable `504` (default `120`) |
+| `ARTIFACT_DELETE_TIMEOUT` | No | Wall-clock budget in seconds for an Artifact Hub GitHub delete round-trip before returning a retriable `504` (default `90`) |
+| `ARTIFACT_MAX_FILES_MB` | No | Max combined size in MB of all files in a single artifact submission (default `25`) |
 
 ### 2. Deploy
 

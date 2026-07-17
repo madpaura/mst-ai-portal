@@ -152,6 +152,9 @@ See [.env.example](.env.example) for the full annotated list. Critical variables
 | `SKILLSPECTOR_FAIL_CLOSED` | `false` | Block artifact submission when the scanner is unreachable; default is fail-open (warn only) |
 | `SKILLSPECTOR_TIMEOUT` | `120` | Seconds to wait for a SkillSpector scan response |
 | `SKILLSPECTOR_PORT` | `9200` | Port for the SkillSpector sidecar (used in host-network mode) |
+| `ARTIFACT_PUBLISH_TIMEOUT` | `120` | Wall-clock budget (seconds) for an Artifact Hub GitHub publish round-trip before returning a retriable `504` |
+| `ARTIFACT_DELETE_TIMEOUT` | `90` | Wall-clock budget (seconds) for an Artifact Hub GitHub delete round-trip before returning a retriable `504` |
+| `ARTIFACT_MAX_FILES_MB` | `25` | Max combined size (MB) of all files in a single artifact submission |
 
 ---
 
