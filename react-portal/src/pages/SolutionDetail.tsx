@@ -59,7 +59,7 @@ export const SolutionDetail: React.FC = () => {
         <div className="flex flex-col items-center justify-center pt-32 gap-4">
           <span className="material-symbols-outlined text-5xl text-slate-500">error_outline</span>
           <p className="text-slate-400">{error || 'Solution not found'}</p>
-          <button onClick={() => navigate('/')} className="text-primary hover:underline text-sm font-medium">
+          <button onClick={() => navigate('/solutions')} className="text-primary hover:underline text-sm font-medium">
             Back to Solutions
           </button>
         </div>
@@ -77,7 +77,7 @@ export const SolutionDetail: React.FC = () => {
           <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-[120px]" />
           <div className="max-w-4xl mx-auto px-6 py-20 relative z-10">
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/solutions')}
               className="flex items-center gap-1 text-sm text-text-muted hover:text-primary transition-colors mb-8"
             >
               <span className="material-symbols-outlined text-sm">arrow_back</span>

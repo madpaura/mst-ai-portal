@@ -140,6 +140,47 @@ async def get_news_item(news_id: str):
     )
 
 
+@router.get("/home/stats")
+async def get_home_stats():
+    """Live counts for the tile landing page. Cached; all queries are cheap
+    COUNTs over indexed/small tables."""
+    async def _fetch():
+        db = await get_db()
+        videos = await db.fetchval(
+            "SELECT COUNT(*) FROM videos WHERE is_published = true AND is_active = true"
+        )
+        courses = await db.fetchval(
+            "SELECT COUNT(*) FROM courses WHERE is_active = true AND curriculum_published = true"
+        )
+        articles = await db.fetchval(
+            "SELECT COUNT(*) FROM articles WHERE is_published = true AND is_active = true"
+        )
+        solutions = await db.fetchval(
+            "SELECT COUNT(*) FROM solution_cards WHERE is_active = true"
+        )
+        memes = await db.fetchval("SELECT COUNT(*) FROM memes")
+        news = await db.fetchrow(
+            """SELECT COUNT(*) AS total,
+                      COUNT(*) FILTER (WHERE published_at >= now() - interval '24 hours') AS today
+               FROM news_feed WHERE is_active = true"""
+        )
+        forge_rows = await db.fetch(
+            "SELECT component_type, COUNT(*) AS cnt FROM forge_components WHERE is_active = true GROUP BY component_type"
+        )
+        marketplace = {r["component_type"]: r["cnt"] for r in forge_rows}
+        return {
+            "videos": videos,
+            "courses": courses,
+            "articles": articles,
+            "solutions": solutions,
+            "memes": memes,
+            "news_total": news["total"],
+            "news_today": news["today"],
+            "marketplace": marketplace,
+        }
+    return await cache.get_or_set(cache.NS_SOLUTIONS, "home", "stats", None, settings.REDIS_DEFAULT_TTL, _fetch)
+
+
 @router.post("/contact")
 async def submit_contact(req: ContactRequest):
     db = await get_db()
