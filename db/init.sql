@@ -375,18 +375,6 @@ CREATE TABLE video_likes (
 
 CREATE INDEX idx_video_likes_video ON video_likes(video_id);
 
----------------------------------------------------
--- ARTICLE LIKES (thumbs up — powers trending sort)
----------------------------------------------------
-CREATE TABLE article_likes (
-    user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
-    article_id  UUID REFERENCES articles(id) ON DELETE CASCADE,
-    created_at  TIMESTAMPTZ DEFAULT now(),
-    PRIMARY KEY (user_id, article_id)
-);
-
-CREATE INDEX idx_article_likes_article ON article_likes(article_id);
-
 -- Saved / bookmarks (Ignite browse "Saved")
 CREATE TABLE video_bookmarks (
     user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -511,6 +499,18 @@ CREATE INDEX idx_articles_published ON articles(is_published) WHERE is_published
 CREATE INDEX idx_articles_search ON articles USING GIN(
     to_tsvector('english', title || ' ' || COALESCE(summary, '') || ' ' || content)
 );
+
+---------------------------------------------------
+-- ARTICLE LIKES (thumbs up — powers trending sort)
+---------------------------------------------------
+CREATE TABLE article_likes (
+    user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
+    article_id  UUID REFERENCES articles(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (user_id, article_id)
+);
+
+CREATE INDEX idx_article_likes_article ON article_likes(article_id);
 
 ---------------------------------------------------
 -- APP SETTINGS (key-value store)
@@ -657,3 +657,68 @@ ALTER TABLE videos
     ADD CONSTRAINT videos_status_check
     CHECK (status IN ('draft', 'processing', 'uploaded', 'ready', 'error'));
 ALTER TABLE videos ALTER COLUMN status SET DEFAULT 'draft';
+
+---------------------------------------------------
+-- COURSE CURRICULUM (Migration 0029, issue #239)
+---------------------------------------------------
+
+-- Authored course metadata + curriculum publish gate
+ALTER TABLE courses
+    ADD COLUMN IF NOT EXISTS level                TEXT,
+    ADD COLUMN IF NOT EXISTS tags                 TEXT[] DEFAULT '{}',
+    ADD COLUMN IF NOT EXISTS cover_image          TEXT,
+    ADD COLUMN IF NOT EXISTS objectives           TEXT[] DEFAULT '{}',
+    ADD COLUMN IF NOT EXISTS prerequisites        TEXT,
+    ADD COLUMN IF NOT EXISTS curriculum_published BOOLEAN DEFAULT false;
+
+-- Weekly modules ("Week 1 — Foundations")
+CREATE TABLE IF NOT EXISTS course_modules (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    course_id   UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    week_number INTEGER NOT NULL DEFAULT 1,
+    title       TEXT NOT NULL,
+    summary     TEXT,
+    sort_order  INTEGER DEFAULT 0,
+    created_at  TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_course_modules_course ON course_modules(course_id);
+
+-- Curriculum items (video | exercise | reading | link)
+CREATE TABLE IF NOT EXISTS course_items (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    module_id    UUID NOT NULL REFERENCES course_modules(id) ON DELETE CASCADE,
+    item_type    TEXT NOT NULL CHECK (item_type IN ('video', 'exercise', 'reading', 'link')),
+    title        TEXT NOT NULL,
+    description  TEXT,
+    duration_min INTEGER DEFAULT 0,
+    video_id     UUID REFERENCES videos(id) ON DELETE SET NULL,
+    external_url TEXT,
+    links        JSONB DEFAULT '[]',
+    sort_order   INTEGER DEFAULT 0,
+    created_at   TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_course_items_module ON course_items(module_id);
+CREATE INDEX IF NOT EXISTS idx_course_items_video  ON course_items(video_id);
+
+-- Per-item progress (manual ticks; video items also auto-complete
+-- from user_video_progress at read time)
+CREATE TABLE IF NOT EXISTS user_item_progress (
+    user_id      UUID REFERENCES users(id) ON DELETE CASCADE,
+    item_id      UUID REFERENCES course_items(id) ON DELETE CASCADE,
+    completed    BOOLEAN DEFAULT true,
+    completed_at TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (user_id, item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_user_item_progress_item ON user_item_progress(item_id);
+
+-- Course feedback: one editable rating+comment per user per course
+CREATE TABLE IF NOT EXISTS course_feedback (
+    user_id    UUID REFERENCES users(id) ON DELETE CASCADE,
+    course_id  UUID REFERENCES courses(id) ON DELETE CASCADE,
+    rating     INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comment    TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (user_id, course_id)
+);
+CREATE INDEX IF NOT EXISTS idx_course_feedback_course ON course_feedback(course_id);
