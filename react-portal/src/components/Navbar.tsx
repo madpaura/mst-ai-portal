@@ -95,6 +95,12 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
             >
               Learn
             </Link>
+            <Link
+              className={`text-sm font-medium transition-colors ${isActive('/courses') ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
+              to="/courses"
+            >
+              Courses
+            </Link>
             {catalogTypes.map(t => (
               <Link
                 key={t.key}

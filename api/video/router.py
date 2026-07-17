@@ -105,13 +105,9 @@ async def list_courses():
             ORDER BY c.sort_order
             """
         )
+        from video.course_admin_router import _course_resp
         return [
-            CourseResponse(
-                id=str(r["id"]), title=r["title"], slug=r["slug"],
-                description=r.get("description"), sort_order=r["sort_order"],
-                video_count=r["video_count"], thumbnail=r.get("thumbnail"),
-                is_featured=r.get("is_featured", False),
-            ).model_dump(mode="json")
+            _course_resp(r, video_count=r["video_count"], thumbnail=r.get("thumbnail")).model_dump(mode="json")
             for r in rows
         ]
     return await cache.get_or_set(cache.NS_VIDEO, "list", "courses", None, settings.REDIS_DEFAULT_TTL, _fetch)
@@ -128,12 +124,9 @@ async def get_course(slug: str):
             "SELECT * FROM videos WHERE course_id = $1 AND is_published = true AND is_active = true ORDER BY sort_order",
             course["id"],
         )
+        from video.course_admin_router import _course_resp
         return {
-            "course": CourseResponse(
-                id=str(course["id"]), title=course["title"], slug=course["slug"],
-                description=course.get("description"), sort_order=course["sort_order"],
-                video_count=len(videos), is_featured=course.get("is_featured", False),
-            ).model_dump(mode="json"),
+            "course": _course_resp(course, video_count=len(videos)).model_dump(mode="json"),
             "videos": [
                 VideoResponse(
                     id=str(v["id"]), course_id=str(v["course_id"]) if v["course_id"] else None,

@@ -52,6 +52,7 @@ from video.router import router as video_router
 from video.admin_router import router as video_admin_router
 from video.auto_router import router as video_auto_router
 from video.course_admin_router import router as course_admin_router
+from video.course_router import router as courses_public_router, admin_feedback_router as course_feedback_admin_router
 from analytics.router import router as analytics_router
 from analytics.admin_router import router as analytics_admin_router
 from settings.router import router as settings_router
@@ -189,6 +190,8 @@ app.include_router(video_router, prefix="/video", tags=["video"])
 app.include_router(video_admin_router, prefix="/admin", tags=["admin-video"])
 app.include_router(video_auto_router, prefix="/admin", tags=["admin-auto"])
 app.include_router(course_admin_router, prefix="/admin", tags=["admin-courses"])
+app.include_router(courses_public_router, prefix="/courses", tags=["courses"])
+app.include_router(course_feedback_admin_router, prefix="/admin", tags=["admin-course-feedback"])
 app.include_router(analytics_router, prefix="/analytics", tags=["analytics"])
 app.include_router(analytics_admin_router, prefix="/admin/analytics", tags=["admin-analytics"])
 app.include_router(settings_router, prefix="/settings", tags=["settings"])

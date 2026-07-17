@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, isLoggedIn } from '../api/client';
 
 export interface CourseInfo {
@@ -8,6 +9,7 @@ export interface CourseInfo {
   description: string | null;
   video_count: number;
   thumbnail: string | null;
+  curriculum_published?: boolean;
 }
 
 export interface CourseProgress {
@@ -58,11 +60,17 @@ export const CourseBrowser: React.FC<CourseBrowserProps> = ({
   const [previewVideos, setPreviewVideos] = useState<VideoPreview[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [enrollingAll, setEnrollingAll] = useState(false);
+  const navigate = useNavigate();
 
   const enrolledCount = courses.filter((c) => courseProgress[c.id]?.is_enrolled).length;
   const allEnrolled = enrolledCount === courses.length && courses.length > 0;
 
   const handleSelectCourse = async (course: CourseInfo) => {
+    // Courses with a published curriculum have a dedicated page.
+    if (course.curriculum_published) {
+      navigate(`/courses/${course.slug}`);
+      return;
+    }
     setSelectedCourse(course);
     setPreviewVideos([]);
     setPreviewLoading(true);

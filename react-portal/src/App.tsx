@@ -16,6 +16,8 @@ const Howto            = React.lazy(() => import('./pages/Howto').then(m => ({ d
 const Login            = React.lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
 const AdminVideos      = React.lazy(() => import('./pages/AdminVideos').then(m => ({ default: m.AdminVideos })));
 const AdminCourseCurriculum = React.lazy(() => import('./pages/AdminCourseCurriculum').then(m => ({ default: m.AdminCourseCurriculum })));
+const Courses          = React.lazy(() => import('./pages/Courses').then(m => ({ default: m.Courses })));
+const CourseDetail     = React.lazy(() => import('./pages/CourseDetail').then(m => ({ default: m.CourseDetail })));
 const AdminMarketplace = React.lazy(() => import('./pages/AdminMarketplace').then(m => ({ default: m.AdminMarketplace })));
 const AdminSolutions   = React.lazy(() => import('./pages/AdminSolutions').then(m => ({ default: m.AdminSolutions })));
 const AdminSettings    = React.lazy(() => import('./pages/AdminSettings').then(m => ({ default: m.AdminSettings })));
@@ -78,6 +80,8 @@ function App() {
           <Route path="/marketplace" element={<Marketplace />} />
           <Route path="/ignite" element={<IgniteBrowse />} />
           <Route path="/ignite/:videoSlug" element={<Ignite />} />
+          <Route path="/courses" element={<Courses />} />
+          <Route path="/courses/:courseSlug" element={<CourseDetail />} />
           <Route path="/howto" element={<Howto />} />
           <Route path="/solutions/:cardId" element={<SolutionDetail />} />
           <Route path="/news" element={<News />} />
