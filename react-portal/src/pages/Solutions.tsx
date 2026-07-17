@@ -33,7 +33,7 @@ interface LandingConfig {
 }
 
 export const Solutions: React.FC = () => {
-  usePageView('/');
+  usePageView('/solutions');
   const navigate = useNavigate();
   const [solutionCards, setSolutionCards] = useState<SolutionCard[]>([]);
   const [landingConfig, setLandingConfig] = useState<LandingConfig | null>(null);

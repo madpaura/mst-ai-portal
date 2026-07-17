@@ -84,8 +84,8 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
           </div>
           <div className="hidden md:flex flex-1 items-center justify-center gap-6">
             <Link
-              className={`text-sm font-medium transition-colors ${isActive('/') ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
-              to="/"
+              className={`text-sm font-medium transition-colors ${isActive('/solutions') ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
+              to="/solutions"
             >
               Solutions
             </Link>

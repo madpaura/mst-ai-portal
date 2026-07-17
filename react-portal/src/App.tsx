@@ -8,6 +8,7 @@ import { ThemeProvider } from './context/theme';
 import { AdminLayout } from './components/AdminLayout';
 import { AssistantWidget } from './components/AssistantWidget';
 
+const Home             = React.lazy(() => import('./pages/Home').then(m => ({ default: m.Home })));
 const Solutions        = React.lazy(() => import('./pages/Solutions').then(m => ({ default: m.Solutions })));
 const Marketplace      = React.lazy(() => import('./pages/Marketplace').then(m => ({ default: m.Marketplace })));
 const Ignite           = React.lazy(() => import('./pages/Ignite').then(m => ({ default: m.Ignite })));
@@ -77,7 +78,8 @@ function App() {
         <Suspense fallback={null}>
         <Routes>
           {/* Public pages */}
-          <Route path="/" element={<Solutions />} />
+          <Route path="/" element={<Home />} />
+          <Route path="/solutions" element={<Solutions />} />
           <Route path="/marketplace" element={<Marketplace />} />
           <Route path="/ignite" element={<IgniteBrowse />} />
           <Route path="/ignite/:videoSlug" element={<Ignite />} />
