@@ -1,14 +1,15 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { VideoTrackRow } from './VideoTrackRow';
 import { EditPopover } from './EditPopover';
-import type { EditOp } from './types';
+import type { EditOp, EditorSuggestion } from './types';
 import { MIN_DRAG_SECONDS, fmtClock } from './types';
 
 const RULER_H = 22;
 const TRACK_H = 56;
 const CUT_LANE_H = 30;
 const SPEED_LANE_H = 30;
-const LANES_H = TRACK_H + CUT_LANE_H + SPEED_LANE_H;
+const SUGG_LANE_H = 30;
+const LANES_H = TRACK_H + CUT_LANE_H + SPEED_LANE_H + SUGG_LANE_H;
 
 const NICE_STEPS = [5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600];
 
@@ -28,6 +29,9 @@ interface EditorTimelineProps {
   onCreateCut: (start: number, end: number) => void;
   onCreateTrim: (start: number, end: number) => void;
   onCreateSpeed: (start: number, end: number, factor: number) => void;
+  /** Open suggestions (issue #259) rendered on a dashed amber lane below Speed. */
+  suggestions: EditorSuggestion[];
+  onSelectSuggestion: (id: string) => void;
 }
 
 interface DragRange {
@@ -57,6 +61,8 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   onCreateCut,
   onCreateTrim,
   onCreateSpeed,
+  suggestions,
+  onSelectSuggestion,
 }) => {
   const innerRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef<{ startT: number } | null>(null);
@@ -67,6 +73,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   const trim = useMemo(() => edits.find((e) => e.type === 'trim'), [edits]);
   const cuts = useMemo(() => edits.filter((e) => e.type === 'cut'), [edits]);
   const speeds = useMemo(() => edits.filter((e) => e.type === 'speed'), [edits]);
+  const openSuggestions = useMemo(() => suggestions.filter((s) => s.state === 'open'), [suggestions]);
 
   const pctOf = (t: number) => (duration > 0 ? `${Math.min(100, Math.max(0, (t / duration) * 100))}%` : '0%');
   const widthPct = (s: number, e: number) =>
@@ -171,6 +178,12 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
           >
             Speed
           </div>
+          <div
+            className="flex items-center pl-3.5 text-[11px] font-semibold tracking-[0.08em] uppercase text-[#F5A524]"
+            style={{ height: SUGG_LANE_H }}
+          >
+            Suggest
+          </div>
         </div>
 
         {/* Scrollable timeline */}
@@ -208,6 +221,9 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
 
             {/* Speed lane background */}
             <div className="border-t border-[#243043]" style={{ height: SPEED_LANE_H }} />
+
+            {/* Suggestions lane background (issue #259) */}
+            <div className="border-t border-[#243043]" style={{ height: SUGG_LANE_H }} />
 
             {/* Trim dim overlay — dims everything outside the kept range */}
             {trim && (
@@ -279,6 +295,31 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                 }}
               >
                 {op.factor ?? 1}×
+              </div>
+            ))}
+
+            {/* Suggestion regions (issue #259) — dashed outline, distinct from
+                committed edit ops; clicking one switches the side panel to
+                the Suggestions tab rather than opening the cut/trim popover. */}
+            {openSuggestions.map((s) => (
+              <div
+                key={s.id}
+                data-region
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectSuggestion(s.id);
+                }}
+                title={`${fmtClock(s.start_s)} – ${fmtClock(s.end_s)} · ${s.kind === 'gap' ? 'Silence' : 'Suggestion'}`}
+                className="absolute rounded-md border border-dashed flex items-center justify-center text-[10.5px] font-semibold cursor-pointer overflow-hidden whitespace-nowrap bg-[#F5A524]/15 border-[#F5A524] text-[#F5A524]"
+                style={{
+                  top: RULER_H + TRACK_H + CUT_LANE_H + SPEED_LANE_H + 4,
+                  height: SUGG_LANE_H - 8,
+                  left: pctOf(s.start_s),
+                  width: widthPct(s.start_s, s.end_s),
+                }}
+              >
+                {s.kind === 'gap' ? '∅' : '✨'}
               </div>
             ))}
 
