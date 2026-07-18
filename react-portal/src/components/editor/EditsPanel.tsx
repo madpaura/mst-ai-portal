@@ -20,6 +20,9 @@ interface EditsPanelProps {
   hasAnalyzedSuggestions: boolean;
   analyzingSuggestions: boolean;
   analyzeSuggestionsError: string | null;
+  /** issue #262: non-fatal notice when the LLM pass failed but gap
+   * suggestions still came back. */
+  analyzeSuggestionsWarning: string | null;
   suggestionThreshold: number;
   onSuggestionThresholdChange: (t: number) => void;
   onAnalyzeSuggestions: () => void;
@@ -48,6 +51,7 @@ export const EditsPanel: React.FC<EditsPanelProps> = ({
   hasAnalyzedSuggestions,
   analyzingSuggestions,
   analyzeSuggestionsError,
+  analyzeSuggestionsWarning,
   suggestionThreshold,
   onSuggestionThresholdChange,
   onAnalyzeSuggestions,
@@ -134,6 +138,7 @@ export const EditsPanel: React.FC<EditsPanelProps> = ({
             hasAnalyzed={hasAnalyzedSuggestions}
             analyzing={analyzingSuggestions}
             analyzeError={analyzeSuggestionsError}
+            analyzeWarning={analyzeSuggestionsWarning}
             threshold={suggestionThreshold}
             onThresholdChange={onSuggestionThresholdChange}
             onAnalyze={onAnalyzeSuggestions}

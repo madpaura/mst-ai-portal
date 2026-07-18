@@ -50,6 +50,7 @@ interface AnalyzeSuggestionsResponse {
   transcript_error: string | null;
   threshold_s: number;
   suggestions: EditorSuggestion[];
+  warning?: string | null;
 }
 
 type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
@@ -113,6 +114,10 @@ export const AdminVideoEditor: React.FC = () => {
   const [hasAnalyzedSuggestions, setHasAnalyzedSuggestions] = useState(false);
   const [analyzingSuggestions, setAnalyzingSuggestions] = useState(false);
   const [analyzeSuggestionsError, setAnalyzeSuggestionsError] = useState<string | null>(null);
+  // issue #262: non-fatal notice when the LLM pass failed but gap
+  // suggestions still came back — distinct from analyzeSuggestionsError,
+  // which means the whole analyze request failed.
+  const [analyzeSuggestionsWarning, setAnalyzeSuggestionsWarning] = useState<string | null>(null);
   const [suggestionThreshold, setSuggestionThreshold] = useState(DEFAULT_SUGGESTION_THRESHOLD_S);
   const [transcriptStatus, setTranscriptStatus] = useState<string | null>(null);
   const [transcriptError, setTranscriptError] = useState<string | null>(null);
@@ -327,16 +332,23 @@ export const AdminVideoEditor: React.FC = () => {
     if (!id) return;
     setAnalyzingSuggestions(true);
     setAnalyzeSuggestionsError(null);
+    setAnalyzeSuggestionsWarning(null);
     try {
+      // Gap suggestions and the LLM skippable-span pass (issue #262) both run
+      // server-side in this one request — the LLM call can take a while, so
+      // this button shows a spinner ("Analyzing…") for the duration; a
+      // generous but bounded server-side timeout (see admin_router.py) keeps
+      // it well under the reverse-proxy's read timeout.
       const data = await api.post<AnalyzeSuggestionsResponse>(
         `/admin/videos/${id}/editor-suggestions/analyze`,
-        { threshold_s: suggestionThreshold },
+        { threshold_s: suggestionThreshold, include_llm: true },
       );
       if (!mountedRef.current) return;
       setTranscriptStatus(data.transcript_status);
       setTranscriptError(data.transcript_error ?? null);
       setSuggestions(data.suggestions);
       setHasAnalyzedSuggestions(true);
+      setAnalyzeSuggestionsWarning(data.warning ?? null);
     } catch (err) {
       if (!mountedRef.current) return;
       setAnalyzeSuggestionsError(toApiError(err));
@@ -888,6 +900,7 @@ export const AdminVideoEditor: React.FC = () => {
             hasAnalyzedSuggestions={hasAnalyzedSuggestions}
             analyzingSuggestions={analyzingSuggestions}
             analyzeSuggestionsError={analyzeSuggestionsError}
+            analyzeSuggestionsWarning={analyzeSuggestionsWarning}
             suggestionThreshold={suggestionThreshold}
             onSuggestionThresholdChange={setSuggestionThreshold}
             onAnalyzeSuggestions={runAnalyzeSuggestions}

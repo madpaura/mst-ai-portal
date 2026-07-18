@@ -7,6 +7,9 @@ interface SuggestionsPanelProps {
   hasAnalyzed: boolean;
   analyzing: boolean;
   analyzeError: string | null;
+  /** issue #262: non-fatal notice — the LLM pass failed but gap suggestions
+   * still came back. Rendered as a dismissible-looking warning, not an error. */
+  analyzeWarning: string | null;
   threshold: number;
   onThresholdChange: (t: number) => void;
   onAnalyze: () => void;
@@ -27,16 +30,19 @@ const TAG_CLASS: Record<EditorSuggestion['kind'], string> = {
 };
 
 /**
- * Suggestions tab body (issue #259): deterministic silence-gap suggestions
- * computed from the Whisper transcript. Structured so a second suggestion
- * source (LLM-flagged low-value spans, issue #262) can plug into the same
- * cards/list — suggestions already carry a `kind` and optional `reason`.
+ * Suggestions tab body: deterministic silence-gap suggestions (issue #259)
+ * plus an LLM pass flagging low-value spans — screen-share setup, false
+ * starts, dead air, off-topic chatter (issue #262). Both sources share the
+ * same cards/list, distinguished by the SILENCE/LLM tag and reason text;
+ * `analyzeWarning` surfaces a non-blocking notice when the LLM pass failed
+ * but gap suggestions still came back.
  */
 export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
   suggestions,
   hasAnalyzed,
   analyzing,
   analyzeError,
+  analyzeWarning,
   threshold,
   onThresholdChange,
   onAnalyze,
@@ -119,10 +125,17 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
         {analyzing ? 'Analyzing…' : hasAnalyzed ? 'Re-analyze' : 'Analyze for skippable sections'}
       </button>
       {analyzeError && <p className="text-[11.5px] text-red-400">{analyzeError}</p>}
+      {!analyzeError && analyzeWarning && (
+        <p className="text-[11.5px] text-[#F5A524] flex items-start gap-1">
+          <span className="material-symbols-outlined text-[13px] leading-none mt-px">warning</span>
+          <span>{analyzeWarning}</span>
+        </p>
+      )}
 
       {!hasAnalyzed ? (
         <p className="text-[12px] text-[#5C6880] leading-relaxed">
-          Finds silent gaps from transcript timestamps. Nothing is cut until you accept a suggestion.
+          Finds silent gaps from transcript timestamps and asks the LLM to flag low-value spans
+          (setup talk, false starts, dead air). Nothing is cut until you accept a suggestion.
         </p>
       ) : (
         <>
