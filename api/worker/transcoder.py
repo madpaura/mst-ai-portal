@@ -5,6 +5,7 @@ Polls PostgreSQL for pending transcode jobs and processes them.
 Run standalone: python -m worker.transcoder
 """
 import asyncio
+import json
 import os
 import shutil
 import signal
@@ -29,11 +30,25 @@ log.add(
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import settings
 from worker.gpu_detect import get_encode_args, get_hwaccel_args, get_gpu_info
+from video.schemas import EXPORT_QUALITY_HEIGHTS
+from worker.style_filters import (
+    build_style_filter_chunk,
+    compute_canvas_width,
+    resolve_background_image_path,
+    style_is_active,
+)
 
 # ── Graceful shutdown state ───────────────────────────────────────────────────
 _shutdown = threading.Event()
 _active_proc: Optional[subprocess.Popen] = None
 _current_job_id: Optional[int] = None
+
+# Editor export/render jobs (issue #260) get their own active-process handle
+# so a shutdown mid-render terminates the right ffmpeg process without
+# disturbing a concurrently-tracked transcode job (the worker only ever runs
+# one of the two at a time, but keeping them separate avoids any ambiguity).
+_active_render_proc: Optional["asyncio.subprocess.Process"] = None
+_current_render_job_id: Optional[int] = None
 
 
 def _handle_shutdown(signum, frame):
@@ -42,6 +57,12 @@ def _handle_shutdown(signum, frame):
     if _active_proc and _active_proc.poll() is None:
         log.info("Terminating active FFmpeg process")
         _active_proc.terminate()
+    if _active_render_proc and _active_render_proc.returncode is None:
+        log.info("Terminating active FFmpeg render process")
+        try:
+            _active_render_proc.terminate()
+        except ProcessLookupError:
+            pass
 
 
 signal.signal(signal.SIGTERM, _handle_shutdown)
@@ -183,6 +204,63 @@ def get_duration(input_path: str) -> int | None:
     return None
 
 
+def get_duration_precise(input_path: str) -> float | None:
+    """Sub-second duration via ffprobe — used by the editor export pipeline
+    where whole-second rounding would visibly clip the last speed/trim
+    segment."""
+    cmd = [
+        "ffprobe", "-v", "error", "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1", input_path,
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        log.warning(f"ffprobe timed out for {input_path}")
+        return None
+    if result.returncode == 0 and result.stdout.strip():
+        try:
+            return float(result.stdout.strip())
+        except ValueError:
+            pass
+    return None
+
+
+def has_audio_stream(input_path: str) -> bool:
+    """True if the file has at least one audio stream (ffprobe)."""
+    cmd = [
+        "ffprobe", "-v", "error", "-select_streams", "a",
+        "-show_entries", "stream=index", "-of", "csv=p=0", input_path,
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        return False
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def get_video_dims(input_path: str) -> tuple[int, int] | None:
+    """Return (width, height) of the first video stream via ffprobe."""
+    cmd = [
+        "ffprobe", "-v", "error", "-select_streams", "v:0",
+        "-show_entries", "stream=width,height",
+        "-of", "csv=s=x:p=0", input_path,
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        log.warning(f"ffprobe timed out for {input_path}")
+        return None
+    if result.returncode == 0 and result.stdout.strip():
+        try:
+            w_str, h_str = result.stdout.strip().split("x")
+            w, h = int(w_str), int(h_str)
+            if w > 0 and h > 0:
+                return w, h
+        except ValueError:
+            pass
+    return None
+
+
 async def process_job(pool: asyncpg.Pool, job):
     """Process a single transcode job."""
     video_id = str(job["video_id"])
@@ -211,7 +289,10 @@ async def process_job(pool: asyncpg.Pool, job):
 
         # 2. Fall back to newest .mp4 in the raw directory
         if not os.path.exists(raw_path) and os.path.isdir(raw_dir):
-            _exclude = {"original_pretrim.mp4", "original_precut.mp4", "original_no_banner.mp4"}
+            _exclude = {
+                "original_pretrim.mp4", "original_precut.mp4", "original_no_banner.mp4",
+                "original_preapply.mp4",
+            }
             candidates = [
                 f for f in os.listdir(raw_dir)
                 if f.endswith(".mp4") and f not in _exclude and ".cut_" not in f and ".trimmed" not in f
@@ -312,9 +393,548 @@ async def process_job(pool: asyncpg.Pool, job):
         log.error(f"Auto-ready notify after transcode failed | video_id={job['video_id']} error={exc}")
 
 
+# ── Editor export/render pipeline (issue #260) ─────────────────────────────
+#
+# Renders the editor's non-destructive EDL (cut/trim/speed + mute) into a
+# single downloadable mp4. Approach: normalize the EDL into an ordered list
+# of (start, end, factor) segments to *keep* — trim bounds applied, cut
+# regions removed, speed regions carved out with everything else at 1.0x —
+# then build one ffmpeg filter_complex that trims+setpts each segment and
+# concats them. A segment+concat graph was chosen over one giant
+# trim/atempo expression per edit: it composes cleanly regardless of how
+# cuts and speed regions interleave, and each segment's filters are trivial
+# to reason about / log independently.
+
+_EDL_EPS = 0.05  # seconds — clamps/merges within this treated as touching
+
+
+def _atempo_chain(factor: float) -> list[str]:
+    """Decompose a speed factor into a chain of ffmpeg `atempo` filters.
+
+    A single `atempo` instance only accepts [0.5, 2.0]; factors outside that
+    (our presets go up to 32x) are reached by chaining multiple stages whose
+    product is the requested factor.
+    """
+    stages: list[float] = []
+    f = float(factor)
+    while f > 2.0:
+        stages.append(2.0)
+        f /= 2.0
+    while f < 0.5:
+        stages.append(0.5)
+        f /= 0.5
+    stages.append(round(f, 6))
+    return [f"atempo={s}" for s in stages]
+
+
+def normalize_edl(edits: list[dict], duration: float) -> list[tuple[float, float, float]]:
+    """Turn a raw edit list into ordered (start, end, factor) keep-segments.
+
+    Order of operations (matches the issue spec): trim bounds first, then
+    cut removals within those bounds, then per-region speed carved out of
+    whatever remains. Degenerate/overlapping spans are dropped defensively
+    (the frontend shouldn't produce them, but a stale/hand-edited draft
+    could) rather than raising — a best-effort render beats a hard failure.
+    """
+    def clamp(t: float) -> float:
+        return max(0.0, min(duration, t))
+
+    # 1. Trim — at most one governs the output window; if the draft somehow
+    #    has more than one, the first valid one wins and the rest are dropped.
+    t0, t1 = 0.0, duration
+    for e in edits:
+        if e.get("type") != "trim":
+            continue
+        s, en = clamp(float(e["start_s"])), clamp(float(e["end_s"]))
+        if en - s > _EDL_EPS:
+            t0, t1 = s, en
+            break
+
+    # 2. Cuts — clamp into [t0, t1], drop degenerate, sort + merge overlaps.
+    cuts: list[tuple[float, float]] = []
+    for e in edits:
+        if e.get("type") != "cut":
+            continue
+        s = max(clamp(float(e["start_s"])), t0)
+        en = min(clamp(float(e["end_s"])), t1)
+        if en - s > _EDL_EPS:
+            cuts.append((s, en))
+    cuts.sort()
+    merged_cuts: list[list[float]] = []
+    for s, en in cuts:
+        if merged_cuts and s <= merged_cuts[-1][1] + _EDL_EPS:
+            merged_cuts[-1][1] = max(merged_cuts[-1][1], en)
+        else:
+            merged_cuts.append([s, en])
+
+    # 3. Kept intervals = [t0, t1] minus the merged cuts.
+    kept: list[tuple[float, float]] = []
+    cursor = t0
+    for s, en in merged_cuts:
+        if s > cursor + _EDL_EPS:
+            kept.append((cursor, s))
+        cursor = max(cursor, en)
+    if t1 > cursor + _EDL_EPS:
+        kept.append((cursor, t1))
+
+    # 4. Speed regions — clamp into [t0, t1], drop degenerate/invalid,
+    #    sort, then drop any region overlapping an already-accepted one
+    #    (first-in-source-order wins).
+    speeds: list[tuple[float, float, float]] = []
+    for e in edits:
+        if e.get("type") != "speed":
+            continue
+        factor = e.get("factor")
+        if not factor or factor <= 0:
+            continue
+        s = max(clamp(float(e["start_s"])), t0)
+        en = min(clamp(float(e["end_s"])), t1)
+        if en - s > _EDL_EPS:
+            speeds.append((s, en, float(factor)))
+    speeds.sort(key=lambda x: x[0])
+    accepted_speeds: list[tuple[float, float, float]] = []
+    for s, en, f in speeds:
+        if accepted_speeds and s < accepted_speeds[-1][1] - _EDL_EPS:
+            continue
+        accepted_speeds.append((s, en, f))
+
+    # 5. Split each kept interval by the speed regions overlapping it;
+    #    everything not covered by a speed region plays at 1.0x.
+    segments: list[tuple[float, float, float]] = []
+    for ks, ke in kept:
+        cursor = ks
+        for s, en, f in accepted_speeds:
+            s2, e2 = max(s, ks), min(en, ke)
+            if e2 - s2 <= _EDL_EPS:
+                continue
+            if s2 > cursor + _EDL_EPS:
+                segments.append((cursor, s2, 1.0))
+            segments.append((s2, e2, f))
+            cursor = max(cursor, e2)
+        if ke > cursor + _EDL_EPS:
+            segments.append((cursor, ke, 1.0))
+
+    return segments
+
+
+def target_height_for_quality(quality: str, source_height: int) -> int:
+    """Never upscale beyond the selected target; force even height (matches
+    what `scale=-2:h` would also produce) — needed both for real downscales
+    and to repair an odd source height some encoders reject outright."""
+    src_h_even = source_height - (source_height % 2)
+    requested_h = EXPORT_QUALITY_HEIGHTS.get(quality)  # None => 'source'
+    return src_h_even if requested_h is None else min(requested_h, src_h_even)
+
+
+def build_export_filter_complex(
+    segments: list[tuple[float, float, float]], muted: bool,
+    quality: str, source_height: int, target_width: Optional[int] = None,
+) -> tuple[str, str, Optional[str], int]:
+    """Build the ffmpeg -filter_complex graph for an export render.
+
+    Returns (filter_complex, video_out_label, audio_out_label_or_None,
+    target_height) — target_height is echoed back purely for logging.
+
+    `target_width` is None for a plain (unstyled) export — the final scale
+    stage then uses ffmpeg's own `-2:h` auto-width, exactly as before this
+    param existed (issue #263's byte-identical-graph requirement for
+    unstyled renders). When the whole-video background styling stage
+    (worker/style_filters.py) is active, the caller passes an explicit,
+    pre-computed even width so the composited backdrop+video canvas it
+    builds afterwards is guaranteed to line up pixel-for-pixel with this
+    stage's output — auto-width's internal rounding isn't reproducible in
+    Python ahead of time, so this stage is made to match a caller-supplied
+    number instead whenever styling needs one.
+    """
+    parts: list[str] = []
+    v_labels: list[str] = []
+    a_labels: list[str] = []
+
+    for i, (s, e, f) in enumerate(segments):
+        vlab = f"v{i}"
+        vfilter = f"[0:v]trim=start={s:.3f}:end={e:.3f},setpts=PTS-STARTPTS"
+        if f != 1.0:
+            vfilter += f",setpts={1.0 / f:.6f}*PTS"
+        vfilter += f"[{vlab}]"
+        parts.append(vfilter)
+        v_labels.append(vlab)
+
+        if not muted:
+            alab = f"a{i}"
+            afilter = f"[0:a]atrim=start={s:.3f}:end={e:.3f},asetpts=PTS-STARTPTS"
+            if f != 1.0:
+                afilter += "," + ",".join(_atempo_chain(f))
+            afilter += f"[{alab}]"
+            parts.append(afilter)
+            a_labels.append(alab)
+
+    n = len(segments)
+    if muted:
+        parts.append("".join(f"[{v}]" for v in v_labels) + f"concat=n={n}:v=1:a=0[vcat]")
+        video_out, audio_out = "vcat", None
+    else:
+        inputs = "".join(f"[{v}][{a}]" for v, a in zip(v_labels, a_labels))
+        parts.append(inputs + f"concat=n={n}:v=1:a=1[vcat][acat]")
+        video_out, audio_out = "vcat", "acat"
+
+    target_h = target_height_for_quality(quality, source_height)
+    if target_width is not None:
+        # Explicit width requested (styling active) — always scale so the
+        # output canvas is exactly target_width x target_h, even when that
+        # happens to equal the source dims already (a harmless no-op-ish
+        # scale, but it removes any ambiguity for the style stage that
+        # overlays on top of this).
+        parts.append(f"[{video_out}]scale={target_width}:{target_h}[vout]")
+        video_out = "vout"
+    elif target_h != source_height:
+        parts.append(f"[{video_out}]scale=-2:{target_h}[vout]")
+        video_out = "vout"
+
+    return ";".join(parts), video_out, audio_out, target_h
+
+
+async def claim_render_job(pool: asyncpg.Pool):
+    """Atomically claim a queued editor-export render job."""
+    return await pool.fetchrow(
+        """
+        UPDATE edit_render_jobs
+        SET status = 'processing', started_at = now()
+        WHERE id = (
+            SELECT id FROM edit_render_jobs
+            WHERE status = 'queued'
+            ORDER BY created_at ASC
+            LIMIT 1
+            FOR UPDATE SKIP LOCKED
+        )
+        RETURNING *
+        """
+    )
+
+
+async def process_render_job(pool: asyncpg.Pool, job):
+    """Render one editor-export job to {video_dir}/exports/edit_<ts>.mp4."""
+    global _active_render_proc, _current_render_job_id
+
+    job_id = job["id"]
+    video_id = str(job["video_id"])
+    log.info(f"Processing render job #{job_id} for video {video_id}")
+
+    async def fail(message: str):
+        log.error(f"Render job #{job_id} failed: {message}")
+        await pool.execute(
+            "UPDATE edit_render_jobs SET status = 'error', error = $1, completed_at = now() WHERE id = $2",
+            message, job_id,
+        )
+
+    edl = job["edl"]
+    if isinstance(edl, str):
+        try:
+            edl = json.loads(edl)
+        except Exception:
+            await fail("Corrupt EDL snapshot")
+            return
+    edits = edl.get("edits", []) or []
+    muted = bool(edl.get("muted", False))
+    quality = edl.get("quality", "source")
+    style = edl.get("style") or {}
+    mode = job["mode"]  # 'download' (issue #260) or 'apply' (issue #261)
+
+    video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
+    raw_dir = os.path.join(video_dir, "raw")
+    raw_path = os.path.join(raw_dir, "original.mp4")
+    if not os.path.exists(raw_path):
+        await fail("Source file not found on disk")
+        return
+
+    duration = await asyncio.to_thread(get_duration_precise, raw_path)
+    if not duration or duration <= 0:
+        await fail("Could not determine source duration")
+        return
+    dims = await asyncio.to_thread(get_video_dims, raw_path)
+    if not dims:
+        await fail("Could not determine source dimensions")
+        return
+    source_width, source_height = dims
+
+    # A source with no audio track (screen recordings, or a raw file produced
+    # by an earlier muted apply) must render as if muted — the filter graph
+    # would otherwise reference [0:a], which matches no streams and kills the
+    # whole render. Found in live system testing.
+    if not muted and not await asyncio.to_thread(has_audio_stream, raw_path):
+        log.info(f"Render job #{job_id}: source has no audio stream — rendering without audio")
+        muted = True
+
+    segments = normalize_edl(edits, float(duration))
+    if not segments:
+        await fail("Edit list removes the entire video — nothing to render")
+        return
+
+    output_duration = sum((e - s) / f for s, e, f in segments)
+    if output_duration <= 0.05:
+        await fail("Computed output duration is effectively zero")
+        return
+
+    # Whole-video background styling (issue #263) — only touches the filter
+    # graph / ffmpeg inputs at all when active, so an unstyled render's
+    # command line is unchanged from before this feature existed.
+    styling_active = style_is_active(style)
+    canvas_width = None
+    if styling_active:
+        target_h_preview = target_height_for_quality(quality, source_height)
+        canvas_width = compute_canvas_width(source_width, source_height, target_h_preview)
+
+    filter_complex, video_out, audio_out, target_h = build_export_filter_complex(
+        segments, muted, quality, source_height,
+        target_width=canvas_width if styling_active else None,
+    )
+
+    bg_image_input_args: list[str] = []
+    if styling_active:
+        bg_fs_path = resolve_background_image_path(video_dir, style)
+        bg_label = None
+        if bg_fs_path:
+            # `-loop 1` makes the image2 demuxer repeat the single frame
+            # indefinitely — without it ffmpeg only has *one* frame for
+            # this input, and the style stage's `overlay=...:shortest=1`
+            # would then truncate the whole render to that one frame
+            # instead of the video's real length (caught by the synthetic
+            # ffmpeg verification for this PR).
+            bg_image_input_args = ["-loop", "1", "-i", bg_fs_path]
+            bg_label = "1:v"
+        style_chunk, styled_video_out = build_style_filter_chunk(
+            video_out, canvas_width, target_h, source_height, style, bg_label,
+        )
+        filter_complex = f"{filter_complex};{style_chunk}"
+        video_out = styled_video_out
+
+    ts = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
+    if mode == "apply":
+        # No standalone output file for 'apply' — the render lands in the raw/
+        # directory as a scratch file and gets os.replace()'d into
+        # original.mp4 once ffmpeg succeeds (see the completion block below).
+        output_path = None
+        # Must end in .mp4 — ffmpeg infers the muxer from the extension and
+        # rejects a trailing .partial (same convention as the download branch).
+        tmp_output = os.path.join(raw_dir, f"original.apply_{ts}.partial.mp4")
+    else:
+        exports_dir = os.path.join(video_dir, "exports")
+        os.makedirs(exports_dir, exist_ok=True)
+        output_filename = f"edit_{ts}.mp4"
+        output_path = os.path.join(exports_dir, output_filename)
+        # Render to a temp path and os.replace() on success — mirrors the
+        # tmp-file + atomic-rename pattern used by the filmstrip generator, so
+        # a status/download poll can never observe a half-written mp4.
+        tmp_output = output_path + ".partial.mp4"
+
+    gpu = get_gpu_info()
+    encode_args = get_encode_args(crf=20)
+    # bg_image_input_args (issue #263) adds "-i <editor_bg path>" as input
+    # index 1 when a custom background image is in use — referenced as
+    # "1:v" inside the style filter chunk built above.
+    cmd = [settings.FFMPEG_PATH, "-y", "-i", raw_path, *bg_image_input_args,
+           "-filter_complex", filter_complex, "-map", f"[{video_out}]"]
+    if audio_out:
+        cmd += ["-map", f"[{audio_out}]"]
+    else:
+        cmd += ["-an"]
+    cmd += encode_args
+    if audio_out:
+        cmd += ["-c:a", "aac", "-b:a", "192k"]
+    cmd += ["-movflags", "+faststart", "-progress", "pipe:1", "-nostats", tmp_output]
+
+    backend = "GPU" if gpu["gpu_available"] else "CPU"
+    style_log = (
+        f" style={style.get('preset')} pad={style.get('pad_pct')}% radius={style.get('radius_px')}px"
+        f"{' image' if bg_image_input_args else ''}"
+        if styling_active else ""
+    )
+    log.info(
+        f"Render job #{job_id} | segments={len(segments)} quality={quality} "
+        f"target_h={target_h} muted={muted} expected_out={output_duration:.1f}s [{backend}]{style_log}"
+    )
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    _active_render_proc = proc
+    _current_render_job_id = job_id
+
+    stderr_tail = bytearray()
+
+    async def _drain_stderr():
+        assert proc.stderr is not None
+        async for chunk in proc.stderr:
+            stderr_tail.extend(chunk)
+            del stderr_tail[:-4000]  # keep only the last ~4KB for the error message
+
+    stderr_task = asyncio.create_task(_drain_stderr())
+
+    last_pct, last_update = -1, 0.0
+    try:
+        assert proc.stdout is not None
+        while True:
+            raw_line = await proc.stdout.readline()
+            if not raw_line:
+                break
+            line = raw_line.decode(errors="replace").strip()
+            if not line.startswith("out_time_ms="):
+                continue
+            try:
+                # ffmpeg's -progress field is misleadingly named: the value
+                # is microseconds, not milliseconds.
+                out_us = int(line.split("=", 1)[1])
+            except (ValueError, IndexError):
+                continue
+            out_s = out_us / 1_000_000.0
+            pct = max(0, min(99, int(out_s / output_duration * 100)))
+            now = time.monotonic()
+            if pct != last_pct and (now - last_update) > 1.0:
+                await pool.execute(
+                    "UPDATE edit_render_jobs SET progress_pct = $1 WHERE id = $2 AND status = 'processing'",
+                    pct, job_id,
+                )
+                last_pct, last_update = pct, now
+        rc = await proc.wait()
+        await stderr_task
+    finally:
+        _active_render_proc = None
+        _current_render_job_id = None
+
+    if rc != 0 or not os.path.exists(tmp_output):
+        if os.path.exists(tmp_output):
+            try:
+                os.remove(tmp_output)
+            except OSError:
+                pass
+        err_tail = bytes(stderr_tail).decode(errors="replace")[-500:]
+        await fail(f"FFmpeg exited with code {rc}: {err_tail}" if err_tail else f"FFmpeg exited with code {rc}")
+        return
+
+    # Check the job wasn't reclaimed/reset out from under us (e.g. a
+    # concurrent cleanup or a second export request racing this one) before
+    # publishing the file.
+    current_status = await pool.fetchval("SELECT status FROM edit_render_jobs WHERE id = $1", job_id)
+    if current_status != "processing":
+        log.warning(f"Render job #{job_id} no longer 'processing' (now {current_status}) — discarding output")
+        try:
+            os.remove(tmp_output)
+        except OSError:
+            pass
+        return
+
+    if mode == "apply":
+        await _finish_apply_render(pool, job_id, video_id, raw_dir, raw_path, tmp_output)
+        return
+
+    os.replace(tmp_output, output_path)
+    await pool.execute(
+        "UPDATE edit_render_jobs SET status = 'done', progress_pct = 100, output_path = $1, completed_at = now() "
+        "WHERE id = $2",
+        output_path, job_id,
+    )
+    log.info(f"Render job #{job_id} completed -> {output_path}")
+
+
+async def _finish_apply_render(
+    pool: asyncpg.Pool, job_id: int, video_id: str, raw_dir: str, raw_path: str, tmp_output: str,
+) -> None:
+    """Swap a successful 'apply' render into raw/original.mp4 (issue #261).
+
+    Backs up the current raw file (single-level — original_preapply.mp4 is
+    overwritten on each apply, mirroring the original_pretrim.mp4 naming
+    convention used by the trim endpoint), atomically replaces original.mp4
+    with the new render, updates stored duration, marks the video stale if a
+    transcript/chapters existed (cuts shift downstream timestamps), clears
+    the editor draft so the next session starts empty, and auto-queues a
+    transcode so the published HLS reflects the edit.
+    """
+    backup_path = os.path.join(raw_dir, "original_preapply.mp4")
+    try:
+        shutil.copy2(raw_path, backup_path)
+    except OSError as e:
+        log.error(f"Apply render #{job_id} failed to back up raw file: {e}")
+        await pool.execute(
+            "UPDATE edit_render_jobs SET status = 'error', error = $1, completed_at = now() WHERE id = $2",
+            f"Could not back up current raw file before apply: {e}", job_id,
+        )
+        try:
+            os.remove(tmp_output)
+        except OSError:
+            pass
+        return
+
+    os.replace(tmp_output, raw_path)  # atomic — original.mp4 is now the edited render
+
+    new_duration = await asyncio.to_thread(get_duration, raw_path)
+
+    video_row = await pool.fetchrow("SELECT transcript_status FROM videos WHERE id = $1", video_id)
+    chapters_count = await pool.fetchval("SELECT COUNT(*) FROM video_chapters WHERE video_id = $1", video_id)
+    had_transcript_or_chapters = bool(video_row and video_row["transcript_status"] == "ready") or bool(
+        chapters_count and chapters_count > 0
+    )
+
+    await pool.execute(
+        """
+        UPDATE videos
+           SET duration_s = COALESCE($1, duration_s),
+               editor_applied_at = now(),
+               pipeline_stale = $2,
+               status = 'processing'
+         WHERE id = $3
+        """,
+        new_duration, had_transcript_or_chapters, video_id,
+    )
+    await pool.execute("INSERT INTO transcode_jobs (video_id) VALUES ($1)", video_id)
+
+    # Clear the draft — applied edits are now baked into original.mp4, so the
+    # next editor session should start from an empty, un-muted, unstyled EDL.
+    # (The custom background image file itself, if any, is left on disk —
+    # same treatment as export files — so re-picking it after a future apply
+    # doesn't require a re-upload; /cleanup is the explicit way to reclaim it.)
+    await pool.execute(
+        """
+        UPDATE video_editor_drafts
+           SET edits = '[]', muted = false,
+               style = '{"preset": "none", "pad_pct": 0, "radius_px": 0, "image": null}',
+               suggestions = '[]', updated_at = now()
+         WHERE video_id = $1
+        """,
+        video_id,
+    )
+
+    # Ops log entry — mirrors admin_router._write_ops_log's format (the
+    # worker runs in a separate process/container so it keeps its own copy
+    # rather than importing the API router module).
+    ops_path = os.path.join(raw_dir, "ops.json")
+    try:
+        from datetime import datetime, timezone
+        ops = json.loads(open(ops_path).read()) if os.path.exists(ops_path) else []
+        ops.append({"op": "editor-apply", "file": "original.mp4", "ts": datetime.now(timezone.utc).isoformat()})
+        ops = ops[-50:]
+        with open(ops_path, "w") as f:
+            json.dump(ops, f)
+    except Exception:
+        pass
+
+    await pool.execute(
+        "UPDATE edit_render_jobs SET status = 'done', progress_pct = 100, completed_at = now() WHERE id = $1",
+        job_id,
+    )
+    log.info(
+        f"Apply render #{job_id} completed | video_id={video_id} duration={new_duration} "
+        f"pipeline_stale={had_transcript_or_chapters}"
+    )
+
+
 async def run_worker():
-    """Main worker loop — polls for jobs."""
-    global _current_job_id
+    """Main worker loop — polls for jobs.
+
+    Also claims editor-export render jobs (issue #260) from the same loop —
+    no separate container. Transcode jobs are checked first each iteration;
+    if none are pending, a render job is tried before sleeping. Both use the
+    same `FOR UPDATE SKIP LOCKED` claim pattern.
+    """
+    global _current_job_id, _current_render_job_id
     log.info("Starting transcode worker...")
     log.info(f"Video storage: {settings.VIDEO_STORAGE_PATH}")
     log.info(f"Poll interval: {settings.TRANSCODE_POLL_INTERVAL}s")
@@ -340,6 +960,15 @@ async def run_worker():
     if reclaimed:
         log.warning(f"Reclaimed {reclaimed} stuck job(s) from previous worker instance")
 
+    # Same for render jobs — edit_render_jobs has no attempts/max_attempts
+    # column, so a reclaim just puts it back to 'queued' unconditionally.
+    render_result = await pool.execute(
+        "UPDATE edit_render_jobs SET status = 'queued', started_at = NULL WHERE status = 'processing'"
+    )
+    render_reclaimed = int(render_result.split()[-1]) if render_result else 0
+    if render_reclaimed:
+        log.warning(f"Reclaimed {render_reclaimed} stuck render job(s) from previous worker instance")
+
     while not _shutdown.is_set():
         try:
             job = await claim_job(pool)
@@ -347,15 +976,24 @@ async def run_worker():
                 _current_job_id = job["id"]
                 await process_job(pool, job)
                 _current_job_id = None
-            else:
-                # Sleep in short increments so SIGTERM is noticed quickly
-                for _ in range(settings.TRANSCODE_POLL_INTERVAL):
-                    if _shutdown.is_set():
-                        break
-                    await asyncio.sleep(1)
+                continue
+
+            render_job = await claim_render_job(pool)
+            if render_job:
+                _current_render_job_id = render_job["id"]
+                await process_render_job(pool, render_job)
+                _current_render_job_id = None
+                continue
+
+            # Sleep in short increments so SIGTERM is noticed quickly
+            for _ in range(settings.TRANSCODE_POLL_INTERVAL):
+                if _shutdown.is_set():
+                    break
+                await asyncio.sleep(1)
         except Exception as e:
             log.error(f"Worker error: {e}")
             _current_job_id = None
+            _current_render_job_id = None
             await asyncio.sleep(settings.TRANSCODE_POLL_INTERVAL)
 
     # Mark the in-flight job as cancelled so it can be retried next startup
@@ -369,6 +1007,20 @@ async def run_worker():
             log.info(f"Marked job #{_current_job_id} as cancelled due to shutdown")
         except Exception as e:
             log.error(f"Failed to mark job as cancelled: {e}")
+
+    # Same for an in-flight render job — put it back to 'queued' so the next
+    # worker startup (or this one, after a restart) picks it back up rather
+    # than leaving it stuck in 'processing' forever.
+    if _current_render_job_id is not None:
+        try:
+            await pool.execute(
+                "UPDATE edit_render_jobs SET status = 'queued', started_at = NULL "
+                "WHERE id = $1 AND status = 'processing'",
+                _current_render_job_id,
+            )
+            log.info(f"Requeued render job #{_current_render_job_id} due to shutdown")
+        except Exception as e:
+            log.error(f"Failed to requeue render job: {e}")
 
     await pool.close()
     log.info("Shutdown complete")

@@ -176,6 +176,42 @@ async def get_auto_status(video_id: str, admin: dict = Depends(require_video_own
     }
 
 
+# ── Apply-to-video stale prompt (issue #261) ────────────────────────────────
+#
+# A successful editor 'apply' render shifts downstream timestamps, so the
+# worker (process_render_job in worker/transcoder.py) sets
+# videos.pipeline_stale=true whenever a transcript/chapters existed at apply
+# time. Both the editor and the video admin screen show a "Timestamps
+# changed" prompt when that flag is set; this endpoint is the one-click
+# "accept" action. Declining is purely a frontend "collapse the banner"
+# action — nothing to call, the flag stays set so the prompt reappears on
+# the next visit. Never triggered automatically.
+
+@router.post("/videos/{video_id}/regenerate-stale")
+async def regenerate_stale_pipeline(video_id: str, admin: dict = Depends(require_video_owner)):
+    """Re-run transcript generation (which cascades to chapters/metadata/howto
+    the same way the normal auto-mode pipeline does — see
+    worker/auto_processor.py's post-transcript cascade) and clear the stale
+    flag. Hand-edited chapters are only ever touched if the user opts in by
+    calling this."""
+    db = await get_db()
+    video = await db.fetchrow("SELECT id FROM videos WHERE id = $1", video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    await db.execute(
+        """
+        UPDATE videos
+           SET transcript_status = 'pending', transcript_error = NULL, pipeline_stale = false
+         WHERE id = $1
+        """,
+        video_id,
+    )
+    await _enqueue_auto_job(db, video_id, "transcript")
+    logger.info("Regenerate-stale triggered | video_id={}", video_id)
+    return {"message": "Transcript & chapters regeneration queued", "video_id": video_id}
+
+
 @router.get("/videos/{video_id}/transcript/progress")
 async def get_transcript_progress(video_id: str, admin: dict = Depends(require_video_owner)):
     """Return current transcript generation progress: elapsed time, estimated duration, partial segments."""

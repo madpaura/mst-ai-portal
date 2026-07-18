@@ -1,6 +1,9 @@
 import asyncio
+import hashlib
+import math
 import os
 import re
+import time
 import uuid
 import json
 import shutil
@@ -10,6 +13,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from loguru import logger as log
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
+from fastapi.responses import FileResponse
 
 from video.schemas import (
     VideoAdminResponse, VideoCreate, VideoUpdate, ChapterResponse,
@@ -17,6 +21,12 @@ from video.schemas import (
     QualitySettingResponse, QualitySettingUpdate, SeedNoteCreate,
     SeedNoteResponse, JobStatusResponse, BannerConfigResponse, BannerConfigUpdate,
     TrimRequest, CutRequest, SpeedSectionRequest, AttachmentResponse, AttachmentUpdate,
+    VideoEditorInfoResponse, VideoEditorDraftResponse, VideoEditorDraftUpdate,
+    VideoFilmstripResponse, EditorExportRequest, EditorExportJobResponse,
+    EditorExportStatusResponse, export_quality_options_for_aspect,
+    EditorSuggestion, EditorSuggestAnalyzeRequest,
+    EditorSuggestAnalyzeResponse, EditorSuggestionStateUpdate,
+    EditorBackgroundUploadResponse,
 )
 from pydantic import BaseModel
 from auth.dependencies import require_content as require_admin
@@ -59,6 +69,7 @@ def _video_row_to_admin(r, job=None) -> VideoAdminResponse:
         sort_order=r["sort_order"], created_at=r["created_at"],
         job_status=job["status"] if job else None,
         job_error=job.get("error") if job else None,
+        pipeline_stale=bool(r.get("pipeline_stale")),
     )
 
 
@@ -332,18 +343,72 @@ async def admin_storage_info(video_id: str, admin: dict = Depends(require_admin)
     if os.path.isfile(thumb_path):
         thumb_size = os.path.getsize(thumb_path)
 
-    return {"files": files, "hls_size": hls_size, "thumb_size": thumb_size}
+    # Filmstrip sprite (issue #257) — a derived asset like hls/thumbnails:
+    # tracked here for visibility, but never deleted by cleanup below.
+    filmstrip_size = 0
+    for fname in ("filmstrip.jpg", "filmstrip.json"):
+        fpath = os.path.join(video_dir, fname)
+        if os.path.isfile(fpath):
+            filmstrip_size += os.path.getsize(fpath)
+
+    # Editor exports (issue #260) — unlike hls/thumb/filmstrip these are
+    # user-downloadable *products*, not derived caches, so cleanup below
+    # DOES remove them (freeing real disk space is the point of cleanup).
+    exports = []
+    exports_size = 0
+    exports_dir = os.path.join(video_dir, "exports")
+    if os.path.isdir(exports_dir):
+        for fname in sorted(os.listdir(exports_dir)):
+            fpath = os.path.join(exports_dir, fname)
+            if not os.path.isfile(fpath):
+                continue
+            size = os.path.getsize(fpath)
+            exports_size += size
+            exports.append({"name": fname, "size": size})
+
+    # Editor custom background image (issue #263) — a user upload, but
+    # (per the issue's cleanup requirement) reclaimed like exports rather
+    # than kept indefinitely like thumb/filmstrip; re-uploadable on demand.
+    editor_bg_size = 0
+    editor_bg_name = None
+    for fpath in _editor_bg_glob(video_dir):
+        editor_bg_size += os.path.getsize(fpath)
+        editor_bg_name = os.path.basename(fpath)
+
+    return {
+        "files": files, "hls_size": hls_size, "thumb_size": thumb_size,
+        "filmstrip_size": filmstrip_size,
+        "exports": exports, "exports_size": exports_size,
+        "editor_bg_name": editor_bg_name, "editor_bg_size": editor_bg_size,
+    }
 
 
 @router.post("/videos/{video_id}/cleanup")
 async def admin_cleanup_video(video_id: str, admin: dict = Depends(require_admin)):
-    """Delete intermediate/backup files to free disk space."""
+    """Delete intermediate/backup files (and editor exports) to free disk space.
+
+    Scans raw/ for trim/cut/banner backups, same as before. The filmstrip
+    sprite (video_dir/filmstrip.jpg + .json) is a derived asset like hls/ or
+    thumb.jpg, not an intermediate — it's surfaced in storage-info but left
+    alone here; it self-invalidates and regenerates when original.mp4
+    changes. Editor exports (issue #260) are different from all of those:
+    they're the user-downloadable *product* of a render, not a cache or a
+    backup, so cleanup deletes them too — reported separately as
+    `exports_deleted` so it's obvious in the response that real downloadable
+    files, not just scratch copies, were removed. The custom editor
+    background image (issue #263), if one is uploaded, is reclaimed the same
+    way — reported as `background_deleted` — since it's re-uploadable on
+    demand and the point of this endpoint is freeing real disk space.
+    """
     db = await get_db()
     await _require_video_access(db, video_id, admin)
     video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
     raw_dir = os.path.join(video_dir, "raw")
+    exports_dir = os.path.join(video_dir, "exports")
 
     deleted = []
+    exports_deleted = []
+    background_deleted = []
     freed_bytes = 0
 
     if os.path.isdir(raw_dir):
@@ -363,7 +428,40 @@ async def admin_cleanup_video(video_id: str, admin: dict = Depends(require_admin
                 freed_bytes += size
                 deleted.append(fname)
 
-    return {"deleted": deleted, "freed_bytes": freed_bytes}
+    if os.path.isdir(exports_dir):
+        for fname in os.listdir(exports_dir):
+            fpath = os.path.join(exports_dir, fname)
+            if not os.path.isfile(fpath):
+                continue
+            size = os.path.getsize(fpath)
+            os.remove(fpath)
+            freed_bytes += size
+            exports_deleted.append(fname)
+
+    for fpath in _editor_bg_glob(video_dir):
+        size = os.path.getsize(fpath)
+        try:
+            os.remove(fpath)
+        except OSError:
+            continue
+        freed_bytes += size
+        background_deleted.append(os.path.basename(fpath))
+
+    if background_deleted:
+        await db.execute(
+            """
+            UPDATE video_editor_drafts
+               SET style = jsonb_set(COALESCE(style, '{}'::jsonb), '{image}', 'null'::jsonb),
+                   updated_at = now()
+             WHERE video_id = $1
+            """,
+            video_id,
+        )
+
+    return {
+        "deleted": deleted, "exports_deleted": exports_deleted,
+        "background_deleted": background_deleted, "freed_bytes": freed_bytes,
+    }
 
 
 @router.post("/videos/{video_id}/transcode")
@@ -452,7 +550,7 @@ async def _run_remotion_async(*args: str, cwd: str | None = None) -> tuple[int, 
 async def _probe_duration_async(path: str) -> int | None:
     """Return video duration in seconds via ffprobe (non-blocking)."""
     ffprobe = settings.FFMPEG_PATH.replace("ffmpeg", "ffprobe")
-    rc, out = await _run_ffmpeg_async(
+    rc, out = await _run_probe_async(
         ffprobe, "-v", "quiet", "-print_format", "json", "-show_format", path,
     )
     if rc == 0:
@@ -907,6 +1005,887 @@ async def admin_ops_log(video_id: str, admin: dict = Depends(verify_video_access
         return json.loads(open(log_path).read())
     except Exception:
         return []
+
+
+# ── Editor (issue #255 — shell + preview tracer slice) ──────
+
+async def _probe_video_dims_async(path: str) -> tuple[int, int] | None:
+    """Return (width, height) of the first video stream via ffprobe (non-blocking)."""
+    ffprobe = settings.FFMPEG_PATH.replace("ffmpeg", "ffprobe")
+    rc, out = await _run_probe_async(
+        ffprobe, "-v", "quiet", "-print_format", "json", "-show_streams", path,
+    )
+    if rc == 0:
+        try:
+            streams = json.loads(out).get("streams", [])
+            vstream = next((s for s in streams if s.get("codec_type") == "video"), None)
+            if vstream:
+                w, h = int(vstream["width"]), int(vstream["height"])
+                if w > 0 and h > 0:
+                    return w, h
+        except Exception:
+            pass
+    return None
+
+
+@router.get("/videos/{video_id}/editor-info", response_model=VideoEditorInfoResponse)
+async def admin_editor_info(video_id: str, admin: dict = Depends(require_admin)):
+    """Bootstrap payload for the standalone video editor page: title, duration,
+    status, plus source width/height/aspect detected via ffprobe on the raw file.
+    Access matches other video admin endpoints (admin, or content-role owner)."""
+    db = await get_db()
+    video = await _require_video_access(db, video_id, admin)
+
+    raw_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original.mp4")
+    raw_available = os.path.exists(raw_path)
+
+    source_width = source_height = None
+    aspect_ratio = None
+    if raw_available:
+        dims = await _probe_video_dims_async(raw_path)
+        if dims:
+            source_width, source_height = dims
+            aspect_ratio = round(source_width / source_height, 6)
+
+    return VideoEditorInfoResponse(
+        id=str(video["id"]),
+        title=video["title"],
+        duration_s=video.get("duration_s"),
+        status=video["status"],
+        raw_url=f"/streams/{video_id}/raw/original.mp4",
+        raw_available=raw_available,
+        source_width=source_width,
+        source_height=source_height,
+        aspect_ratio=aspect_ratio,
+        pipeline_stale=bool(video.get("pipeline_stale")),
+        editor_applied_at=video.get("editor_applied_at"),
+    )
+
+
+# ── Editor EDL draft (issue #256) ──────────────────────────
+
+_DEFAULT_EDITOR_STYLE = {"preset": "none", "pad_pct": 0, "radius_px": 0, "image": None}
+
+
+def _draft_row_to_response(video_id: str, r) -> VideoEditorDraftResponse:
+    edits = r["edits"] if isinstance(r["edits"], list) else json.loads(r["edits"] or "[]")
+    style = r["style"] if isinstance(r["style"], dict) else json.loads(r["style"] or "{}")
+    suggestions = r["suggestions"] if isinstance(r["suggestions"], list) else json.loads(r["suggestions"] or "[]")
+    return VideoEditorDraftResponse(
+        video_id=video_id,
+        edits=edits,
+        muted=r["muted"],
+        style={**_DEFAULT_EDITOR_STYLE, **style},
+        suggestions=suggestions,
+        updated_at=r["updated_at"],
+    )
+
+
+@router.get("/videos/{video_id}/editor-draft", response_model=VideoEditorDraftResponse)
+async def admin_get_editor_draft(video_id: str, admin: dict = Depends(verify_video_access)):
+    """Fetch the video's saved EDL draft, or an empty default if none exists yet."""
+    db = await get_db()
+    row = await db.fetchrow("SELECT * FROM video_editor_drafts WHERE video_id = $1", video_id)
+    if not row:
+        return VideoEditorDraftResponse(
+            video_id=video_id,
+            edits=[],
+            muted=False,
+            style=_DEFAULT_EDITOR_STYLE,
+            updated_at=datetime.now(timezone.utc),
+        )
+    return _draft_row_to_response(video_id, row)
+
+
+@router.put("/videos/{video_id}/editor-draft", response_model=VideoEditorDraftResponse)
+async def admin_upsert_editor_draft(
+    video_id: str, req: VideoEditorDraftUpdate, admin: dict = Depends(verify_video_access)
+):
+    """Upsert the full EDL draft for a video (autosaved from the editor UI)."""
+    db = await get_db()
+    edits_json = json.dumps([e.model_dump() for e in req.edits])
+    style_json = json.dumps(req.style.model_dump())
+    row = await db.fetchrow(
+        """
+        INSERT INTO video_editor_drafts (video_id, edits, muted, style, updated_at)
+        VALUES ($1, $2, $3, $4, now())
+        ON CONFLICT (video_id) DO UPDATE
+            SET edits = EXCLUDED.edits, muted = EXCLUDED.muted,
+                style = EXCLUDED.style, updated_at = now()
+        RETURNING *
+        """,
+        video_id, edits_json, req.muted, style_json,
+    )
+    return _draft_row_to_response(video_id, row)
+
+
+# ── Editor background image (issue #263) ───────────────────
+#
+# A custom uploaded background lives at the video dir root as
+# `editor_bg.<ext>` (one per video, like `thumb.jpg`/`custom_thumb.jpg`) —
+# `_editor_bg_glob` finds it regardless of which extension was last
+# uploaded, and any previous file is removed before a new one is written so
+# stale extensions never pile up.
+
+ALLOWED_EDITOR_BG_EXT = {'.jpg', '.jpeg', '.png', '.webp'}
+ALLOWED_EDITOR_BG_MIME = {'image/jpeg', 'image/png', 'image/webp'}
+MAX_EDITOR_BG_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+def _editor_bg_glob(video_dir: str) -> list[str]:
+    """Return full paths of any existing editor_bg.* file(s) in video_dir."""
+    if not os.path.isdir(video_dir):
+        return []
+    return [
+        os.path.join(video_dir, fname)
+        for fname in os.listdir(video_dir)
+        if os.path.splitext(fname)[0] == "editor_bg" and os.path.isfile(os.path.join(video_dir, fname))
+    ]
+
+
+@router.post("/videos/{video_id}/editor-background", response_model=EditorBackgroundUploadResponse)
+async def admin_upload_editor_background(
+    video_id: str, file: UploadFile = File(...), admin: dict = Depends(verify_video_access)
+):
+    """Upload a custom background image for the Style panel's whole-video
+    styling (issue #263). Validated by extension + declared content-type and
+    a 10 MB size cap; stored as `editor_bg.<ext>` alongside the video's other
+    assets (thumb.jpg, filmstrip.jpg, …), replacing any previous upload.
+    Does not touch the draft row — the frontend writes the returned path
+    into `style.image` and saves the draft itself, so this participates in
+    undo/autosave the same way the rest of the Style panel does.
+    """
+    db = await get_db()
+    await _require_video_access(db, video_id, admin)
+
+    original_name = file.filename or "background"
+    _, ext = os.path.splitext(original_name)
+    ext = ext.lower()
+    if ext not in ALLOWED_EDITOR_BG_EXT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File type '{ext}' is not allowed — use jpg, png or webp",
+        )
+    if file.content_type and file.content_type not in ALLOWED_EDITOR_BG_MIME:
+        raise HTTPException(status_code=400, detail=f"Content type '{file.content_type}' is not allowed")
+
+    video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
+    os.makedirs(video_dir, exist_ok=True)
+
+    final_name = f"editor_bg{ext}"
+    final_path = os.path.join(video_dir, final_name)
+    tmp_path = final_path + ".tmp"
+
+    size = 0
+    try:
+        with open(tmp_path, "wb") as f:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_EDITOR_BG_BYTES:
+                    f.close()
+                    os.remove(tmp_path)
+                    raise HTTPException(status_code=413, detail="Image exceeds 10 MB limit")
+                f.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as e:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # Only one background image per video — clear any previous upload
+    # (possibly a different extension) before publishing the new one.
+    for stale in _editor_bg_glob(video_dir):
+        try:
+            os.remove(stale)
+        except OSError:
+            pass
+    os.replace(tmp_path, final_path)
+
+    return EditorBackgroundUploadResponse(path=f"/streams/{video_id}/{final_name}")
+
+
+@router.delete("/videos/{video_id}/editor-background")
+async def admin_delete_editor_background(video_id: str, admin: dict = Depends(verify_video_access)):
+    """Remove the custom background image and clear it from the saved draft
+    (issue #263) — the frontend also clears its local `style.image` state,
+    but the draft is cleared here too so a stale reference can't survive a
+    failed autosave."""
+    db = await get_db()
+    await _require_video_access(db, video_id, admin)
+    video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
+
+    removed = []
+    for path in _editor_bg_glob(video_dir):
+        try:
+            os.remove(path)
+            removed.append(os.path.basename(path))
+        except OSError:
+            pass
+
+    await db.execute(
+        """
+        UPDATE video_editor_drafts
+           SET style = jsonb_set(COALESCE(style, '{}'::jsonb), '{image}', 'null'::jsonb),
+               updated_at = now()
+         WHERE video_id = $1
+        """,
+        video_id,
+    )
+    return {"message": "Background image removed", "removed": removed}
+
+
+# ── Editor export/render (issue #260) ──────────────────────
+#
+# Renders the saved EDL draft into a downloadable mp4 via the worker
+# container (which owns ffmpeg + GPU access) rather than the API process.
+# `mode='download'` here — 'apply' (re-render the source in place, issue
+# #261) is the sibling endpoint below; both share this table/worker and the
+# same "one active render per video" 409 guard.
+
+@router.post("/videos/{video_id}/editor-export", response_model=EditorExportJobResponse)
+async def admin_start_editor_export(
+    video_id: str, req: EditorExportRequest, admin: dict = Depends(verify_video_access)
+):
+    """Snapshot the current EDL draft into a queued render job.
+
+    409s if a job for this video is already queued or processing — only one
+    export renders per video at a time.
+    """
+    db = await get_db()
+
+    raw_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original.mp4")
+    if not os.path.exists(raw_path):
+        raise HTTPException(status_code=400, detail="No raw video file found")
+
+    active = await db.fetchval(
+        "SELECT id FROM edit_render_jobs WHERE video_id = $1 AND status IN ('queued', 'processing') LIMIT 1",
+        video_id,
+    )
+    if active:
+        raise HTTPException(status_code=409, detail="A render is already in progress for this video")
+
+    dims = await _probe_video_dims_async(raw_path)
+    aspect_ratio = (dims[0] / dims[1]) if dims else None
+    allowed = export_quality_options_for_aspect(aspect_ratio)
+    if req.quality not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"quality must be one of {list(allowed)} for this source's aspect ratio",
+        )
+
+    draft_row = await db.fetchrow("SELECT * FROM video_editor_drafts WHERE video_id = $1", video_id)
+    if draft_row:
+        draft = _draft_row_to_response(video_id, draft_row)
+    else:
+        draft = VideoEditorDraftResponse(
+            video_id=video_id, edits=[], muted=False, style=_DEFAULT_EDITOR_STYLE,
+            updated_at=datetime.now(timezone.utc),
+        )
+
+    edl_snapshot = {
+        "edits": [e.model_dump() for e in draft.edits],
+        "muted": draft.muted,
+        "style": draft.style.model_dump(),
+        "quality": req.quality,
+    }
+
+    row = await db.fetchrow(
+        """
+        INSERT INTO edit_render_jobs (video_id, edl, mode, status)
+        VALUES ($1, $2, 'download', 'queued')
+        RETURNING *
+        """,
+        video_id, json.dumps(edl_snapshot),
+    )
+    return EditorExportJobResponse(
+        id=row["id"], video_id=video_id, status=row["status"], mode="download",
+        progress_pct=row["progress_pct"], quality=req.quality, error=row["error"],
+        created_at=row["created_at"],
+    )
+
+
+# ── Editor apply-to-video (issue #261) ──────────────────────
+#
+# Same render pipeline as editor-export, but mode='apply': the worker
+# re-renders at source resolution (no quality picker) and, on success,
+# swaps the rendered file in as the new raw/original.mp4 — see
+# process_render_job() in worker/transcoder.py for the swap/backup/stale-flag
+# logic. The 409 single-active-job guard below is identical to editor-export
+# and intentionally not mode-scoped: only one render (of either mode) may be
+# in flight for a video at a time.
+
+@router.post("/videos/{video_id}/editor-apply", response_model=EditorExportJobResponse)
+async def admin_start_editor_apply(
+    video_id: str, admin: dict = Depends(verify_video_access)
+):
+    """Snapshot the current EDL draft into a queued 'apply' render job.
+
+    Always renders at source resolution — there is no quality option for
+    apply. 409s if a render (export or apply) is already queued/processing
+    for this video.
+    """
+    db = await get_db()
+
+    raw_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original.mp4")
+    if not os.path.exists(raw_path):
+        raise HTTPException(status_code=400, detail="No raw video file found")
+
+    active = await db.fetchval(
+        "SELECT id FROM edit_render_jobs WHERE video_id = $1 AND status IN ('queued', 'processing') LIMIT 1",
+        video_id,
+    )
+    if active:
+        raise HTTPException(status_code=409, detail="A render is already in progress for this video")
+
+    draft_row = await db.fetchrow("SELECT * FROM video_editor_drafts WHERE video_id = $1", video_id)
+    if draft_row:
+        draft = _draft_row_to_response(video_id, draft_row)
+    else:
+        draft = VideoEditorDraftResponse(
+            video_id=video_id, edits=[], muted=False, style=_DEFAULT_EDITOR_STYLE,
+            updated_at=datetime.now(timezone.utc),
+        )
+
+    edl_snapshot = {
+        "edits": [e.model_dump() for e in draft.edits],
+        "muted": draft.muted,
+        "style": draft.style.model_dump(),
+        "quality": "source",  # apply always renders at source resolution
+    }
+
+    row = await db.fetchrow(
+        """
+        INSERT INTO edit_render_jobs (video_id, edl, mode, status)
+        VALUES ($1, $2, 'apply', 'queued')
+        RETURNING *
+        """,
+        video_id, json.dumps(edl_snapshot),
+    )
+    return EditorExportJobResponse(
+        id=row["id"], video_id=video_id, status=row["status"], mode="apply",
+        progress_pct=row["progress_pct"], quality="source", error=row["error"],
+        created_at=row["created_at"],
+    )
+
+
+@router.get("/videos/{video_id}/editor-export/status", response_model=EditorExportStatusResponse)
+async def admin_editor_export_status(video_id: str, admin: dict = Depends(verify_video_access)):
+    """Latest render job for this video, for the export modal's progress
+    poll. `status='none'` means no export has ever been requested."""
+    db = await get_db()
+    row = await db.fetchrow(
+        "SELECT * FROM edit_render_jobs WHERE video_id = $1 ORDER BY created_at DESC LIMIT 1",
+        video_id,
+    )
+    if not row:
+        return EditorExportStatusResponse(status="none")
+
+    quality = None
+    try:
+        edl = row["edl"] if isinstance(row["edl"], dict) else json.loads(row["edl"])
+        quality = edl.get("quality")
+    except Exception:
+        pass
+
+    download_available = bool(
+        row["status"] == "done" and row["output_path"] and os.path.exists(row["output_path"])
+    )
+
+    return EditorExportStatusResponse(
+        id=row["id"], status=row["status"], mode=row["mode"], progress_pct=row["progress_pct"],
+        quality=quality, error=row["error"], download_available=download_available,
+        output_filename=os.path.basename(row["output_path"]) if download_available else None,
+        created_at=row["created_at"], completed_at=row["completed_at"],
+    )
+
+
+@router.get("/videos/{video_id}/editor-export/download")
+async def admin_editor_export_download(video_id: str, admin: dict = Depends(verify_video_access)):
+    """Stream the most recently completed export as an attachment.
+
+    Deliberately a dedicated authenticated FastAPI route rather than the
+    /streams static path — /streams is served unauthenticated straight off
+    disk by the frontend nginx container, which would leak downloadable
+    exports to anyone with the URL. Scoped to mode='download' — an 'apply'
+    job never has a standalone output file (the render is swapped into
+    raw/original.mp4 instead), so it must never surface here.
+    """
+    db = await get_db()
+    row = await db.fetchrow(
+        "SELECT * FROM edit_render_jobs WHERE video_id = $1 AND status = 'done' AND mode = 'download' "
+        "ORDER BY completed_at DESC NULLS LAST, created_at DESC LIMIT 1",
+        video_id,
+    )
+    if not row or not row["output_path"] or not os.path.exists(row["output_path"]):
+        raise HTTPException(status_code=404, detail="No completed export available for download")
+
+    return FileResponse(
+        row["output_path"], media_type="video/mp4",
+        filename=os.path.basename(row["output_path"]),
+    )
+
+
+# ── Silence-gap suggestions (issue #259) ────────────────────
+#
+# Deterministic, on-demand: reads the Whisper transcript already produced by
+# the auto-mode pipeline (worker/auto_processor.py) and flags gaps between
+# consecutive segment timestamps that exceed `threshold_s`. Nothing here
+# touches the raw file or the transcript — accepting a suggestion just adds a
+# normal `cut` op to the draft's `edits` (via the existing PUT above), tagged
+# `source: "suggestion"`. Review state (accepted/ignored) is stored alongside
+# the suggestions themselves in `video_editor_drafts.suggestions` so a
+# re-analyze — even with a different threshold — doesn't resurrect a
+# suggestion the user already dealt with, as long as its id is unchanged.
+#
+# Suggestion ids are a short hash of the rounded start/end timestamps, so
+# re-running analyze with the same transcript + threshold reproduces the same
+# ids deterministically (see `_gap_suggestion_id`).
+
+def _transcript_json_path(video_id: str) -> str:
+    return os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "transcript.json")
+
+
+def _gap_suggestion_id(start_s: float, end_s: float) -> str:
+    key = f"gap:{round(start_s, 1)}:{round(end_s, 1)}"
+    return hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
+
+
+def _llm_suggestion_id(start_s: float, end_s: float) -> str:
+    key = f"{round(start_s, 1)}:{round(end_s, 1)}"
+    return "llm:" + hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
+
+
+def _compute_gap_suggestions(transcript: dict, threshold_s: float) -> list[dict]:
+    """Flag gaps >= threshold_s between consecutive transcript segments."""
+    segments = transcript.get("segments") or []
+    segments = sorted(
+        (s for s in segments if s.get("start") is not None and s.get("end") is not None),
+        key=lambda s: s["start"],
+    )
+    out: list[dict] = []
+    for prev, nxt in zip(segments, segments[1:]):
+        prev_end = float(prev["end"])
+        next_start = float(nxt["start"])
+        gap = next_start - prev_end
+        if gap >= threshold_s:
+            out.append({
+                "id": _gap_suggestion_id(prev_end, next_start),
+                "kind": "gap",
+                "start_s": prev_end,
+                "end_s": next_start,
+                "gap_s": round(gap, 2),
+                "reason": f"Silence — {round(gap, 1)}s gap between segments",
+                "state": "open",
+            })
+    return out
+
+
+# ── LLM skippable-span suggestions (issue #262) ─────────────────────────────
+#
+# Second suggestion source, plugged into the same analyze endpoint: sends the
+# (compacted, possibly chunked) transcript to the portal's configured LLM
+# provider (same provider-selection rules as every other AI feature — see
+# api/articles/llm.py::call_llm) and asks it to flag low-value spans. Never
+# raises: any failure (no provider configured, timeout, malformed JSON) is
+# swallowed into a warning string so the gap suggestions computed above still
+# reach the frontend.
+
+_LLM_SUGGEST_CHUNK_MAX_CHARS = 12000
+_LLM_SUGGEST_CHUNK_TIMEOUT_S = 45.0
+_LLM_SUGGEST_TOTAL_TIMEOUT_S = 100.0  # stays under the /backend/ nginx proxy_read_timeout (120s)
+_LLM_SUGGEST_MAX_CHUNKS = 6
+
+
+async def _compute_llm_suggestions(transcript: dict, duration: float | None) -> tuple[list[dict], Optional[str]]:
+    """Run the LLM skippable-span pass. Returns (raw_spans, warning) — never raises."""
+    from video.llm_prompts import (
+        chunk_transcript_segments, compact_transcript_segments,
+        editor_llm_suggestions_prompt, parse_json_strict,
+    )
+    from articles.llm import call_llm
+
+    compact = compact_transcript_segments(transcript.get("segments") or [])
+    if not compact:
+        return [], None
+
+    chunks = chunk_transcript_segments(compact, max_chars=_LLM_SUGGEST_CHUNK_MAX_CHARS)[:_LLM_SUGGEST_MAX_CHUNKS]
+
+    spans: list[dict] = []
+    errors: list[str] = []
+    started = time.monotonic()
+
+    for chunk in chunks:
+        if not chunk:
+            continue
+        if time.monotonic() - started > _LLM_SUGGEST_TOTAL_TIMEOUT_S:
+            errors.append("Time budget exceeded before all transcript chunks were analyzed")
+            break
+        prompt = editor_llm_suggestions_prompt(chunk, duration)
+        try:
+            raw = await asyncio.wait_for(call_llm(prompt), timeout=_LLM_SUGGEST_CHUNK_TIMEOUT_S)
+            parsed = parse_json_strict(raw)
+            chunk_spans = parsed.get("spans") if isinstance(parsed, dict) else None
+            if not isinstance(chunk_spans, list):
+                raise ValueError("LLM response missing a 'spans' list")
+            for sp in chunk_spans:
+                if not isinstance(sp, dict):
+                    continue
+                try:
+                    start_s = float(sp["start_s"])
+                    end_s = float(sp["end_s"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                reason = str(sp.get("reason") or "").strip() or "Skippable section"
+                spans.append({"start_s": start_s, "end_s": end_s, "reason": reason[:200]})
+        except asyncio.TimeoutError:
+            errors.append("LLM request timed out")
+        except Exception as e:  # HTTPException from call_llm, JSON errors, etc.
+            detail = getattr(e, "detail", None) or str(e)
+            errors.append(str(detail)[:200])
+
+    warning = None
+    if errors:
+        warning = (
+            f"LLM suggestion pass failed: {errors[0]}" if not spans
+            else f"LLM suggestion pass partially failed: {errors[0]}"
+        )
+    return spans, warning
+
+
+def _sanitize_llm_spans(spans: list[dict], duration: Optional[float], existing_edits: list[dict]) -> list[dict]:
+    """Clamp spans to [0, duration]; drop degenerate/out-of-range spans and
+    spans fully overlapped by an existing cut op (acceptance criteria)."""
+    cuts = [e for e in existing_edits if isinstance(e, dict) and e.get("type") == "cut"]
+    dur = float(duration) if duration else None
+    out: list[dict] = []
+    seen: set[tuple[float, float]] = set()
+    for sp in spans:
+        start_s, end_s = sp["start_s"], sp["end_s"]
+        if dur is not None:
+            if start_s >= dur or end_s <= 0:
+                continue  # fully outside the video's duration
+            start_s = max(0.0, start_s)
+            end_s = min(dur, end_s)
+        else:
+            start_s = max(0.0, start_s)
+        if end_s <= start_s:
+            continue  # degenerate
+        if any(c.get("start_s", 0) <= start_s and c.get("end_s", 0) >= end_s for c in cuts):
+            continue  # fully overlapped by an existing cut
+        key = (round(start_s, 1), round(end_s, 1))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({
+            "id": _llm_suggestion_id(start_s, end_s),
+            "kind": "llm",
+            "start_s": round(start_s, 2),
+            "end_s": round(end_s, 2),
+            "gap_s": None,
+            "reason": sp["reason"],
+            "state": "open",
+        })
+    return out
+
+
+async def _load_draft_edits(db, video_id: str) -> list[dict]:
+    row = await db.fetchrow("SELECT edits FROM video_editor_drafts WHERE video_id = $1", video_id)
+    if not row or not row["edits"]:
+        return []
+    raw = row["edits"]
+    return raw if isinstance(raw, list) else json.loads(raw or "[]")
+
+
+def _merge_suggestion_review_state(fresh: list[dict], stored: list) -> list[dict]:
+    """Carry forward accepted/ignored state from a prior analyze pass, keyed
+    by suggestion id, so reviewed suggestions don't reappear as `open`."""
+    stored_by_id = {s["id"]: s for s in (stored or []) if isinstance(s, dict) and s.get("id")}
+    merged = []
+    for s in fresh:
+        prior = stored_by_id.get(s["id"])
+        if prior and prior.get("state") in ("accepted", "ignored"):
+            s = {**s, "state": prior["state"]}
+        merged.append(s)
+    return merged
+
+
+async def _load_stored_suggestions(db, video_id: str) -> list:
+    row = await db.fetchrow("SELECT suggestions FROM video_editor_drafts WHERE video_id = $1", video_id)
+    if not row or not row["suggestions"]:
+        return []
+    raw = row["suggestions"]
+    return raw if isinstance(raw, list) else json.loads(raw or "[]")
+
+
+async def _save_suggestions(db, video_id: str, suggestions: list[dict]) -> None:
+    await db.execute(
+        """
+        INSERT INTO video_editor_drafts (video_id, suggestions, updated_at)
+        VALUES ($1, $2, now())
+        ON CONFLICT (video_id) DO UPDATE
+            SET suggestions = EXCLUDED.suggestions, updated_at = now()
+        """,
+        video_id, json.dumps(suggestions),
+    )
+
+
+@router.post("/videos/{video_id}/editor-suggestions/analyze", response_model=EditorSuggestAnalyzeResponse)
+async def admin_analyze_suggestions(
+    video_id: str, req: EditorSuggestAnalyzeRequest, admin: dict = Depends(verify_video_access)
+):
+    """Compute silence-gap suggestions from the video's transcript, plus (by
+    default) an LLM pass flagging low-value spans (issue #262) — one Analyze
+    click returns both, merged with any prior accepted/ignored review state.
+
+    Re-runnable with a different `threshold_s`. If the transcript isn't
+    `ready` yet, returns `transcript_status` unchanged (and no suggestions) so
+    the frontend can offer the "generate transcript first" flow instead.
+    """
+    db = await get_db()
+    video = await db.fetchrow(
+        "SELECT transcript_status, transcript_error, duration_s FROM videos WHERE id = $1", video_id
+    )
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    transcript_status = video["transcript_status"] or "pending"
+    if transcript_status != "ready":
+        return EditorSuggestAnalyzeResponse(
+            transcript_status=transcript_status,
+            transcript_error=video["transcript_error"],
+            threshold_s=req.threshold_s,
+            suggestions=[],
+        )
+
+    t_path = _transcript_json_path(video_id)
+    if not os.path.isfile(t_path):
+        # transcript_status says ready but the file is missing — surface as
+        # an error state rather than silently returning zero suggestions.
+        return EditorSuggestAnalyzeResponse(
+            transcript_status="error",
+            transcript_error="Transcript file missing on disk",
+            threshold_s=req.threshold_s,
+            suggestions=[],
+        )
+
+    try:
+        with open(t_path) as f:
+            transcript = json.load(f)
+    except Exception:
+        return EditorSuggestAnalyzeResponse(
+            transcript_status="error",
+            transcript_error="Failed to read transcript",
+            threshold_s=req.threshold_s,
+            suggestions=[],
+        )
+
+    fresh = _compute_gap_suggestions(transcript, req.threshold_s)
+
+    warning: Optional[str] = None
+    if req.include_llm:
+        existing_edits = await _load_draft_edits(db, video_id)
+        raw_spans, warning = await _compute_llm_suggestions(transcript, video["duration_s"])
+        fresh += _sanitize_llm_spans(raw_spans, video["duration_s"], existing_edits)
+
+    stored = await _load_stored_suggestions(db, video_id)
+    merged = _merge_suggestion_review_state(fresh, stored)
+    await _save_suggestions(db, video_id, merged)
+
+    return EditorSuggestAnalyzeResponse(
+        transcript_status="ready",
+        transcript_error=None,
+        threshold_s=req.threshold_s,
+        suggestions=[EditorSuggestion(**s) for s in merged],
+        warning=warning,
+    )
+
+
+@router.patch("/videos/{video_id}/editor-suggestions/{suggestion_id}", response_model=EditorSuggestion)
+async def admin_update_suggestion_state(
+    video_id: str, suggestion_id: str, req: EditorSuggestionStateUpdate,
+    admin: dict = Depends(verify_video_access),
+):
+    """Mark a suggestion accepted/ignored (or back to open) without touching edits.
+
+    "Cut this" on the frontend calls this *and* PUTs the new cut op onto the
+    draft's `edits` via the existing endpoint above; this call only updates
+    the suggestion's own review state so it doesn't reappear as `open` on the
+    next analyze.
+    """
+    db = await get_db()
+    stored = await _load_stored_suggestions(db, video_id)
+    updated = None
+    for s in stored:
+        if s.get("id") == suggestion_id:
+            s["state"] = req.state
+            updated = s
+            break
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    await _save_suggestions(db, video_id, stored)
+    return EditorSuggestion(**updated)
+
+
+# ── Editor timeline filmstrip (issue #257) ──────────────────
+#
+# A single tiled JPEG sprite sampling ~1 frame every few seconds from the raw
+# file, stored alongside the video's other derived assets (video_dir root,
+# same level as thumb.jpg). Cached by comparing the sprite's mtime against
+# raw/original.mp4's mtime, so a later "Apply to video" (or the existing
+# trim/cut endpoints, which already rewrite original.mp4 in place) naturally
+# invalidates it on the next request.
+#
+# Concurrency guard: `_filmstrip_generating` is a plain in-process set,
+# added to synchronously (no `await` between the membership check and the
+# add) right before `asyncio.create_task`, so two requests landing back to
+# back on the same event loop can't both schedule a generation pass for the
+# same video_id. The tmp-file + os.replace() pattern (mirroring the upload
+# endpoint) is a second, independent guard against a torn/partial sprite
+# ever being visible to a GET, and against cross-process races if this ever
+# runs behind multiple workers.
+
+_filmstrip_generating: set[str] = set()
+_filmstrip_failures: dict[str, int] = {}
+_FILMSTRIP_MAX_FAILURES = 3
+
+_FILMSTRIP_TILE_WIDTH = 160
+_FILMSTRIP_MIN_INTERVAL_S = 2.0
+_FILMSTRIP_MAX_INTERVAL_S = 8.0
+_FILMSTRIP_TARGET_TILES = 100
+_FILMSTRIP_MAX_TILES = 240
+
+
+def _filmstrip_paths(video_id: str) -> tuple[str, str, str]:
+    video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
+    sprite_path = os.path.join(video_dir, "filmstrip.jpg")
+    meta_path = os.path.join(video_dir, "filmstrip.json")
+    return video_dir, sprite_path, meta_path
+
+
+def _filmstrip_cache_valid(raw_path: str, sprite_path: str, meta_path: str) -> bool:
+    if not (os.path.isfile(sprite_path) and os.path.isfile(meta_path)):
+        return False
+    try:
+        return os.path.getmtime(sprite_path) >= os.path.getmtime(raw_path)
+    except OSError:
+        return False
+
+
+async def _generate_filmstrip(video_id: str, raw_path: str, video_dir: str) -> None:
+    """Run the ffmpeg sampling pass and atomically publish sprite + sidecar JSON."""
+    sprite_path = os.path.join(video_dir, "filmstrip.jpg")
+    meta_path = os.path.join(video_dir, "filmstrip.json")
+    tmp_sprite = sprite_path + ".tmp"
+    tmp_meta = meta_path + ".tmp"
+
+    try:
+        duration = await _probe_duration_async(raw_path) or 0
+        dims = await _probe_video_dims_async(raw_path)
+        src_w, src_h = dims if dims else (16, 9)
+        aspect = (src_w / src_h) if src_h else (16 / 9)
+
+        tile_w = _FILMSTRIP_TILE_WIDTH
+        tile_h = max(1, round(tile_w / aspect))
+
+        interval = min(
+            _FILMSTRIP_MAX_INTERVAL_S,
+            max(_FILMSTRIP_MIN_INTERVAL_S, (duration or 60) / _FILMSTRIP_TARGET_TILES),
+        )
+        tile_count = max(4, min(_FILMSTRIP_MAX_TILES, math.ceil((duration or interval) / interval)))
+        cols = max(1, math.ceil(math.sqrt(tile_count)))
+        rows = max(1, math.ceil(tile_count / cols))
+
+        os.makedirs(video_dir, exist_ok=True)
+        if os.path.exists(tmp_sprite):
+            os.unlink(tmp_sprite)
+
+        vf = f"fps=1/{interval:.4f},scale={tile_w}:-2,tile={cols}x{rows}"
+        # -f image2: the .tmp suffix hides the .jpg extension from ffmpeg, so
+        # the muxer must be named explicitly or the command fails with rc=234.
+        rc, stderr = await _run_ffmpeg_async(
+            settings.FFMPEG_PATH, "-y", "-i", raw_path,
+            "-vf", vf, "-frames:v", "1", "-q:v", "3", "-f", "image2", tmp_sprite,
+        )
+        if rc != 0 or not os.path.isfile(tmp_sprite):
+            log.warning(
+                "Filmstrip generation failed | video_id={} rc={} stderr={}",
+                video_id, rc, (stderr or "")[-400:],
+            )
+            if os.path.exists(tmp_sprite):
+                os.unlink(tmp_sprite)
+            _filmstrip_failures[video_id] = _filmstrip_failures.get(video_id, 0) + 1
+            return
+
+        meta = {
+            "tile_count": tile_count,
+            "cols": cols,
+            "rows": rows,
+            "tile_width": tile_w,
+            "tile_height": tile_h,
+            "interval_s": interval,
+        }
+        with open(tmp_meta, "w") as f:
+            json.dump(meta, f)
+
+        os.replace(tmp_sprite, sprite_path)  # atomic — GET never sees a partial sprite
+        os.replace(tmp_meta, meta_path)
+        _filmstrip_failures.pop(video_id, None)
+        log.info(
+            "Filmstrip ready | video_id={} tiles={} grid={}x{} interval={}s",
+            video_id, tile_count, cols, rows, round(interval, 2),
+        )
+    except Exception:
+        log.exception("Filmstrip generation crashed | video_id={}", video_id)
+        _filmstrip_failures[video_id] = _filmstrip_failures.get(video_id, 0) + 1
+        for p in (tmp_sprite, tmp_meta):
+            if os.path.exists(p):
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
+    finally:
+        _filmstrip_generating.discard(video_id)
+
+
+@router.get("/videos/{video_id}/filmstrip", response_model=VideoFilmstripResponse)
+async def admin_get_filmstrip(video_id: str, admin: dict = Depends(verify_video_access)):
+    """Return (or kick off generation of) the timeline filmstrip sprite.
+
+    Frontend polls this on a timer (stale-poll `useRef` pattern) while
+    `status == "generating"`; once `status == "ready"`, `sprite_url` is
+    fetchable via the existing `/streams` static mount.
+    """
+    video_dir, sprite_path, meta_path = _filmstrip_paths(video_id)
+    raw_path = os.path.join(video_dir, "raw", "original.mp4")
+
+    if not os.path.isfile(raw_path):
+        return VideoFilmstripResponse(status="unavailable")
+
+    if _filmstrip_cache_valid(raw_path, sprite_path, meta_path):
+        try:
+            meta = json.loads(open(meta_path).read())
+            return VideoFilmstripResponse(
+                status="ready",
+                sprite_url=f"/streams/{video_id}/filmstrip.jpg",
+                tile_count=meta["tile_count"],
+                cols=meta["cols"],
+                rows=meta["rows"],
+                tile_width=meta["tile_width"],
+                tile_height=meta["tile_height"],
+                interval_s=meta["interval_s"],
+            )
+        except Exception:
+            pass  # corrupt sidecar — fall through and regenerate
+
+    if _filmstrip_failures.get(video_id, 0) >= _FILMSTRIP_MAX_FAILURES:
+        return VideoFilmstripResponse(status="error")
+
+    if video_id not in _filmstrip_generating:
+        _filmstrip_generating.add(video_id)  # synchronous — closes the double-spawn race
+        asyncio.create_task(_generate_filmstrip(video_id, raw_path, video_dir))
+
+    return VideoFilmstripResponse(status="generating")
 
 
 # ── Chapters ────────────────────────────────────────────────

@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field
-from typing import Optional
+from pydantic import BaseModel, Field, field_validator, model_validator
+from typing import Literal, Optional
 from datetime import datetime
 
 
@@ -290,6 +290,8 @@ class VideoAdminResponse(VideoResponse):
     custom_thumbnail: Optional[str] = None
     job_status: Optional[str] = None
     job_error: Optional[str] = None
+    # Apply-to-video staleness (issue #261) — see VideoEditorInfoResponse.
+    pipeline_stale: bool = False
 
 
 class ContinueWatchingResponse(VideoResponse):
@@ -478,3 +480,225 @@ class JobStatusResponse(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     created_at: datetime
+
+
+class VideoEditorInfoResponse(BaseModel):
+    """Bootstrap payload for the standalone video editor page (issue #255)."""
+    id: str
+    title: str
+    duration_s: Optional[int] = None
+    status: str
+    raw_url: str
+    raw_available: bool
+    source_width: Optional[int] = None
+    source_height: Optional[int] = None
+    aspect_ratio: Optional[float] = None
+    # Apply-to-video staleness (issue #261) — a successful 'apply' render
+    # shifts downstream timestamps, so an existing transcript/chapters no
+    # longer line up. `pipeline_stale` drives the regenerate prompt.
+    pipeline_stale: bool = False
+    editor_applied_at: Optional[datetime] = None
+
+
+# ── Video editor EDL draft (issue #256) ────────────────────────────────────
+
+# Speed op factor is restricted to these presets (issue #258) — slow-motion
+# plus the fast-forward factors from the legacy speed-section feature.
+SPEED_FACTOR_PRESETS: frozenset[float] = frozenset({0.5, 0.75, 1.25, 1.5, 2.0, 4.0, 8.0, 16.0, 32.0})
+
+
+class EditorEditOp(BaseModel):
+    """One non-destructive edit operation on the timeline.
+
+    `factor` is only used by `speed` ops (issue #258 adds the UI). Speed
+    factors are restricted to `SPEED_FACTOR_PRESETS`. `source` is an optional
+    provenance tag — `'suggestion'` marks a cut created by accepting a
+    suggestion (issue #259), purely informational for the UI.
+    """
+    id: str
+    type: Literal['cut', 'trim', 'speed']
+    start_s: float
+    end_s: float
+    factor: Optional[float] = None
+    source: Optional[Literal['suggestion']] = None
+
+    @model_validator(mode='after')
+    def _validate_speed_factor(self) -> 'EditorEditOp':
+        if self.type == 'speed':
+            if self.factor is None or self.factor not in SPEED_FACTOR_PRESETS:
+                raise ValueError(
+                    f'speed op factor must be one of {sorted(SPEED_FACTOR_PRESETS)}, got {self.factor!r}'
+                )
+        return self
+
+
+class EditorStyle(BaseModel):
+    """Whole-video background styling (issue #263): a preset gradient/solid
+    or a custom uploaded image behind the video, with adjustable inset
+    padding and corner radius. `image`, when set, is the served URL of the
+    uploaded background (e.g. `/streams/{video_id}/editor_bg.png` — see
+    `admin_upload_editor_background` in admin_router.py) and takes priority
+    over `preset` at render time; it's cleared back to `None` by the
+    remove-image endpoint.
+
+    Ranges mirror the Style panel's sliders (`pad_pct` 0-12, `radius_px`
+    0-32) — see `react-portal/src/components/editor/StylePanel.tsx`.
+    """
+    preset: str = 'none'
+    pad_pct: float = Field(default=0, ge=0, le=12)
+    radius_px: float = Field(default=0, ge=0, le=32)
+    image: Optional[str] = None
+
+    @field_validator('preset')
+    @classmethod
+    def _normalize_preset(cls, v: str) -> str:
+        from video.style_presets import normalize_preset
+        return normalize_preset(v)
+
+
+class EditorBackgroundUploadResponse(BaseModel):
+    """Returned after a successful custom background image upload — the
+    frontend writes this straight into the draft's `style.image`."""
+    path: str
+
+
+# ── Silence-gap suggestions (issue #259) ────────────────────────────────────
+#
+# `kind` is deliberately extensible: this slice only produces 'gap' (deterministic
+# transcript-timestamp gaps), but issue #262 plugs an 'llm' kind into the same
+# shape (with a `reason` string explaining the flag). Suggestion `id`s are a
+# deterministic hash of the rounded start/end so re-analyzing with the same
+# threshold reproduces the same ids — which is what lets accepted/ignored
+# review state (persisted in `video_editor_drafts.suggestions`) survive a
+# re-analyze instead of resurrecting already-reviewed suggestions.
+
+class EditorSuggestion(BaseModel):
+    id: str
+    kind: Literal['gap', 'llm'] = 'gap'
+    start_s: float
+    end_s: float
+    gap_s: Optional[float] = None
+    reason: Optional[str] = None
+    state: Literal['open', 'accepted', 'ignored'] = 'open'
+
+
+class VideoEditorDraftResponse(BaseModel):
+    video_id: str
+    edits: list[EditorEditOp] = []
+    muted: bool = False
+    style: EditorStyle = EditorStyle()
+    suggestions: list[EditorSuggestion] = []
+    updated_at: datetime
+
+
+class VideoEditorDraftUpdate(BaseModel):
+    edits: list[EditorEditOp] = []
+    muted: bool = False
+    style: EditorStyle = EditorStyle()
+
+
+class EditorSuggestAnalyzeRequest(BaseModel):
+    threshold_s: float = 2.0
+    # issue #262: the LLM skippable-span pass runs alongside the gap pass by
+    # default. Callers that only want the deterministic gap suggestions (or
+    # want to retry just the LLM pass without recomputing gaps) can set this
+    # to False.
+    include_llm: bool = True
+
+
+class EditorSuggestAnalyzeResponse(BaseModel):
+    """Result of an on-demand suggestion analysis pass.
+
+    `transcript_status` mirrors `videos.transcript_status`; the frontend uses
+    it to distinguish "ready — here are suggestions" from "not ready yet —
+    offer the generate-transcript flow" without a second round trip.
+    """
+    transcript_status: str
+    transcript_error: Optional[str] = None
+    threshold_s: float
+    suggestions: list[EditorSuggestion] = []
+    # issue #262: non-fatal notice when the LLM pass failed (timeout,
+    # malformed JSON, no provider configured) — gap suggestions are still
+    # returned and this is surfaced as a dismissible warning, not an error.
+    warning: Optional[str] = None
+
+
+class EditorSuggestionStateUpdate(BaseModel):
+    state: Literal['open', 'accepted', 'ignored']
+
+
+# ── Timeline filmstrip (issue #257) ─────────────────────────────────────────
+
+class VideoFilmstripResponse(BaseModel):
+    """Filmstrip sprite metadata for the editor's timeline video track.
+
+    `status` drives frontend polling: `generating` means an ffmpeg pass is
+    in flight (or about to be); `ready` means `sprite_url` is fetchable now;
+    `unavailable` means there's no raw file to sample from; `error` means
+    generation failed (frontend should stop polling and show a fallback).
+    """
+    status: Literal['ready', 'generating', 'unavailable', 'error']
+    sprite_url: Optional[str] = None
+    tile_count: Optional[int] = None
+    cols: Optional[int] = None
+    rows: Optional[int] = None
+    tile_width: Optional[int] = None
+    tile_height: Optional[int] = None
+    interval_s: Optional[float] = None
+
+
+# ── Editor export/render (issue #260) ───────────────────────────────────────
+
+# Quality keys are aspect-aware: a 16:9 source offers a 1440p upscale option
+# that a 4:3 source does not (its "1080p"/"720p" targets are already framed
+# as the 4:3-equivalent heights — 1440x1080 / 960x720 — in the frontend
+# copy). "source" always means "don't scale" regardless of aspect.
+EXPORT_QUALITY_OPTIONS_16_9: tuple[str, ...] = ('source', '1440p', '1080p', '720p')
+EXPORT_QUALITY_OPTIONS_4_3: tuple[str, ...] = ('source', '1080p', '720p')
+EXPORT_QUALITY_HEIGHTS: dict[str, int] = {'1440p': 1440, '1080p': 1080, '720p': 720}
+
+
+def export_quality_options_for_aspect(aspect_ratio: Optional[float]) -> tuple[str, ...]:
+    """Which quality keys are valid for a source of this aspect ratio.
+
+    Mirrors the editor mockup's `srcAspect > 1.5` split between the 16:9 and
+    4:3 quality tables.
+    """
+    if aspect_ratio and aspect_ratio > 1.5:
+        return EXPORT_QUALITY_OPTIONS_16_9
+    return EXPORT_QUALITY_OPTIONS_4_3
+
+
+class EditorExportRequest(BaseModel):
+    quality: str = 'source'
+
+
+class EditorExportJobResponse(BaseModel):
+    """Returned immediately after POST .../editor-export or .../editor-apply
+    — the job snapshot. `mode` distinguishes the two (issue #261)."""
+    id: int
+    video_id: str
+    status: Literal['queued', 'processing', 'done', 'error']
+    mode: Literal['download', 'apply'] = 'download'
+    progress_pct: int = 0
+    quality: Optional[str] = None
+    error: Optional[str] = None
+    created_at: datetime
+
+
+class EditorExportStatusResponse(BaseModel):
+    """Polled by the export/apply modal. `status='none'` means no render has
+    ever been requested for this video — the modal renders its idle state.
+    `mode` (issue #261) tells the frontend which flow the latest job belongs
+    to, since both modes share this single status endpoint."""
+    id: Optional[int] = None
+    status: Literal['none', 'queued', 'processing', 'done', 'error'] = 'none'
+    mode: Literal['download', 'apply'] = 'download'
+    progress_pct: int = 0
+    quality: Optional[str] = None
+    error: Optional[str] = None
+    download_available: bool = False
+    output_filename: Optional[str] = None
+    created_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
