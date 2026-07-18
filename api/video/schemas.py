@@ -562,3 +562,54 @@ class VideoFilmstripResponse(BaseModel):
     tile_width: Optional[int] = None
     tile_height: Optional[int] = None
     interval_s: Optional[float] = None
+
+
+# ── Editor export/render (issue #260) ───────────────────────────────────────
+
+# Quality keys are aspect-aware: a 16:9 source offers a 1440p upscale option
+# that a 4:3 source does not (its "1080p"/"720p" targets are already framed
+# as the 4:3-equivalent heights — 1440x1080 / 960x720 — in the frontend
+# copy). "source" always means "don't scale" regardless of aspect.
+EXPORT_QUALITY_OPTIONS_16_9: tuple[str, ...] = ('source', '1440p', '1080p', '720p')
+EXPORT_QUALITY_OPTIONS_4_3: tuple[str, ...] = ('source', '1080p', '720p')
+EXPORT_QUALITY_HEIGHTS: dict[str, int] = {'1440p': 1440, '1080p': 1080, '720p': 720}
+
+
+def export_quality_options_for_aspect(aspect_ratio: Optional[float]) -> tuple[str, ...]:
+    """Which quality keys are valid for a source of this aspect ratio.
+
+    Mirrors the editor mockup's `srcAspect > 1.5` split between the 16:9 and
+    4:3 quality tables.
+    """
+    if aspect_ratio and aspect_ratio > 1.5:
+        return EXPORT_QUALITY_OPTIONS_16_9
+    return EXPORT_QUALITY_OPTIONS_4_3
+
+
+class EditorExportRequest(BaseModel):
+    quality: str = 'source'
+
+
+class EditorExportJobResponse(BaseModel):
+    """Returned immediately after POST .../editor-export — the job snapshot."""
+    id: int
+    video_id: str
+    status: Literal['queued', 'processing', 'done', 'error']
+    progress_pct: int = 0
+    quality: Optional[str] = None
+    error: Optional[str] = None
+    created_at: datetime
+
+
+class EditorExportStatusResponse(BaseModel):
+    """Polled by the export modal. `status='none'` means no render has ever
+    been requested for this video — the modal renders its idle state."""
+    id: Optional[int] = None
+    status: Literal['none', 'queued', 'processing', 'done', 'error'] = 'none'
+    progress_pct: int = 0
+    quality: Optional[str] = None
+    error: Optional[str] = None
+    download_available: bool = False
+    output_filename: Optional[str] = None
+    created_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
