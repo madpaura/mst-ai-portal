@@ -1801,9 +1801,11 @@ async def _generate_filmstrip(video_id: str, raw_path: str, video_dir: str) -> N
             os.unlink(tmp_sprite)
 
         vf = f"fps=1/{interval:.4f},scale={tile_w}:-2,tile={cols}x{rows}"
+        # -f image2: the .tmp suffix hides the .jpg extension from ffmpeg, so
+        # the muxer must be named explicitly or the command fails with rc=234.
         rc, stderr = await _run_ffmpeg_async(
             settings.FFMPEG_PATH, "-y", "-i", raw_path,
-            "-vf", vf, "-frames:v", "1", "-q:v", "3", tmp_sprite,
+            "-vf", vf, "-frames:v", "1", "-q:v", "3", "-f", "image2", tmp_sprite,
         )
         if rc != 0 or not os.path.isfile(tmp_sprite):
             log.warning(
