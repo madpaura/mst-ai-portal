@@ -1,5 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { fmtClock } from './types';
+
+// Preset speed factors offered by the Speed action (issue #258) — slow-motion
+// plus the fast-forward factors from the legacy speed-section feature.
+// Must match `SPEED_FACTOR_PRESETS` in api/video/schemas.py exactly.
+export const SPEED_FACTOR_PRESETS = [0.5, 0.75, 1.25, 1.5, 2, 4, 8, 16, 32];
 
 interface EditPopoverProps {
   /** Viewport coordinates (from the mouseup that ended the drag-select). */
@@ -9,15 +14,16 @@ interface EditPopoverProps {
   rangeEnd: number;
   onCutOut: () => void;
   onTrimTo: () => void;
+  onSpeed: (factor: number) => void;
   onClose: () => void;
 }
 
 /**
  * Floating action popover shown after a drag-select on the timeline.
  *
- * Only "Cut out" / "Trim to" ship this slice. The action list is built from
- * a small config array precisely so a "Speed" entry can be appended later
- * (issue #256 spec) without restructuring this component — see `ACTIONS`.
+ * "Cut out" / "Trim to" / "Speed" ship this slice (issue #258 added Speed).
+ * The action list is built from a small config array — see `ACTIONS`. Speed
+ * expands an inline chip row of preset factors instead of firing immediately.
  */
 export const EditPopover: React.FC<EditPopoverProps> = ({
   clientX,
@@ -26,13 +32,16 @@ export const EditPopover: React.FC<EditPopoverProps> = ({
   rangeEnd,
   onCutOut,
   onTrimTo,
+  onSpeed,
   onClose,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
+  const [showSpeedChips, setShowSpeedChips] = useState(false);
 
   // Position is applied directly to the DOM node (not React state) so that
   // clamping the popover to the viewport, once we know its real rendered
-  // size, doesn't trigger a second render.
+  // size, doesn't trigger a second render. Re-runs when the speed chip row
+  // toggles too, since that changes the popover's rendered height.
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -42,7 +51,7 @@ export const EditPopover: React.FC<EditPopoverProps> = ({
     const top = Math.min(clientY + 10, window.innerHeight - h - 8);
     el.style.left = `${left}px`;
     el.style.top = `${top}px`;
-  }, [clientX, clientY]);
+  }, [clientX, clientY, showSpeedChips]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -61,9 +70,6 @@ export const EditPopover: React.FC<EditPopoverProps> = ({
     };
   }, [onClose]);
 
-  // Extension point: a `speed` entry (with a factor sub-menu, like the
-  // mockup's chip row) can be appended here in a later slice without
-  // changing the popover's layout or event wiring.
   const ACTIONS: Array<{ key: string; label: string; icon: string; className: string; onClick: () => void }> = [
     {
       key: 'cut',
@@ -78,6 +84,15 @@ export const EditPopover: React.FC<EditPopoverProps> = ({
       icon: 'crop',
       className: 'text-primary hover:bg-primary/15 border-[#243043] hover:border-primary/50',
       onClick: onTrimTo,
+    },
+    {
+      key: 'speed',
+      label: 'Speed',
+      icon: 'speed',
+      className: `text-[#A78BFA] hover:bg-[#A78BFA]/15 border-[#243043] hover:border-[#A78BFA]/50 ${
+        showSpeedChips ? 'bg-[#A78BFA]/15 border-[#A78BFA]/50' : ''
+      }`,
+      onClick: () => setShowSpeedChips((s) => !s),
     },
   ];
 
@@ -109,6 +124,19 @@ export const EditPopover: React.FC<EditPopoverProps> = ({
           <span className="material-symbols-outlined text-[15px]">close</span>
         </button>
       </div>
+      {showSpeedChips && (
+        <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-[#243043] max-w-[240px]">
+          {SPEED_FACTOR_PRESETS.map((f) => (
+            <button
+              key={f}
+              onClick={() => onSpeed(f)}
+              className="px-2.5 py-1 rounded-full border border-[#243043] font-mono text-[11px] text-[#96A2B8] hover:border-[#A78BFA] hover:text-[#A78BFA] hover:bg-[#A78BFA]/10 transition-colors"
+            >
+              {f}×
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

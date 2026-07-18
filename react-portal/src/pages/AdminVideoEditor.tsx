@@ -37,6 +37,18 @@ interface VideoEditorDraft {
 
 type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
+// Undo snapshot (issue #258): covers both `edits` and `muted` so the
+// remove-audio toggle participates in the same capped-5 undo stack.
+interface UndoSnapshot {
+  edits: EditOp[];
+  muted: boolean;
+}
+
+// Browsers commonly reject/clamp HTMLMediaElement.playbackRate above 16 (the
+// preset chips go up to 32× for export-time speed). The displayed preview
+// rate is capped here; the real factor still applies at export.
+const MAX_PREVIEW_PLAYBACK_RATE = 16;
+
 /**
  * Standalone, full-page video editor shell (issue #255 tracer slice) plus
  * the non-destructive EDL core (issue #256): a timeline with cut/trim
@@ -66,14 +78,16 @@ export const AdminVideoEditor: React.FC = () => {
 
   // ── EDL draft state (issue #256) ──────────────────────────────────────
   const [edits, setEdits] = useState<EditOp[]>([]);
-  const [muted, setMuted] = useState(false); // stored/persisted; UI lands in a later slice
+  const [muted, setMuted] = useState(false); // whole-video remove-audio toggle (issue #258)
   const [style, setStyle] = useState<EditorStyle>(DEFAULT_STYLE); // ditto
   const [selectedEditId, setSelectedEditId] = useState<string | null>(null);
   const [skipCuts, setSkipCuts] = useState(true);
   const [undoDepth, setUndoDepth] = useState(0);
   const [saveState, setSaveState] = useState<SaveState>('idle');
 
-  const undoStackRef = useRef<EditOp[][]>([]);
+  // Undo snapshots cover both `edits` and `muted` (issue #258 — remove-audio
+  // participates in the same capped-5 undo stack as cut/trim/speed edits).
+  const undoStackRef = useRef<UndoSnapshot[]>([]);
   const justLoadedRef = useRef(true); // skips the autosave effect run caused by mount / draft load
   const mountedRef = useRef(true);
   const saveTimerRef = useRef<number | null>(null);
@@ -167,23 +181,35 @@ export const AdminVideoEditor: React.FC = () => {
   }, [edits, muted, style]);
 
   // ── Undo (capped at the last 5 actions — explicit product decision) ────
+  // Snapshots capture both `edits` and `muted` so the remove-audio toggle
+  // undoes/redoes alongside cut/trim/speed edits, without changing the cap.
+  const pushUndoSnapshot = useCallback(() => {
+    const stack = undoStackRef.current;
+    stack.push({ edits, muted });
+    if (stack.length > UNDO_CAP) stack.shift();
+    setUndoDepth(stack.length);
+  }, [edits, muted]);
+
   const applyEdits = useCallback(
     (next: EditOp[]) => {
-      const stack = undoStackRef.current;
-      stack.push(edits);
-      if (stack.length > UNDO_CAP) stack.shift();
-      setUndoDepth(stack.length);
+      pushUndoSnapshot();
       setEdits(next);
     },
-    [edits],
+    [pushUndoSnapshot],
   );
+
+  const toggleMuted = useCallback(() => {
+    pushUndoSnapshot();
+    setMuted((m) => !m);
+  }, [pushUndoSnapshot]);
 
   const undo = useCallback(() => {
     const stack = undoStackRef.current;
     const last = stack.pop();
     if (last === undefined) return;
     setUndoDepth(stack.length);
-    setEdits(last);
+    setEdits(last.edits);
+    setMuted(last.muted);
     setSelectedEditId(null);
   }, []);
 
@@ -203,6 +229,13 @@ export const AdminVideoEditor: React.FC = () => {
     [applyEdits, edits],
   );
 
+  const handleCreateSpeed = useCallback(
+    (start: number, end: number, factor: number) => {
+      applyEdits([...edits, { id: genEditId(), type: 'speed', start_s: start, end_s: end, factor }]);
+    },
+    [applyEdits, edits],
+  );
+
   const handleDeleteEdit = useCallback(
     (editId: string) => {
       applyEdits(edits.filter((e) => e.id !== editId));
@@ -212,6 +245,14 @@ export const AdminVideoEditor: React.FC = () => {
   );
 
   const outputDuration = useMemo(() => estimateOutputDuration(edits, duration), [edits, duration]);
+
+  // Belt-and-braces sync for the remove-audio toggle: React's `muted` prop on
+  // <video> only reliably sets the DOM property on the initial render in
+  // some browsers, so re-apply it directly via the ref on every change.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (v) v.muted = muted;
+  }, [muted, info]);
 
   const togglePlay = useCallback(() => {
     const v = videoRef.current;
@@ -262,7 +303,9 @@ export const AdminVideoEditor: React.FC = () => {
   };
 
   // Preview-skips-cuts: jump over cut regions and clamp to trim bounds
-  // during playback, when the toggle is on.
+  // during playback, when the toggle is on. Speed regions (issue #258) are
+  // evaluated afterwards, against the (possibly skip-adjusted) time, so a
+  // skip that lands inside a speed region picks up its rate immediately.
   const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
     const v = e.target as HTMLVideoElement;
     let t = v.currentTime;
@@ -284,6 +327,20 @@ export const AdminVideoEditor: React.FC = () => {
         }
       }
     }
+
+    const speedOp = edits.find(
+      (op) => op.type === 'speed' && op.factor && t >= op.start_s && t < op.end_s,
+    );
+    const targetRate = speedOp ? Math.min(MAX_PREVIEW_PLAYBACK_RATE, speedOp.factor as number) : 1;
+    if (v.playbackRate !== targetRate) {
+      try {
+        v.playbackRate = targetRate;
+      } catch {
+        // Some browsers reject out-of-range rates outright — leave the
+        // previous rate in place rather than throwing out of the handler.
+      }
+    }
+
     setCurrentTime(t);
   };
 
@@ -372,6 +429,21 @@ export const AdminVideoEditor: React.FC = () => {
                 ))}
               </div>
             </div>
+            <button
+              onClick={toggleMuted}
+              title="Remove audio from the whole video (undoable)"
+              aria-pressed={muted}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[13px] font-medium border transition-colors shrink-0 mr-1 ${
+                muted
+                  ? 'border-[#F0564A]/60 bg-[#F0564A]/15 text-[#F0564A]'
+                  : 'border-[#243043] bg-[#0F1520] text-[#96A2B8] hover:border-[#5C6880] hover:text-[#E8EDF6]'
+              }`}
+            >
+              <span className="material-symbols-outlined text-base">
+                {muted ? 'volume_off' : 'volume_up'}
+              </span>
+              Remove audio
+            </button>
           </>
         )}
         <span className="text-[10px] font-bold tracking-[0.1em] text-[#F5A524] border border-[#F5A524]/40 rounded-full px-2.5 py-0.5">
@@ -415,13 +487,19 @@ export const AdminVideoEditor: React.FC = () => {
               )}
 
               {/* Stage */}
-              <div className="flex-1 min-h-0 rounded-lg border border-[#243043] bg-black flex items-center justify-center overflow-hidden">
+              <div className="flex-1 min-h-0 rounded-lg border border-[#243043] bg-black flex items-center justify-center overflow-hidden relative">
+                {muted && (
+                  <span className="absolute top-2.5 right-3 z-10 text-[11px] font-semibold tracking-[0.04em] text-[#F0564A] bg-[#0B0F17]/80 border border-[#F0564A] rounded-full px-2.5 py-1">
+                    AUDIO REMOVED
+                  </span>
+                )}
                 {info && (
                   <video
                     ref={videoRef}
                     src={`${API_BASE}${info.raw_url}`}
                     className="max-w-full max-h-full"
                     style={{ aspectRatio: String(aspect) }}
+                    muted={muted}
                     onPlay={() => setPlaying(true)}
                     onPause={() => setPlaying(false)}
                     onTimeUpdate={handleTimeUpdate}
@@ -494,6 +572,7 @@ export const AdminVideoEditor: React.FC = () => {
           onSelectEdit={setSelectedEditId}
           onCreateCut={handleCreateCut}
           onCreateTrim={handleCreateTrim}
+          onCreateSpeed={handleCreateSpeed}
         />
       )}
     </div>

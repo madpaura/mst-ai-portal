@@ -28,7 +28,7 @@ export const EditsPanel: React.FC<EditsPanelProps> = ({ edits, selectedEditId, o
             <br />
             Drag on the timeline to select a region,
             <br />
-            then choose Cut or Trim.
+            then choose Cut, Trim or Speed.
           </div>
         ) : (
           edits.map((op) => {

@@ -7,7 +7,8 @@ import { MIN_DRAG_SECONDS, fmtClock } from './types';
 const RULER_H = 22;
 const TRACK_H = 56;
 const CUT_LANE_H = 30;
-const LANES_H = TRACK_H + CUT_LANE_H;
+const SPEED_LANE_H = 30;
+const LANES_H = TRACK_H + CUT_LANE_H + SPEED_LANE_H;
 
 const NICE_STEPS = [5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600];
 
@@ -25,6 +26,7 @@ interface EditorTimelineProps {
   onSelectEdit: (id: string | null) => void;
   onCreateCut: (start: number, end: number) => void;
   onCreateTrim: (start: number, end: number) => void;
+  onCreateSpeed: (start: number, end: number, factor: number) => void;
 }
 
 interface DragRange {
@@ -52,6 +54,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   onSelectEdit,
   onCreateCut,
   onCreateTrim,
+  onCreateSpeed,
 }) => {
   const innerRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef<{ startT: number } | null>(null);
@@ -61,6 +64,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
 
   const trim = useMemo(() => edits.find((e) => e.type === 'trim'), [edits]);
   const cuts = useMemo(() => edits.filter((e) => e.type === 'cut'), [edits]);
+  const speeds = useMemo(() => edits.filter((e) => e.type === 'speed'), [edits]);
 
   const pctOf = (t: number) => (duration > 0 ? `${Math.min(100, Math.max(0, (t / duration) * 100))}%` : '0%');
   const widthPct = (s: number, e: number) =>
@@ -159,6 +163,12 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
           >
             Cut
           </div>
+          <div
+            className="flex items-center pl-3.5 text-[11px] font-semibold tracking-[0.08em] uppercase text-[#A78BFA]"
+            style={{ height: SPEED_LANE_H }}
+          >
+            Speed
+          </div>
         </div>
 
         {/* Scrollable timeline */}
@@ -193,6 +203,9 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
 
             {/* Cut lane background */}
             <div className="border-t border-[#243043]" style={{ height: CUT_LANE_H }} />
+
+            {/* Speed lane background */}
+            <div className="border-t border-[#243043]" style={{ height: SPEED_LANE_H }} />
 
             {/* Trim dim overlay — dims everything outside the kept range */}
             {trim && (
@@ -242,6 +255,31 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
               </div>
             ))}
 
+            {/* Speed regions */}
+            {speeds.map((op) => (
+              <div
+                key={op.id}
+                data-region
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectEdit(op.id);
+                }}
+                title={`${fmtClock(op.start_s)} – ${fmtClock(op.end_s)} · ${op.factor ?? 1}×`}
+                className={`absolute rounded-md border flex items-center justify-center text-[10.5px] font-semibold cursor-pointer overflow-hidden whitespace-nowrap bg-[#A78BFA]/20 border-[#A78BFA] text-[#A78BFA] ${
+                  selectedEditId === op.id ? 'ring-2 ring-primary' : ''
+                }`}
+                style={{
+                  top: RULER_H + TRACK_H + CUT_LANE_H + 4,
+                  height: SPEED_LANE_H - 8,
+                  left: pctOf(op.start_s),
+                  width: widthPct(op.start_s, op.end_s),
+                }}
+              >
+                {op.factor ?? 1}×
+              </div>
+            ))}
+
             {/* Drag preview */}
             {dragPreview && (
               <div
@@ -276,6 +314,10 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
           }}
           onTrimTo={() => {
             onCreateTrim(pending.start, pending.end);
+            setPending(null);
+          }}
+          onSpeed={(factor) => {
+            onCreateSpeed(pending.start, pending.end, factor);
             setPending(null);
           }}
           onClose={() => setPending(null)}

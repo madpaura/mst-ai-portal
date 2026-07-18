@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Literal, Optional
 from datetime import datetime
 
@@ -495,17 +495,31 @@ class VideoEditorInfoResponse(BaseModel):
 
 # ── Video editor EDL draft (issue #256) ────────────────────────────────────
 
+# Speed op factor is restricted to these presets (issue #258) — slow-motion
+# plus the fast-forward factors from the legacy speed-section feature.
+SPEED_FACTOR_PRESETS: frozenset[float] = frozenset({0.5, 0.75, 1.25, 1.5, 2.0, 4.0, 8.0, 16.0, 32.0})
+
+
 class EditorEditOp(BaseModel):
     """One non-destructive edit operation on the timeline.
 
-    `factor` is only used by `speed` ops (later slice adds the UI; the shape
-    is carried now so the draft format doesn't need another migration).
+    `factor` is only used by `speed` ops (issue #258 adds the UI). Speed
+    factors are restricted to `SPEED_FACTOR_PRESETS`.
     """
     id: str
     type: Literal['cut', 'trim', 'speed']
     start_s: float
     end_s: float
     factor: Optional[float] = None
+
+    @model_validator(mode='after')
+    def _validate_speed_factor(self) -> 'EditorEditOp':
+        if self.type == 'speed':
+            if self.factor is None or self.factor not in SPEED_FACTOR_PRESETS:
+                raise ValueError(
+                    f'speed op factor must be one of {sorted(SPEED_FACTOR_PRESETS)}, got {self.factor!r}'
+                )
+        return self
 
 
 class EditorStyle(BaseModel):
