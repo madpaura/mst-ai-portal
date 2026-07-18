@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 
 
@@ -491,3 +491,40 @@ class VideoEditorInfoResponse(BaseModel):
     source_width: Optional[int] = None
     source_height: Optional[int] = None
     aspect_ratio: Optional[float] = None
+
+
+# ── Video editor EDL draft (issue #256) ────────────────────────────────────
+
+class EditorEditOp(BaseModel):
+    """One non-destructive edit operation on the timeline.
+
+    `factor` is only used by `speed` ops (later slice adds the UI; the shape
+    is carried now so the draft format doesn't need another migration).
+    """
+    id: str
+    type: Literal['cut', 'trim', 'speed']
+    start_s: float
+    end_s: float
+    factor: Optional[float] = None
+
+
+class EditorStyle(BaseModel):
+    """Background/frame style — only used by a later slice; stored now so the
+    draft round-trips the full shape from day one."""
+    preset: str = 'none'
+    pad_pct: float = 0
+    radius_px: float = 0
+
+
+class VideoEditorDraftResponse(BaseModel):
+    video_id: str
+    edits: list[EditorEditOp] = []
+    muted: bool = False
+    style: EditorStyle = EditorStyle()
+    updated_at: datetime
+
+
+class VideoEditorDraftUpdate(BaseModel):
+    edits: list[EditorEditOp] = []
+    muted: bool = False
+    style: EditorStyle = EditorStyle()

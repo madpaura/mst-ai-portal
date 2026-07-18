@@ -17,7 +17,7 @@ from video.schemas import (
     QualitySettingResponse, QualitySettingUpdate, SeedNoteCreate,
     SeedNoteResponse, JobStatusResponse, BannerConfigResponse, BannerConfigUpdate,
     TrimRequest, CutRequest, SpeedSectionRequest, AttachmentResponse, AttachmentUpdate,
-    VideoEditorInfoResponse,
+    VideoEditorInfoResponse, VideoEditorDraftResponse, VideoEditorDraftUpdate,
 )
 from pydantic import BaseModel
 from auth.dependencies import require_content as require_admin
@@ -961,6 +961,61 @@ async def admin_editor_info(video_id: str, admin: dict = Depends(require_admin))
         source_height=source_height,
         aspect_ratio=aspect_ratio,
     )
+
+
+# ── Editor EDL draft (issue #256) ──────────────────────────
+
+_DEFAULT_EDITOR_STYLE = {"preset": "none", "pad_pct": 0, "radius_px": 0}
+
+
+def _draft_row_to_response(video_id: str, r) -> VideoEditorDraftResponse:
+    edits = r["edits"] if isinstance(r["edits"], list) else json.loads(r["edits"] or "[]")
+    style = r["style"] if isinstance(r["style"], dict) else json.loads(r["style"] or "{}")
+    return VideoEditorDraftResponse(
+        video_id=video_id,
+        edits=edits,
+        muted=r["muted"],
+        style={**_DEFAULT_EDITOR_STYLE, **style},
+        updated_at=r["updated_at"],
+    )
+
+
+@router.get("/videos/{video_id}/editor-draft", response_model=VideoEditorDraftResponse)
+async def admin_get_editor_draft(video_id: str, admin: dict = Depends(verify_video_access)):
+    """Fetch the video's saved EDL draft, or an empty default if none exists yet."""
+    db = await get_db()
+    row = await db.fetchrow("SELECT * FROM video_editor_drafts WHERE video_id = $1", video_id)
+    if not row:
+        return VideoEditorDraftResponse(
+            video_id=video_id,
+            edits=[],
+            muted=False,
+            style=_DEFAULT_EDITOR_STYLE,
+            updated_at=datetime.now(timezone.utc),
+        )
+    return _draft_row_to_response(video_id, row)
+
+
+@router.put("/videos/{video_id}/editor-draft", response_model=VideoEditorDraftResponse)
+async def admin_upsert_editor_draft(
+    video_id: str, req: VideoEditorDraftUpdate, admin: dict = Depends(verify_video_access)
+):
+    """Upsert the full EDL draft for a video (autosaved from the editor UI)."""
+    db = await get_db()
+    edits_json = json.dumps([e.model_dump() for e in req.edits])
+    style_json = json.dumps(req.style.model_dump())
+    row = await db.fetchrow(
+        """
+        INSERT INTO video_editor_drafts (video_id, edits, muted, style, updated_at)
+        VALUES ($1, $2, $3, $4, now())
+        ON CONFLICT (video_id) DO UPDATE
+            SET edits = EXCLUDED.edits, muted = EXCLUDED.muted,
+                style = EXCLUDED.style, updated_at = now()
+        RETURNING *
+        """,
+        video_id, edits_json, req.muted, style_json,
+    )
+    return _draft_row_to_response(video_id, row)
 
 
 # ── Chapters ────────────────────────────────────────────────
