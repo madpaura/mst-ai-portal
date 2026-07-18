@@ -12,6 +12,7 @@ from video.schemas import (
     ProgressUpdate, OverallProgressResponse, NoteResponse, NoteCreate,
     NoteUpdate, HowtoResponse, VideoLikeResponse, AttachmentResponse,
     PlaylistResponse, PlaylistCreate, PlaylistUpdate, PlaylistVideoAdd,
+    ContinueWatchingResponse,
 )
 from auth.dependencies import get_current_user, get_optional_user
 from database import get_db
@@ -386,6 +387,49 @@ async def update_video_progress(
         video_id=str(row["video_id"]), watched_seconds=row["watched_seconds"],
         completed=row["completed"], last_position=row["last_position"],
     )
+
+
+_CONTINUE_WATCHING_LIMIT = 12
+
+
+@router.get("/continue-watching", response_model=list[ContinueWatchingResponse])
+async def get_continue_watching(user: dict = Depends(get_current_user)):
+    """Signed-in user's in-progress videos, most recently updated first.
+
+    Replaces the Ignite "My Courses" row removed in #243. Derived entirely
+    from existing per-video progress (no new tracking/tables).
+    """
+    db = await get_db()
+    rows = await db.fetch(
+        """
+        SELECT v.*, u.display_name AS author_name,
+            p.watched_seconds, p.last_position
+        FROM user_video_progress p
+        JOIN videos v ON v.id = p.video_id
+        LEFT JOIN users u ON u.id = v.created_by
+        WHERE p.user_id = $1
+            AND v.is_published = true AND v.is_active = true
+            AND p.completed = false
+            AND (p.watched_seconds > 0 OR p.last_position > 0)
+        ORDER BY p.updated_at DESC
+        LIMIT $2
+        """,
+        user["id"], _CONTINUE_WATCHING_LIMIT,
+    )
+    return [
+        ContinueWatchingResponse(
+            id=str(r["id"]), series_id=str(r["series_id"]) if r["series_id"] else None,
+            title=r["title"], slug=r["slug"], description=r.get("description"),
+            category=r["category"], duration_s=r.get("duration_s"),
+            status=r["status"], hls_path=r.get("hls_path"),
+            thumbnail=r.get("thumbnail"), is_published=r["is_published"],
+            sort_order=r["sort_order"], created_at=r["created_at"],
+            transcript_status=r.get("transcript_status"),
+            author_name=r.get("author_name"),
+            watched_seconds=r["watched_seconds"], last_position=r["last_position"],
+        )
+        for r in rows
+    ]
 
 
 @router.get("/videos/{slug}/notes", response_model=list[NoteResponse])

@@ -43,6 +43,14 @@ interface Playlist {
   created_at: string;
 }
 
+// Continue Watching row item — server-derived from /video/continue-watching
+// (per-video progress, issue #244). Distinct from the local, device-only
+// `progressBySlug` overlay used on regular video cards below.
+interface ContinueWatchingVideo extends ApiVideo {
+  watched_seconds: number;
+  last_position: number;
+}
+
 // Discover modes. "rated" = Top Rated (likes proxy until dedicated ratings land).
 type DiscoverMode = 'all' | 'recent' | 'history' | 'trending' | 'saved' | 'rated';
 
@@ -128,6 +136,7 @@ export const IgniteBrowse: React.FC = () => {
   const [likes, setLikes] = useState<Record<string, number>>({});
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [continueWatching, setContinueWatching] = useState<ContinueWatchingVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [fullLoaded, setFullLoaded] = useState(false);
   const fullLoadedRef = useRef(false);
@@ -215,11 +224,14 @@ export const IgniteBrowse: React.FC = () => {
     if (!user) {
       setSaved(new Set());
       setPlaylists([]);
+      setContinueWatching([]);
       return;
     }
     api.get<string[]>('/video/bookmarks')
       .then((slugs) => setSaved(new Set(slugs))).catch(() => {});
     api.get<Playlist[]>('/video/playlists').then(setPlaylists).catch(() => {});
+    api.get<ContinueWatchingVideo[]>('/video/continue-watching')
+      .then(setContinueWatching).catch(() => setContinueWatching([]));
   }, [user]);
 
   // ── Scope/mode selection helpers (keep the four filters mutually consistent) ──
@@ -333,14 +345,6 @@ export const IgniteBrowse: React.FC = () => {
     });
     return m;
   }, [videos]);
-
-  const continueWatching = useMemo(
-    () => videos.filter((v) => {
-      const p = progressBySlug[v.slug];
-      return p !== undefined && p > 0 && p < 100;
-    }),
-    [videos, progressBySlug],
-  );
 
   // Apply scope → mode → category → search to the grid.
   const filtered = useMemo(() => {
@@ -556,6 +560,54 @@ export const IgniteBrowse: React.FC = () => {
               <div className="h-full bg-primary rounded" style={{ width: `${pct}%` }} />
             </div>
           )}
+        </div>
+      </div>
+    );
+  };
+
+  // ── Continue Watching card — resumes at the saved server-side position ──
+  const ContinueWatchingCard: React.FC<{ v: ContinueWatchingVideo }> = ({ v }) => {
+    const thumb = v.thumbnail ? `${apiBase}${v.thumbnail}` : null;
+    const pct = v.duration_s ? Math.min(100, Math.round((v.last_position / v.duration_s) * 100)) : 0;
+    const resume = () => { saveScroll(); navigate(`/ignite/${v.slug}?t=${v.last_position}`); };
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={resume}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); resume(); } }}
+        className="group text-left cursor-pointer bg-surface border border-border-base rounded-xl overflow-hidden transition-all duration-200 hover:-translate-y-1 hover:shadow-xl hover:border-primary/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+      >
+        <div className="relative aspect-video overflow-hidden">
+          {thumb ? (
+            <img src={thumb} alt={v.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+          ) : (
+            <div className={`w-full h-full bg-gradient-to-br ${gradFor(v.category + v.id)} flex items-center justify-center transition-transform duration-300 group-hover:scale-105`}>
+              <span className="material-symbols-outlined text-white/85 text-[44px]">{iconFor(v.category)}</span>
+            </div>
+          )}
+          <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/25 transition-colors">
+            <div className="w-11 h-11 rounded-full bg-white/15 border border-white/40 backdrop-blur flex items-center justify-center opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100 transition-all">
+              <span className="material-symbols-outlined text-white text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>play_arrow</span>
+            </div>
+          </div>
+          <span className="absolute bottom-2 right-2 bg-black/75 text-white text-[11px] font-semibold px-1.5 py-0.5 rounded backdrop-blur">
+            {fmtDuration(v.duration_s)}
+          </span>
+          {pct > 0 && (
+            <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-black/40">
+              <div className="h-full bg-primary" style={{ width: `${pct}%` }} />
+            </div>
+          )}
+        </div>
+        <div className="p-4">
+          <div className="text-[10.5px] font-bold uppercase tracking-wider text-primary mb-1.5 truncate">
+            {v.series_id ? seriesTitle[v.series_id] || v.category : v.category}
+          </div>
+          <h3 className="text-[14.5px] font-semibold leading-snug text-text-strong line-clamp-2 mb-3">{v.title}</h3>
+          <div className="h-[3px] bg-surface-muted rounded overflow-hidden">
+            <div className="h-full bg-primary rounded" style={{ width: `${pct}%` }} />
+          </div>
         </div>
       </div>
     );
@@ -905,12 +957,12 @@ export const IgniteBrowse: React.FC = () => {
                   </div>
                 )}
 
-                {/* Continue Watching — only on the default view */}
-                {continueWatching.length > 0 && !scopeActive && mode === 'all' && category === 'all' && (
+                {/* Continue Watching — signed-in users with in-progress videos, default view only */}
+                {user && continueWatching.length > 0 && !scopeActive && mode === 'all' && category === 'all' && (
                   <section className="mb-10">
                     {sectionHeader('Continue Watching')}
                     <div className="grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))' }}>
-                      {continueWatching.map((v) => <VideoCard key={v.id} v={v} />)}
+                      {continueWatching.map((v) => <ContinueWatchingCard key={v.id} v={v} />)}
                     </div>
                   </section>
                 )}
