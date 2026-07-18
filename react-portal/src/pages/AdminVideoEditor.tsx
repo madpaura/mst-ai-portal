@@ -4,6 +4,8 @@ import { useAuth } from '../api/auth';
 import { api, toApiError } from '../api/client';
 import { EditorTimeline } from '../components/editor/EditorTimeline';
 import { EditsPanel } from '../components/editor/EditsPanel';
+import { ExportModal } from '../components/editor/ExportModal';
+import type { EditorExportQualityOption, EditorExportStatus } from '../components/editor/ExportModal';
 import type { InspectorTab } from '../components/editor/EditsPanel';
 import type { EditOp, EditorStyle, EditorSuggestion } from '../components/editor/types';
 import {
@@ -126,10 +128,25 @@ export const AdminVideoEditor: React.FC = () => {
   const mountedRef = useRef(true);
   const saveTimerRef = useRef<number | null>(null);
 
+  // ── Export mp4 (issue #260) ─────────────────────────────────────────────
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportQuality, setExportQuality] = useState('source');
+  const [exportStarting, setExportStarting] = useState(false);
+  const [exportStartError, setExportStartError] = useState<string | null>(null);
+  const [exportStatus, setExportStatus] = useState<EditorExportStatus | null>(null);
+
+  // Stale poll / stale closure guard (CLAUDE.md pattern) — must be set
+  // before the interval starts, and re-checked after every await so a poll
+  // started for one video never writes state after the id changes.
+  const activeExportIdRef = useRef<string | null>(null);
+  const exportPollRef = useRef<number | null>(null);
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      activeExportIdRef.current = null;
+      if (exportPollRef.current) window.clearInterval(exportPollRef.current);
     };
   }, []);
 
@@ -411,6 +428,134 @@ export const AdminVideoEditor: React.FC = () => {
 
   const outputDuration = useMemo(() => estimateOutputDuration(edits, duration), [edits, duration]);
 
+  // ── Export mp4 (issue #260) ─────────────────────────────────────────────
+  // Quality options are aspect-aware, mirroring the backend's
+  // export_quality_options_for_aspect() split at aspect_ratio > 1.5.
+  const exportQualityOptions = useMemo<EditorExportQualityOption[]>(() => {
+    const w = info?.source_width;
+    const h = info?.source_height;
+    const sourceLabel = w && h ? `Source (${w}×${h})` : 'Source';
+    const aspect = info?.aspect_ratio && info.aspect_ratio > 0 ? info.aspect_ratio : w && h ? w / h : 16 / 9;
+    if (aspect > 1.5) {
+      return [
+        { value: 'source', label: sourceLabel },
+        { value: '1440p', label: '1440p (2560×1440)' },
+        { value: '1080p', label: '1080p (1920×1080)' },
+        { value: '720p', label: '720p (1280×720)' },
+      ];
+    }
+    return [
+      { value: 'source', label: sourceLabel },
+      { value: '1080p', label: '1080p-class (1440×1080)' },
+      { value: '720p', label: '720p-class (960×720)' },
+    ];
+  }, [info?.source_width, info?.source_height, info?.aspect_ratio]);
+
+  // Keep the selected quality valid if the option list changes underneath it
+  // (e.g. editor-info arrives after the modal was already opened once).
+  useEffect(() => {
+    if (!exportQualityOptions.some((o) => o.value === exportQuality)) {
+      setExportQuality(exportQualityOptions[0]?.value ?? 'source');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exportQualityOptions]);
+
+  const startExportPoll = useCallback(() => {
+    if (!id) return;
+    activeExportIdRef.current = id;
+    if (exportPollRef.current) window.clearInterval(exportPollRef.current);
+    const poll = async () => {
+      if (activeExportIdRef.current !== id) {
+        if (exportPollRef.current) window.clearInterval(exportPollRef.current);
+        return;
+      }
+      try {
+        const data = await api.get<EditorExportStatus>(`/admin/videos/${id}/editor-export/status`);
+        if (activeExportIdRef.current !== id) return;
+        setExportStatus(data);
+        if (data.status !== 'queued' && data.status !== 'processing' && exportPollRef.current) {
+          window.clearInterval(exportPollRef.current);
+          exportPollRef.current = null;
+        }
+      } catch {
+        // Transient poll failure — leave the interval running, next tick retries.
+      }
+    };
+    exportPollRef.current = window.setInterval(poll, 2000);
+    poll();
+  }, [id]);
+
+  const openExportModal = useCallback(() => {
+    setExportStartError(null);
+    setExportModalOpen(true);
+    if (!id) return;
+    activeExportIdRef.current = id;
+    api
+      .get<EditorExportStatus>(`/admin/videos/${id}/editor-export/status`)
+      .then((data) => {
+        if (activeExportIdRef.current !== id) return;
+        setExportStatus(data);
+        if (data.status === 'queued' || data.status === 'processing') startExportPoll();
+      })
+      .catch(() => {
+        // No job yet, or the fetch failed — the modal just starts from its idle state.
+      });
+  }, [id, startExportPoll]);
+
+  const handleStartExport = useCallback(async () => {
+    if (!id) return;
+    setExportStarting(true);
+    setExportStartError(null);
+    try {
+      const job = await api.post<{ id: number; status: string; progress_pct: number; quality: string | null }>(
+        `/admin/videos/${id}/editor-export`,
+        { quality: exportQuality },
+      );
+      if (activeExportIdRef.current !== id) return;
+      setExportStatus({
+        id: job.id,
+        status: job.status as EditorExportStatus['status'],
+        progress_pct: job.progress_pct,
+        quality: job.quality ?? exportQuality,
+        error: null,
+        download_available: false,
+        output_filename: null,
+      });
+      startExportPoll();
+    } catch (err) {
+      if (activeExportIdRef.current !== id) return;
+      setExportStartError(toApiError(err));
+    } finally {
+      if (activeExportIdRef.current === id) setExportStarting(false);
+    }
+  }, [id, exportQuality, startExportPoll]);
+
+  const exportDownloadUrl = id ? `${API_BASE}/admin/videos/${id}/editor-export/download` : null;
+
+  // One-shot check on load so the header button (and its "Rendering… N%"
+  // label) reflects a render already in flight from a previous visit —
+  // resumes the poll automatically rather than waiting for the user to
+  // reopen the modal.
+  useEffect(() => {
+    if (!id) return;
+    activeExportIdRef.current = id;
+    let cancelled = false;
+    api
+      .get<EditorExportStatus>(`/admin/videos/${id}/editor-export/status`)
+      .then((data) => {
+        if (cancelled || activeExportIdRef.current !== id) return;
+        setExportStatus(data);
+        if (data.status === 'queued' || data.status === 'processing') startExportPoll();
+      })
+      .catch(() => {
+        // No job yet — fine, header button stays in its idle state.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
   // Belt-and-braces sync for the remove-audio toggle: React's `muted` prop on
   // <video> only reliably sets the DOM property on the initial render in
   // some browsers, so re-apply it directly via the ref on every change.
@@ -609,6 +754,20 @@ export const AdminVideoEditor: React.FC = () => {
               </span>
               Remove audio
             </button>
+            <button
+              onClick={openExportModal}
+              title={
+                exportStatus?.status === 'queued' || exportStatus?.status === 'processing'
+                  ? `Rendering… ${exportStatus.progress_pct}%`
+                  : 'Render the edit list to a downloadable mp4'
+              }
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[13px] font-medium bg-primary hover:bg-blue-500 text-white shrink-0"
+            >
+              <span className="material-symbols-outlined text-base">movie</span>
+              {exportStatus?.status === 'queued' || exportStatus?.status === 'processing'
+                ? `Rendering… ${exportStatus.progress_pct}%`
+                : 'Export mp4'}
+            </button>
           </>
         )}
         <span className="text-[10px] font-bold tracking-[0.1em] text-[#F5A524] border border-[#F5A524]/40 rounded-full px-2.5 py-0.5">
@@ -758,6 +917,22 @@ export const AdminVideoEditor: React.FC = () => {
           onSelectSuggestion={handleSelectSuggestion}
         />
       )}
+
+      <ExportModal
+        open={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        edits={edits}
+        muted={muted}
+        style={style}
+        quality={exportQuality}
+        onQualityChange={setExportQuality}
+        qualityOptions={exportQualityOptions}
+        status={exportStatus}
+        starting={exportStarting}
+        startError={exportStartError}
+        onStart={handleStartExport}
+        downloadUrl={exportDownloadUrl}
+      />
     </div>
   );
 };

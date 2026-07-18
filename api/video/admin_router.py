@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from loguru import logger as log
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
+from fastapi.responses import FileResponse
 
 from video.schemas import (
     VideoAdminResponse, VideoCreate, VideoUpdate, ChapterResponse,
@@ -20,7 +21,9 @@ from video.schemas import (
     SeedNoteResponse, JobStatusResponse, BannerConfigResponse, BannerConfigUpdate,
     TrimRequest, CutRequest, SpeedSectionRequest, AttachmentResponse, AttachmentUpdate,
     VideoEditorInfoResponse, VideoEditorDraftResponse, VideoEditorDraftUpdate,
-    VideoFilmstripResponse, EditorSuggestion, EditorSuggestAnalyzeRequest,
+    VideoFilmstripResponse, EditorExportRequest, EditorExportJobResponse,
+    EditorExportStatusResponse, export_quality_options_for_aspect,
+    EditorSuggestion, EditorSuggestAnalyzeRequest,
     EditorSuggestAnalyzeResponse, EditorSuggestionStateUpdate,
 )
 from pydantic import BaseModel
@@ -345,27 +348,50 @@ async def admin_storage_info(video_id: str, admin: dict = Depends(require_admin)
         if os.path.isfile(fpath):
             filmstrip_size += os.path.getsize(fpath)
 
+    # Editor exports (issue #260) — unlike hls/thumb/filmstrip these are
+    # user-downloadable *products*, not derived caches, so cleanup below
+    # DOES remove them (freeing real disk space is the point of cleanup).
+    exports = []
+    exports_size = 0
+    exports_dir = os.path.join(video_dir, "exports")
+    if os.path.isdir(exports_dir):
+        for fname in sorted(os.listdir(exports_dir)):
+            fpath = os.path.join(exports_dir, fname)
+            if not os.path.isfile(fpath):
+                continue
+            size = os.path.getsize(fpath)
+            exports_size += size
+            exports.append({"name": fname, "size": size})
+
     return {
         "files": files, "hls_size": hls_size, "thumb_size": thumb_size,
         "filmstrip_size": filmstrip_size,
+        "exports": exports, "exports_size": exports_size,
     }
 
 
 @router.post("/videos/{video_id}/cleanup")
 async def admin_cleanup_video(video_id: str, admin: dict = Depends(require_admin)):
-    """Delete intermediate/backup files to free disk space.
+    """Delete intermediate/backup files (and editor exports) to free disk space.
 
-    Only scans raw/ for trim/cut/banner backups. The filmstrip sprite
-    (video_dir/filmstrip.jpg + .json) is a derived asset like hls/ or
+    Scans raw/ for trim/cut/banner backups, same as before. The filmstrip
+    sprite (video_dir/filmstrip.jpg + .json) is a derived asset like hls/ or
     thumb.jpg, not an intermediate — it's surfaced in storage-info but left
-    alone here; it self-invalidates and regenerates when original.mp4 changes.
+    alone here; it self-invalidates and regenerates when original.mp4
+    changes. Editor exports (issue #260) are different from all of those:
+    they're the user-downloadable *product* of a render, not a cache or a
+    backup, so cleanup deletes them too — reported separately as
+    `exports_deleted` so it's obvious in the response that real downloadable
+    files, not just scratch copies, were removed.
     """
     db = await get_db()
     await _require_video_access(db, video_id, admin)
     video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
     raw_dir = os.path.join(video_dir, "raw")
+    exports_dir = os.path.join(video_dir, "exports")
 
     deleted = []
+    exports_deleted = []
     freed_bytes = 0
 
     if os.path.isdir(raw_dir):
@@ -385,7 +411,17 @@ async def admin_cleanup_video(video_id: str, admin: dict = Depends(require_admin
                 freed_bytes += size
                 deleted.append(fname)
 
-    return {"deleted": deleted, "freed_bytes": freed_bytes}
+    if os.path.isdir(exports_dir):
+        for fname in os.listdir(exports_dir):
+            fpath = os.path.join(exports_dir, fname)
+            if not os.path.isfile(fpath):
+                continue
+            size = os.path.getsize(fpath)
+            os.remove(fpath)
+            freed_bytes += size
+            exports_deleted.append(fname)
+
+    return {"deleted": deleted, "exports_deleted": exports_deleted, "freed_bytes": freed_bytes}
 
 
 @router.post("/videos/{video_id}/transcode")
@@ -1039,6 +1075,130 @@ async def admin_upsert_editor_draft(
         video_id, edits_json, req.muted, style_json,
     )
     return _draft_row_to_response(video_id, row)
+
+
+# ── Editor export/render (issue #260) ──────────────────────
+#
+# Renders the saved EDL draft into a downloadable mp4 via the worker
+# container (which owns ffmpeg + GPU access) rather than the API process.
+# `mode` is hardcoded to 'download' here — 'apply' (re-render the source in
+# place) is a later slice; the job row's mode column already supports it.
+
+@router.post("/videos/{video_id}/editor-export", response_model=EditorExportJobResponse)
+async def admin_start_editor_export(
+    video_id: str, req: EditorExportRequest, admin: dict = Depends(verify_video_access)
+):
+    """Snapshot the current EDL draft into a queued render job.
+
+    409s if a job for this video is already queued or processing — only one
+    export renders per video at a time.
+    """
+    db = await get_db()
+
+    raw_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original.mp4")
+    if not os.path.exists(raw_path):
+        raise HTTPException(status_code=400, detail="No raw video file found")
+
+    active = await db.fetchval(
+        "SELECT id FROM edit_render_jobs WHERE video_id = $1 AND status IN ('queued', 'processing') LIMIT 1",
+        video_id,
+    )
+    if active:
+        raise HTTPException(status_code=409, detail="A render is already in progress for this video")
+
+    dims = await _probe_video_dims_async(raw_path)
+    aspect_ratio = (dims[0] / dims[1]) if dims else None
+    allowed = export_quality_options_for_aspect(aspect_ratio)
+    if req.quality not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"quality must be one of {list(allowed)} for this source's aspect ratio",
+        )
+
+    draft_row = await db.fetchrow("SELECT * FROM video_editor_drafts WHERE video_id = $1", video_id)
+    if draft_row:
+        draft = _draft_row_to_response(video_id, draft_row)
+    else:
+        draft = VideoEditorDraftResponse(
+            video_id=video_id, edits=[], muted=False, style=_DEFAULT_EDITOR_STYLE,
+            updated_at=datetime.now(timezone.utc),
+        )
+
+    edl_snapshot = {
+        "edits": [e.model_dump() for e in draft.edits],
+        "muted": draft.muted,
+        "style": draft.style.model_dump(),
+        "quality": req.quality,
+    }
+
+    row = await db.fetchrow(
+        """
+        INSERT INTO edit_render_jobs (video_id, edl, mode, status)
+        VALUES ($1, $2, 'download', 'queued')
+        RETURNING *
+        """,
+        video_id, json.dumps(edl_snapshot),
+    )
+    return EditorExportJobResponse(
+        id=row["id"], video_id=video_id, status=row["status"],
+        progress_pct=row["progress_pct"], quality=req.quality, error=row["error"],
+        created_at=row["created_at"],
+    )
+
+
+@router.get("/videos/{video_id}/editor-export/status", response_model=EditorExportStatusResponse)
+async def admin_editor_export_status(video_id: str, admin: dict = Depends(verify_video_access)):
+    """Latest render job for this video, for the export modal's progress
+    poll. `status='none'` means no export has ever been requested."""
+    db = await get_db()
+    row = await db.fetchrow(
+        "SELECT * FROM edit_render_jobs WHERE video_id = $1 ORDER BY created_at DESC LIMIT 1",
+        video_id,
+    )
+    if not row:
+        return EditorExportStatusResponse(status="none")
+
+    quality = None
+    try:
+        edl = row["edl"] if isinstance(row["edl"], dict) else json.loads(row["edl"])
+        quality = edl.get("quality")
+    except Exception:
+        pass
+
+    download_available = bool(
+        row["status"] == "done" and row["output_path"] and os.path.exists(row["output_path"])
+    )
+
+    return EditorExportStatusResponse(
+        id=row["id"], status=row["status"], progress_pct=row["progress_pct"],
+        quality=quality, error=row["error"], download_available=download_available,
+        output_filename=os.path.basename(row["output_path"]) if download_available else None,
+        created_at=row["created_at"], completed_at=row["completed_at"],
+    )
+
+
+@router.get("/videos/{video_id}/editor-export/download")
+async def admin_editor_export_download(video_id: str, admin: dict = Depends(verify_video_access)):
+    """Stream the most recently completed export as an attachment.
+
+    Deliberately a dedicated authenticated FastAPI route rather than the
+    /streams static path — /streams is served unauthenticated straight off
+    disk by the frontend nginx container, which would leak downloadable
+    exports to anyone with the URL.
+    """
+    db = await get_db()
+    row = await db.fetchrow(
+        "SELECT * FROM edit_render_jobs WHERE video_id = $1 AND status = 'done' "
+        "ORDER BY completed_at DESC NULLS LAST, created_at DESC LIMIT 1",
+        video_id,
+    )
+    if not row or not row["output_path"] or not os.path.exists(row["output_path"]):
+        raise HTTPException(status_code=404, detail="No completed export available for download")
+
+    return FileResponse(
+        row["output_path"], media_type="video/mp4",
+        filename=os.path.basename(row["output_path"]),
+    )
 
 
 # ── Silence-gap suggestions (issue #259) ────────────────────
