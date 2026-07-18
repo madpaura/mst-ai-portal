@@ -478,3 +478,16 @@ class JobStatusResponse(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     created_at: datetime
+
+
+class VideoEditorInfoResponse(BaseModel):
+    """Bootstrap payload for the standalone video editor page (issue #255)."""
+    id: str
+    title: str
+    duration_s: Optional[int] = None
+    status: str
+    raw_url: str
+    raw_available: bool
+    source_width: Optional[int] = None
+    source_height: Optional[int] = None
+    aspect_ratio: Optional[float] = None

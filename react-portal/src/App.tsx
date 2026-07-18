@@ -16,6 +16,7 @@ const IgniteBrowse     = React.lazy(() => import('./pages/IgniteBrowse').then(m 
 const Howto            = React.lazy(() => import('./pages/Howto').then(m => ({ default: m.Howto })));
 const Login            = React.lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
 const AdminVideos      = React.lazy(() => import('./pages/AdminVideos').then(m => ({ default: m.AdminVideos })));
+const AdminVideoEditor = React.lazy(() => import('./pages/AdminVideoEditor').then(m => ({ default: m.AdminVideoEditor })));
 const AdminCourses     = React.lazy(() => import('./pages/AdminCourses').then(m => ({ default: m.AdminCourses })));
 const AdminCourseCurriculum = React.lazy(() => import('./pages/AdminCourseCurriculum').then(m => ({ default: m.AdminCourseCurriculum })));
 const Courses          = React.lazy(() => import('./pages/Courses').then(m => ({ default: m.Courses })));
@@ -99,6 +100,11 @@ function App() {
           <Route path="/contribute" element={<ContributeRequest />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/search" element={<Search />} />
+
+          {/* Standalone video editor — full-page dark chrome, opened in a new
+              tab from AdminVideos.tsx. Deliberately NOT nested under
+              AdminLayout (issue #255): it owns its own auth guard and chrome. */}
+          <Route path="/admin/videos/:id/editor" element={<AdminVideoEditor />} />
 
           {/* Admin pages (protected by AdminLayout) */}
           <Route path="/admin" element={<AdminLayout />}>

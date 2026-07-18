@@ -201,15 +201,6 @@ export const AdminVideos: React.FC = () => {
   const [emailShowSaved, setEmailShowSaved] = useState(false);
   const emailCsvRef = useRef<HTMLInputElement>(null);
 
-  // Trim / Cut / Speed
-  const [trimStart, setTrimStart] = useState(0);
-  const [trimEnd, setTrimEnd] = useState(0);
-  const [trimming, setTrimming] = useState(false);
-  const [trimMode, setTrimMode] = useState<'trim' | 'cut' | 'speed'>('trim');
-  const [speedFactor, setSpeedFactor] = useState<number>(2);
-  const [dragging, setDragging] = useState<'start' | 'end' | null>(null);
-  const timelineRef = useRef<HTMLDivElement>(null);
-
   // Upload
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -732,85 +723,6 @@ export const AdminVideos: React.FC = () => {
       showMsg('success', 'Transcode queued');
     } catch (err: unknown) {
       showMsg('error', toApiError(err));
-    }
-  };
-
-  const handleTrim = async () => {
-    if (!selected) return;
-    if (trimEnd <= trimStart) {
-      showMsg('error', 'End time must be after start time');
-      return;
-    }
-    setTrimming(true);
-    try {
-      await api.post(`/admin/videos/${selected.id}/trim`, {
-        start_seconds: trimStart,
-        end_seconds: trimEnd,
-      });
-      await fetchVideos();
-      markEdited(selected.id);
-      showMsg('success', `Trim started: ${trimStart}s — ${trimEnd}s. Transcode when ready.`);
-    } catch (err: unknown) {
-      showMsg('error', toApiError(err));
-    } finally {
-      setTrimming(false);
-    }
-  };
-
-  const handleCut = async () => {
-    if (!selected) return;
-    if (trimEnd <= trimStart) {
-      showMsg('error', 'End time must be after start time');
-      return;
-    }
-    setTrimming(true);
-    try {
-      await api.post(`/admin/videos/${selected.id}/cut`, {
-        start_seconds: trimStart,
-        end_seconds: trimEnd,
-      });
-      await fetchVideos();
-      markEdited(selected.id);
-      showMsg('success', `Cut started: removing ${trimStart}s — ${trimEnd}s. Transcode when ready.`);
-    } catch (err: unknown) {
-      showMsg('error', toApiError(err));
-    } finally {
-      setTrimming(false);
-    }
-  };
-
-  const handleSpeedSection = async () => {
-    if (!selected) return;
-    if (trimEnd <= trimStart) {
-      showMsg('error', 'End time must be after start time');
-      return;
-    }
-    setTrimming(true);
-    try {
-      await api.post(`/admin/videos/${selected.id}/speed-section`, {
-        start_seconds: trimStart,
-        end_seconds: trimEnd,
-        speed_factor: speedFactor,
-      });
-      await fetchVideos();
-      markEdited(selected.id);
-      showMsg('success', `Speed-up started: ${trimStart}s — ${trimEnd}s at ${speedFactor}x. Transcode when ready.`);
-    } catch (err: unknown) {
-      showMsg('error', toApiError(err));
-    } finally {
-      setTrimming(false);
-    }
-  };
-
-  const handleTimelineDrag = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!dragging || !timelineRef.current || playerDuration <= 0) return;
-    const rect = timelineRef.current.getBoundingClientRect();
-    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const t = Math.round(pct * playerDuration * 10) / 10;
-    if (dragging === 'start') {
-      setTrimStart(Math.min(t, trimEnd - 0.1));
-    } else {
-      setTrimEnd(Math.max(t, trimStart + 0.1));
     }
   };
 
@@ -2000,7 +1912,7 @@ export const AdminVideos: React.FC = () => {
                       : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white border-transparent'
                   }`}
                 >
-                  {tab === 'seed-notes' ? 'Seed Notes' : tab === 'howto' ? 'How-To' : tab === 'transcript' ? '🎙 Transcript' : tab === 'banner' ? '🎬 Banner' : tab === 'trim' ? '✂️ Trim' : tab === 'attachments' ? 'Attachments' : tab === 'email' ? '📧 Email' : tab}
+                  {tab === 'seed-notes' ? 'Seed Notes' : tab === 'howto' ? 'How-To' : tab === 'transcript' ? '🎙 Transcript' : tab === 'banner' ? '🎬 Banner' : tab === 'trim' ? '🎬 Editor' : tab === 'attachments' ? 'Attachments' : tab === 'email' ? '📧 Email' : tab}
                 </button>
               ))}
             </div>
@@ -2546,273 +2458,30 @@ export const AdminVideos: React.FC = () => {
 
             {activeTab === 'trim' && (
               <div className="space-y-5">
-                {/* Mode Toggle */}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setTrimMode('trim')}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                      trimMode === 'trim'
-                        ? 'bg-primary text-white'
-                        : 'bg-panel-light dark:bg-panel-dark/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-sm">crop</span>
-                    Trim
-                  </button>
-                  <button
-                    onClick={() => setTrimMode('cut')}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                      trimMode === 'cut'
-                        ? 'bg-red-500 text-white'
-                        : 'bg-panel-light dark:bg-panel-dark/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-sm">content_cut</span>
-                    Cut
-                  </button>
-                  <button
-                    onClick={() => setTrimMode('speed')}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                      trimMode === 'speed'
-                        ? 'bg-orange-500 text-white'
-                        : 'bg-panel-light dark:bg-panel-dark/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-sm">fast_forward</span>
-                    Speed Up
-                  </button>
-                </div>
-                <p className="text-sm text-text-muted">
-                  {trimMode === 'trim'
-                    ? 'Trim keeps only the section between start and end times. The original is backed up before the first trim.'
-                    : trimMode === 'cut'
-                    ? 'Cut removes the section between start and end times, keeping everything before and after. The original is backed up before the first cut.'
-                    : 'Speed Up accelerates the selected section by the chosen factor. Drag the handles on the timeline or use the inputs to define the section.'}
-                </p>
-
-                {/* Speed factor selector */}
-                {trimMode === 'speed' && (
-                  <div className="flex items-center gap-2 p-3 rounded-xl bg-orange-500/5 border border-orange-500/20">
-                    <span className="text-xs font-bold text-text-muted uppercase tracking-wider mr-1">Speed Factor</span>
-                    {[2, 4, 8, 16, 32].map((f) => (
-                      <button
-                        key={f}
-                        onClick={() => setSpeedFactor(f)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                          speedFactor === f
-                            ? 'bg-orange-500 text-white'
-                            : 'bg-panel-light dark:bg-panel-dark/50 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-white/10'
-                        }`}
-                      >
-                        {f}x
-                      </button>
-                    ))}
+                <div className="p-8 rounded-xl bg-gradient-to-br from-primary/5 to-transparent border border-primary/20 text-center space-y-4">
+                  <div className="w-14 h-14 mx-auto rounded-2xl bg-primary/15 border border-primary/30 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-primary text-3xl">movie_edit</span>
                   </div>
-                )}
-
-                {/* Timeline with trim markers */}
-                {(selected.hls_path || selected.status !== 'draft') && playerDuration > 0 ? (
-                  <div className="px-1">
-                    <div
-                      ref={timelineRef}
-                      className={`relative w-full h-10 bg-muted-light dark:bg-muted-dark/50 rounded-lg border border-slate-300 dark:border-white/5 overflow-hidden ${dragging ? 'cursor-grabbing' : 'cursor-default'}`}
-                      onMouseMove={handleTimelineDrag}
-                      onMouseUp={() => setDragging(null)}
-                      onMouseLeave={() => setDragging(null)}
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Video Editor</h3>
+                    <p className="text-sm text-text-muted mt-1 max-w-md mx-auto">
+                      Open the non-destructive editor in a new tab to preview the source and,
+                      in upcoming slices, trim, cut and speed up sections on a full timeline.
+                    </p>
+                  </div>
+                  {(selected.hls_path || selected.status !== 'draft') ? (
+                    <a
+                      href={`/admin/videos/${selected.id}/editor`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors"
                     >
-                      {/* Playhead */}
-                      {playerDuration > 0 && (
-                        <div
-                          className="absolute top-0 h-full w-0.5 bg-slate-700/80 dark:bg-white/60 z-20 pointer-events-none"
-                          style={{ left: `${(playerTime / playerDuration) * 100}%` }}
-                        />
-                      )}
-                      {/* Selected region */}
-                      {playerDuration > 0 && trimEnd > trimStart && trimMode === 'trim' && (
-                        <div
-                          className="absolute top-0 h-full bg-primary/20 border-x-2 border-primary/60 z-10 pointer-events-none"
-                          style={{
-                            left: `${(trimStart / playerDuration) * 100}%`,
-                            width: `${((trimEnd - trimStart) / playerDuration) * 100}%`,
-                          }}
-                        />
-                      )}
-                      {/* Cut region (striped to indicate removal) */}
-                      {playerDuration > 0 && trimEnd > trimStart && trimMode === 'cut' && (
-                        <>
-                          <div
-                            className="absolute top-0 h-full bg-red-500/20 border-x-2 border-red-500/60 z-10 pointer-events-none"
-                            style={{
-                              left: `${(trimStart / playerDuration) * 100}%`,
-                              width: `${((trimEnd - trimStart) / playerDuration) * 100}%`,
-                              backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(239,68,68,0.15) 4px, rgba(239,68,68,0.15) 8px)',
-                            }}
-                          />
-                          {/* Kept regions */}
-                          {trimStart > 0 && (
-                            <div
-                              className="absolute top-0 h-full bg-green-500/10 z-[5] pointer-events-none"
-                              style={{
-                                left: '0%',
-                                width: `${(trimStart / playerDuration) * 100}%`,
-                              }}
-                            />
-                          )}
-                          <div
-                            className="absolute top-0 h-full bg-green-500/10 z-[5] pointer-events-none"
-                            style={{
-                              left: `${(trimEnd / playerDuration) * 100}%`,
-                              width: `${((playerDuration - trimEnd) / playerDuration) * 100}%`,
-                            }}
-                          />
-                        </>
-                      )}
-                      {/* Speed-up region (orange) */}
-                      {playerDuration > 0 && trimEnd > trimStart && trimMode === 'speed' && (
-                        <div
-                          className="absolute top-0 h-full bg-orange-500/25 border-x-2 border-orange-400/60 z-10 pointer-events-none"
-                          style={{
-                            left: `${(trimStart / playerDuration) * 100}%`,
-                            width: `${((trimEnd - trimStart) / playerDuration) * 100}%`,
-                            backgroundImage: 'repeating-linear-gradient(-45deg, transparent, transparent 4px, rgba(249,115,22,0.15) 4px, rgba(249,115,22,0.15) 8px)',
-                          }}
-                        />
-                      )}
-                      {/* Start marker (draggable) */}
-                      {playerDuration > 0 && (
-                        <div
-                          className="absolute top-0 h-full w-2 bg-green-400 z-30 cursor-ew-resize hover:bg-green-300 transition-colors"
-                          style={{ left: `${(trimStart / playerDuration) * 100}%`, transform: 'translateX(-50%)' }}
-                          title={`Start: ${formatDuration(trimStart)} — drag to adjust`}
-                          onMouseDown={(e) => { e.preventDefault(); setDragging('start'); }}
-                        />
-                      )}
-                      {/* End marker (draggable) */}
-                      {playerDuration > 0 && trimEnd > 0 && (
-                        <div
-                          className="absolute top-0 h-full w-2 bg-red-400 z-30 cursor-ew-resize hover:bg-red-300 transition-colors"
-                          style={{ left: `${(trimEnd / playerDuration) * 100}%`, transform: 'translateX(-50%)' }}
-                          title={`End: ${formatDuration(trimEnd)} — drag to adjust`}
-                          onMouseDown={(e) => { e.preventDefault(); setDragging('end'); }}
-                        />
-                      )}
-                    </div>
-                    <div className="flex justify-between text-[10px] text-slate-500 dark:text-slate-600 mt-1 px-0.5">
-                      <span>0:00</span>
-                      <span>{formatDuration(Math.floor(playerDuration))}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-4 rounded-xl bg-input-light dark:bg-input-dark/30 border border-slate-200 dark:border-white/5 text-center">
-                    <p className="text-slate-500 text-sm">Upload a video first to use the trim tool.</p>
-                  </div>
-                )}
-
-                {/* Trim Controls */}
-                <div className="flex items-end gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
-                  <div className="w-40">
-                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Start (seconds)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      min={0}
-                      value={trimStart}
-                      onChange={(e) => setTrimStart(parseFloat(e.target.value) || 0)}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
-                    />
-                  </div>
-                  <button
-                    onClick={() => setTrimStart(Math.floor(playerTime * 10) / 10)}
-                    className="px-3 py-2 bg-green-50 dark:bg-green-500/20 hover:bg-green-100 dark:hover:bg-green-500/30 text-green-700 dark:text-green-400 text-xs font-bold rounded-lg transition-colors border border-green-200 dark:border-green-500/30"
-                    title="Set start to current player position"
-                  >
-                    <span className="material-symbols-outlined text-sm">first_page</span>
-                  </button>
-                  <div className="w-40">
-                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">End (seconds)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      min={0}
-                      value={trimEnd}
-                      onChange={(e) => setTrimEnd(parseFloat(e.target.value) || 0)}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
-                    />
-                  </div>
-                  <button
-                    onClick={() => setTrimEnd(Math.floor(playerTime * 10) / 10)}
-                    className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs font-bold rounded-lg transition-colors border border-red-500/30"
-                    title="Set end to current player position"
-                  >
-                    <span className="material-symbols-outlined text-sm">last_page</span>
-                  </button>
-                  <div className="flex-1" />
-                  <button
-                    onClick={() => { if (playerDuration > 0) { setTrimStart(0); setTrimEnd(Math.floor(playerDuration * 10) / 10); } }}
-                    className="px-3 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 text-xs rounded-lg transition-colors"
-                  >
-                    Full Duration
-                  </button>
-                </div>
-
-                {/* Summary & Execute */}
-                <div className="flex items-center justify-between p-4 rounded-xl bg-input-light dark:bg-input-dark/30 border border-slate-200 dark:border-white/5">
-                  <div className="text-sm text-text">
-                    {trimEnd > trimStart ? (
-                      trimMode === 'trim' ? (
-                        <>
-                          Keep <span className="font-bold text-slate-900 dark:text-white">{formatDuration(Math.floor(trimStart))}</span>
-                          {' → '}
-                          <span className="font-bold text-slate-900 dark:text-white">{formatDuration(Math.floor(trimEnd))}</span>
-                          {' '}
-                          <span className="text-slate-500">({formatDuration(Math.floor(trimEnd - trimStart))} duration)</span>
-                        </>
-                      ) : trimMode === 'cut' ? (
-                        <>
-                          Remove <span className="font-bold text-red-400">{formatDuration(Math.floor(trimStart))}</span>
-                          {' → '}
-                          <span className="font-bold text-red-400">{formatDuration(Math.floor(trimEnd))}</span>
-                          {' '}
-                          <span className="text-slate-500">({formatDuration(Math.floor(trimEnd - trimStart))} removed)</span>
-                        </>
-                      ) : (
-                        <>
-                          Speed up <span className="font-bold text-orange-400">{formatDuration(Math.floor(trimStart))}</span>
-                          {' → '}
-                          <span className="font-bold text-orange-400">{formatDuration(Math.floor(trimEnd))}</span>
-                          {' '}
-                          <span className="text-slate-500">at {speedFactor}x ({formatDuration(Math.floor((trimEnd - trimStart) / speedFactor))} after)</span>
-                        </>
-                      )
-                    ) : (
-                      <span className="text-slate-500">Set start and end times to define the {trimMode} region</span>
-                    )}
-                  </div>
-                  <button
-                    onClick={trimMode === 'trim' ? handleTrim : trimMode === 'cut' ? handleCut : handleSpeedSection}
-                    disabled={trimming || trimEnd <= trimStart}
-                    className={`flex items-center gap-2 px-5 py-2.5 disabled:opacity-30 text-white text-sm font-bold rounded-lg transition-colors ${
-                      trimMode === 'trim'
-                        ? 'bg-primary hover:bg-blue-500'
-                        : trimMode === 'cut'
-                        ? 'bg-red-600 hover:bg-red-500'
-                        : 'bg-orange-500 hover:bg-orange-400'
-                    }`}
-                  >
-                    {trimming ? (
-                      <>
-                        <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
-                        {trimMode === 'trim' ? 'Trimming...' : trimMode === 'cut' ? 'Cutting...' : 'Processing...'}
-                      </>
-                    ) : (
-                      <>
-                        <span className="material-symbols-outlined text-sm">
-                          {trimMode === 'trim' ? 'crop' : trimMode === 'cut' ? 'content_cut' : 'fast_forward'}
-                        </span>
-                        {trimMode === 'trim' ? 'Trim Video' : trimMode === 'cut' ? 'Cut Video' : `Speed Up ${speedFactor}x`}
-                      </>
-                    )}
-                  </button>
+                      <span className="material-symbols-outlined text-sm">open_in_new</span>
+                      Open Editor
+                    </a>
+                  ) : (
+                    <p className="text-xs text-slate-500">Upload a video first to use the editor.</p>
+                  )}
                 </div>
               </div>
             )}

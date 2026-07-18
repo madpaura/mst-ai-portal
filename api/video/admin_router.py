@@ -17,6 +17,7 @@ from video.schemas import (
     QualitySettingResponse, QualitySettingUpdate, SeedNoteCreate,
     SeedNoteResponse, JobStatusResponse, BannerConfigResponse, BannerConfigUpdate,
     TrimRequest, CutRequest, SpeedSectionRequest, AttachmentResponse, AttachmentUpdate,
+    VideoEditorInfoResponse,
 )
 from pydantic import BaseModel
 from auth.dependencies import require_content as require_admin
@@ -907,6 +908,59 @@ async def admin_ops_log(video_id: str, admin: dict = Depends(verify_video_access
         return json.loads(open(log_path).read())
     except Exception:
         return []
+
+
+# ── Editor (issue #255 — shell + preview tracer slice) ──────
+
+async def _probe_video_dims_async(path: str) -> tuple[int, int] | None:
+    """Return (width, height) of the first video stream via ffprobe (non-blocking)."""
+    ffprobe = settings.FFMPEG_PATH.replace("ffmpeg", "ffprobe")
+    rc, out = await _run_probe_async(
+        ffprobe, "-v", "quiet", "-print_format", "json", "-show_streams", path,
+    )
+    if rc == 0:
+        try:
+            streams = json.loads(out).get("streams", [])
+            vstream = next((s for s in streams if s.get("codec_type") == "video"), None)
+            if vstream:
+                w, h = int(vstream["width"]), int(vstream["height"])
+                if w > 0 and h > 0:
+                    return w, h
+        except Exception:
+            pass
+    return None
+
+
+@router.get("/videos/{video_id}/editor-info", response_model=VideoEditorInfoResponse)
+async def admin_editor_info(video_id: str, admin: dict = Depends(require_admin)):
+    """Bootstrap payload for the standalone video editor page: title, duration,
+    status, plus source width/height/aspect detected via ffprobe on the raw file.
+    Access matches other video admin endpoints (admin, or content-role owner)."""
+    db = await get_db()
+    video = await _require_video_access(db, video_id, admin)
+
+    raw_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original.mp4")
+    raw_available = os.path.exists(raw_path)
+
+    source_width = source_height = None
+    aspect_ratio = None
+    if raw_available:
+        dims = await _probe_video_dims_async(raw_path)
+        if dims:
+            source_width, source_height = dims
+            aspect_ratio = round(source_width / source_height, 6)
+
+    return VideoEditorInfoResponse(
+        id=str(video["id"]),
+        title=video["title"],
+        duration_s=video.get("duration_s"),
+        status=video["status"],
+        raw_url=f"/streams/{video_id}/raw/original.mp4",
+        raw_available=raw_available,
+        source_width=source_width,
+        source_height=source_height,
+        aspect_ratio=aspect_ratio,
+    )
 
 
 # ── Chapters ────────────────────────────────────────────────
