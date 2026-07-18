@@ -67,6 +67,7 @@ def _video_row_to_admin(r, job=None) -> VideoAdminResponse:
         sort_order=r["sort_order"], created_at=r["created_at"],
         job_status=job["status"] if job else None,
         job_error=job.get("error") if job else None,
+        pipeline_stale=bool(r.get("pipeline_stale")),
     )
 
 
@@ -1017,6 +1018,8 @@ async def admin_editor_info(video_id: str, admin: dict = Depends(require_admin))
         source_width=source_width,
         source_height=source_height,
         aspect_ratio=aspect_ratio,
+        pipeline_stale=bool(video.get("pipeline_stale")),
+        editor_applied_at=video.get("editor_applied_at"),
     )
 
 
@@ -1081,8 +1084,9 @@ async def admin_upsert_editor_draft(
 #
 # Renders the saved EDL draft into a downloadable mp4 via the worker
 # container (which owns ffmpeg + GPU access) rather than the API process.
-# `mode` is hardcoded to 'download' here — 'apply' (re-render the source in
-# place) is a later slice; the job row's mode column already supports it.
+# `mode='download'` here — 'apply' (re-render the source in place, issue
+# #261) is the sibling endpoint below; both share this table/worker and the
+# same "one active render per video" 409 guard.
 
 @router.post("/videos/{video_id}/editor-export", response_model=EditorExportJobResponse)
 async def admin_start_editor_export(
@@ -1140,8 +1144,72 @@ async def admin_start_editor_export(
         video_id, json.dumps(edl_snapshot),
     )
     return EditorExportJobResponse(
-        id=row["id"], video_id=video_id, status=row["status"],
+        id=row["id"], video_id=video_id, status=row["status"], mode="download",
         progress_pct=row["progress_pct"], quality=req.quality, error=row["error"],
+        created_at=row["created_at"],
+    )
+
+
+# ── Editor apply-to-video (issue #261) ──────────────────────
+#
+# Same render pipeline as editor-export, but mode='apply': the worker
+# re-renders at source resolution (no quality picker) and, on success,
+# swaps the rendered file in as the new raw/original.mp4 — see
+# process_render_job() in worker/transcoder.py for the swap/backup/stale-flag
+# logic. The 409 single-active-job guard below is identical to editor-export
+# and intentionally not mode-scoped: only one render (of either mode) may be
+# in flight for a video at a time.
+
+@router.post("/videos/{video_id}/editor-apply", response_model=EditorExportJobResponse)
+async def admin_start_editor_apply(
+    video_id: str, admin: dict = Depends(verify_video_access)
+):
+    """Snapshot the current EDL draft into a queued 'apply' render job.
+
+    Always renders at source resolution — there is no quality option for
+    apply. 409s if a render (export or apply) is already queued/processing
+    for this video.
+    """
+    db = await get_db()
+
+    raw_path = os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "raw", "original.mp4")
+    if not os.path.exists(raw_path):
+        raise HTTPException(status_code=400, detail="No raw video file found")
+
+    active = await db.fetchval(
+        "SELECT id FROM edit_render_jobs WHERE video_id = $1 AND status IN ('queued', 'processing') LIMIT 1",
+        video_id,
+    )
+    if active:
+        raise HTTPException(status_code=409, detail="A render is already in progress for this video")
+
+    draft_row = await db.fetchrow("SELECT * FROM video_editor_drafts WHERE video_id = $1", video_id)
+    if draft_row:
+        draft = _draft_row_to_response(video_id, draft_row)
+    else:
+        draft = VideoEditorDraftResponse(
+            video_id=video_id, edits=[], muted=False, style=_DEFAULT_EDITOR_STYLE,
+            updated_at=datetime.now(timezone.utc),
+        )
+
+    edl_snapshot = {
+        "edits": [e.model_dump() for e in draft.edits],
+        "muted": draft.muted,
+        "style": draft.style.model_dump(),
+        "quality": "source",  # apply always renders at source resolution
+    }
+
+    row = await db.fetchrow(
+        """
+        INSERT INTO edit_render_jobs (video_id, edl, mode, status)
+        VALUES ($1, $2, 'apply', 'queued')
+        RETURNING *
+        """,
+        video_id, json.dumps(edl_snapshot),
+    )
+    return EditorExportJobResponse(
+        id=row["id"], video_id=video_id, status=row["status"], mode="apply",
+        progress_pct=row["progress_pct"], quality="source", error=row["error"],
         created_at=row["created_at"],
     )
 
@@ -1170,7 +1238,7 @@ async def admin_editor_export_status(video_id: str, admin: dict = Depends(verify
     )
 
     return EditorExportStatusResponse(
-        id=row["id"], status=row["status"], progress_pct=row["progress_pct"],
+        id=row["id"], status=row["status"], mode=row["mode"], progress_pct=row["progress_pct"],
         quality=quality, error=row["error"], download_available=download_available,
         output_filename=os.path.basename(row["output_path"]) if download_available else None,
         created_at=row["created_at"], completed_at=row["completed_at"],
@@ -1184,11 +1252,13 @@ async def admin_editor_export_download(video_id: str, admin: dict = Depends(veri
     Deliberately a dedicated authenticated FastAPI route rather than the
     /streams static path — /streams is served unauthenticated straight off
     disk by the frontend nginx container, which would leak downloadable
-    exports to anyone with the URL.
+    exports to anyone with the URL. Scoped to mode='download' — an 'apply'
+    job never has a standalone output file (the render is swapped into
+    raw/original.mp4 instead), so it must never surface here.
     """
     db = await get_db()
     row = await db.fetchrow(
-        "SELECT * FROM edit_render_jobs WHERE video_id = $1 AND status = 'done' "
+        "SELECT * FROM edit_render_jobs WHERE video_id = $1 AND status = 'done' AND mode = 'download' "
         "ORDER BY completed_at DESC NULLS LAST, created_at DESC LIMIT 1",
         video_id,
     )

@@ -28,6 +28,10 @@ interface Video {
   job_status: string | null;
   job_error: string | null;
   created_at: string;
+  // Apply-to-video staleness (issue #261) — set true when a successful
+  // editor "apply" render shifted timestamps out from under an existing
+  // transcript/chapters.
+  pipeline_stale?: boolean;
 }
 
 interface Chapter {
@@ -113,6 +117,12 @@ export const AdminVideos: React.FC = () => {
     () => localStorage.getItem('mst_last_edited_video')
   );
   const [opsLog, setOpsLog] = useState<Array<{ op: string; file: string; ts: string }>>([]);
+
+  // Apply-to-video stale prompt (issue #261) — "Later" just collapses the
+  // banner for the currently-selected video; the flag itself is only
+  // cleared by the regenerate action (or a future apply).
+  const [staleBannerDismissedFor, setStaleBannerDismissedFor] = useState<string | null>(null);
+  const [regeneratingStale, setRegeneratingStale] = useState(false);
 
   const markEdited = (id: string) => {
     setLastEditedId(id);
@@ -912,6 +922,23 @@ export const AdminVideos: React.FC = () => {
       showMsg('success', 'Job cancelled');
     } catch (err: unknown) {
       showMsg('error', toApiError(err));
+    }
+  };
+
+  // Apply-to-video stale prompt (issue #261) — one click enqueues the
+  // existing transcript-then-chapters auto-job pipeline and clears
+  // pipeline_stale. Never triggered automatically.
+  const handleRegenerateStale = async () => {
+    if (!selected) return;
+    setRegeneratingStale(true);
+    try {
+      await api.post(`/admin/videos/${selected.id}/regenerate-stale`);
+      await fetchVideos();
+      showMsg('success', 'Transcript & chapters regeneration queued');
+    } catch (err: unknown) {
+      showMsg('error', toApiError(err));
+    } finally {
+      setRegeneratingStale(false);
     }
   };
 
@@ -2465,6 +2492,28 @@ export const AdminVideos: React.FC = () => {
 
             {activeTab === 'trim' && (
               <div className="space-y-5">
+                {selected.pipeline_stale && staleBannerDismissedFor !== selected.id && (
+                  <div className="flex items-center gap-3 p-3.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-sm text-amber-700 dark:text-amber-300">
+                    <span className="material-symbols-outlined text-base shrink-0">warning</span>
+                    <span className="flex-1">
+                      Timestamps changed — the transcript, captions and chapters no longer match the
+                      edited video. Regenerate them?
+                    </span>
+                    <button
+                      onClick={() => setStaleBannerDismissedFor(selected.id)}
+                      className="shrink-0 px-2.5 py-1 rounded-md text-xs font-medium border border-amber-500/40 hover:bg-amber-500/10"
+                    >
+                      Later
+                    </button>
+                    <button
+                      onClick={handleRegenerateStale}
+                      disabled={regeneratingStale}
+                      className="shrink-0 px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-500 text-black hover:bg-amber-400 disabled:opacity-50"
+                    >
+                      {regeneratingStale ? 'Queuing…' : 'Regenerate transcript & chapters'}
+                    </button>
+                  </div>
+                )}
                 <div className="p-8 rounded-xl bg-gradient-to-br from-primary/5 to-transparent border border-primary/20 text-center space-y-4">
                   <div className="w-14 h-14 mx-auto rounded-2xl bg-primary/15 border border-primary/30 flex items-center justify-center">
                     <span className="material-symbols-outlined text-primary text-3xl">movie_edit</span>

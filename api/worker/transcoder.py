@@ -270,7 +270,10 @@ async def process_job(pool: asyncpg.Pool, job):
 
         # 2. Fall back to newest .mp4 in the raw directory
         if not os.path.exists(raw_path) and os.path.isdir(raw_dir):
-            _exclude = {"original_pretrim.mp4", "original_precut.mp4", "original_no_banner.mp4"}
+            _exclude = {
+                "original_pretrim.mp4", "original_precut.mp4", "original_no_banner.mp4",
+                "original_preapply.mp4",
+            }
             candidates = [
                 f for f in os.listdir(raw_dir)
                 if f.endswith(".mp4") and f not in _exclude and ".cut_" not in f and ".trimmed" not in f
@@ -591,9 +594,11 @@ async def process_render_job(pool: asyncpg.Pool, job):
     edits = edl.get("edits", []) or []
     muted = bool(edl.get("muted", False))
     quality = edl.get("quality", "source")
+    mode = job["mode"]  # 'download' (issue #260) or 'apply' (issue #261)
 
     video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
-    raw_path = os.path.join(video_dir, "raw", "original.mp4")
+    raw_dir = os.path.join(video_dir, "raw")
+    raw_path = os.path.join(raw_dir, "original.mp4")
     if not os.path.exists(raw_path):
         await fail("Source file not found on disk")
         return
@@ -622,15 +627,22 @@ async def process_render_job(pool: asyncpg.Pool, job):
         segments, muted, quality, source_height,
     )
 
-    exports_dir = os.path.join(video_dir, "exports")
-    os.makedirs(exports_dir, exist_ok=True)
     ts = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
-    output_filename = f"edit_{ts}.mp4"
-    output_path = os.path.join(exports_dir, output_filename)
-    # Render to a temp path and os.replace() on success — mirrors the
-    # tmp-file + atomic-rename pattern used by the filmstrip generator, so a
-    # status/download poll can never observe a half-written mp4.
-    tmp_output = output_path + ".partial.mp4"
+    if mode == "apply":
+        # No standalone output file for 'apply' — the render lands in the raw/
+        # directory as a scratch file and gets os.replace()'d into
+        # original.mp4 once ffmpeg succeeds (see the completion block below).
+        output_path = None
+        tmp_output = os.path.join(raw_dir, f"original.apply_{ts}.mp4.partial")
+    else:
+        exports_dir = os.path.join(video_dir, "exports")
+        os.makedirs(exports_dir, exist_ok=True)
+        output_filename = f"edit_{ts}.mp4"
+        output_path = os.path.join(exports_dir, output_filename)
+        # Render to a temp path and os.replace() on success — mirrors the
+        # tmp-file + atomic-rename pattern used by the filmstrip generator, so
+        # a status/download poll can never observe a half-written mp4.
+        tmp_output = output_path + ".partial.mp4"
 
     gpu = get_gpu_info()
     encode_args = get_encode_args(crf=20)
@@ -720,6 +732,10 @@ async def process_render_job(pool: asyncpg.Pool, job):
             pass
         return
 
+    if mode == "apply":
+        await _finish_apply_render(pool, job_id, video_id, raw_dir, raw_path, tmp_output)
+        return
+
     os.replace(tmp_output, output_path)
     await pool.execute(
         "UPDATE edit_render_jobs SET status = 'done', progress_pct = 100, output_path = $1, completed_at = now() "
@@ -727,6 +743,94 @@ async def process_render_job(pool: asyncpg.Pool, job):
         output_path, job_id,
     )
     log.info(f"Render job #{job_id} completed -> {output_path}")
+
+
+async def _finish_apply_render(
+    pool: asyncpg.Pool, job_id: int, video_id: str, raw_dir: str, raw_path: str, tmp_output: str,
+) -> None:
+    """Swap a successful 'apply' render into raw/original.mp4 (issue #261).
+
+    Backs up the current raw file (single-level — original_preapply.mp4 is
+    overwritten on each apply, mirroring the original_pretrim.mp4 naming
+    convention used by the trim endpoint), atomically replaces original.mp4
+    with the new render, updates stored duration, marks the video stale if a
+    transcript/chapters existed (cuts shift downstream timestamps), clears
+    the editor draft so the next session starts empty, and auto-queues a
+    transcode so the published HLS reflects the edit.
+    """
+    backup_path = os.path.join(raw_dir, "original_preapply.mp4")
+    try:
+        shutil.copy2(raw_path, backup_path)
+    except OSError as e:
+        log.error(f"Apply render #{job_id} failed to back up raw file: {e}")
+        await pool.execute(
+            "UPDATE edit_render_jobs SET status = 'error', error = $1, completed_at = now() WHERE id = $2",
+            f"Could not back up current raw file before apply: {e}", job_id,
+        )
+        try:
+            os.remove(tmp_output)
+        except OSError:
+            pass
+        return
+
+    os.replace(tmp_output, raw_path)  # atomic — original.mp4 is now the edited render
+
+    new_duration = await asyncio.to_thread(get_duration, raw_path)
+
+    video_row = await pool.fetchrow("SELECT transcript_status FROM videos WHERE id = $1", video_id)
+    chapters_count = await pool.fetchval("SELECT COUNT(*) FROM video_chapters WHERE video_id = $1", video_id)
+    had_transcript_or_chapters = bool(video_row and video_row["transcript_status"] == "ready") or bool(
+        chapters_count and chapters_count > 0
+    )
+
+    await pool.execute(
+        """
+        UPDATE videos
+           SET duration_s = COALESCE($1, duration_s),
+               editor_applied_at = now(),
+               pipeline_stale = $2,
+               status = 'processing'
+         WHERE id = $3
+        """,
+        new_duration, had_transcript_or_chapters, video_id,
+    )
+    await pool.execute("INSERT INTO transcode_jobs (video_id) VALUES ($1)", video_id)
+
+    # Clear the draft — applied edits are now baked into original.mp4, so the
+    # next editor session should start from an empty, un-muted, unstyled EDL.
+    await pool.execute(
+        """
+        UPDATE video_editor_drafts
+           SET edits = '[]', muted = false,
+               style = '{"preset": "none", "pad_pct": 0, "radius_px": 0}',
+               suggestions = '[]', updated_at = now()
+         WHERE video_id = $1
+        """,
+        video_id,
+    )
+
+    # Ops log entry — mirrors admin_router._write_ops_log's format (the
+    # worker runs in a separate process/container so it keeps its own copy
+    # rather than importing the API router module).
+    ops_path = os.path.join(raw_dir, "ops.json")
+    try:
+        from datetime import datetime, timezone
+        ops = json.loads(open(ops_path).read()) if os.path.exists(ops_path) else []
+        ops.append({"op": "editor-apply", "file": "original.mp4", "ts": datetime.now(timezone.utc).isoformat()})
+        ops = ops[-50:]
+        with open(ops_path, "w") as f:
+            json.dump(ops, f)
+    except Exception:
+        pass
+
+    await pool.execute(
+        "UPDATE edit_render_jobs SET status = 'done', progress_pct = 100, completed_at = now() WHERE id = $1",
+        job_id,
+    )
+    log.info(
+        f"Apply render #{job_id} completed | video_id={video_id} duration={new_duration} "
+        f"pipeline_stale={had_transcript_or_chapters}"
+    )
 
 
 async def run_worker():

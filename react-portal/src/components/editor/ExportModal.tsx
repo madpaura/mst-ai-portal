@@ -2,11 +2,16 @@ import React from 'react';
 import type { EditOp, EditorStyle } from './types';
 import { fmtClock, opLabel } from './types';
 
-// Export mp4 confirm/progress modal (issue #260). Pure presentation — all
-// state (quality selection, the POST to start a render, and the status
-// poll) lives in AdminVideoEditor.tsx per the stale-poll pattern in
-// CLAUDE.md. This component only renders whatever it's handed and reports
-// user actions back via callbacks.
+// Export mp4 / Apply to video confirm/progress modal (issue #260, extended
+// for apply by issue #261). Pure presentation — all state (quality
+// selection, the POST to start a render, and the status poll) lives in
+// AdminVideoEditor.tsx per the stale-poll pattern in CLAUDE.md. This
+// component only renders whatever it's handed and reports user actions back
+// via callbacks. `mode` picks between the two render flows that share this
+// one modal, mirroring the shared job table/worker/status-endpoint on the
+// backend — 'apply' hides the quality picker (source resolution only) and,
+// once done, offers the regenerate-transcript-and-chapters prompt instead
+// of a download link.
 
 export interface EditorExportQualityOption {
   value: string;
@@ -16,6 +21,7 @@ export interface EditorExportQualityOption {
 export interface EditorExportStatus {
   id: number | null;
   status: 'none' | 'queued' | 'processing' | 'done' | 'error';
+  mode?: 'download' | 'apply';
   progress_pct: number;
   quality: string | null;
   error: string | null;
@@ -26,6 +32,7 @@ export interface EditorExportStatus {
 interface ExportModalProps {
   open: boolean;
   onClose: () => void;
+  mode: 'download' | 'apply';
   edits: EditOp[];
   muted: boolean;
   style: EditorStyle;
@@ -37,6 +44,13 @@ interface ExportModalProps {
   startError: string | null;
   onStart: () => void;
   downloadUrl: string | null;
+  // Apply-only (issue #261): whether the freshly-reloaded video info still
+  // shows pipeline_stale=true after the apply completed (there's nothing to
+  // regenerate if the video never had a transcript/chapters to begin with).
+  pipelineStale?: boolean;
+  onRegenerateStale?: () => void;
+  regeneratingStale?: boolean;
+  regenerateError?: string | null;
 }
 
 const COLORS: Record<string, string> = {
@@ -48,6 +62,7 @@ const COLORS: Record<string, string> = {
 export const ExportModal: React.FC<ExportModalProps> = ({
   open,
   onClose,
+  mode,
   edits,
   muted,
   style,
@@ -59,13 +74,22 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   startError,
   onStart,
   downloadUrl,
+  pipelineStale = false,
+  onRegenerateStale,
+  regeneratingStale = false,
+  regenerateError = null,
 }) => {
   if (!open) return null;
 
+  const isApply = mode === 'apply';
   const isActive = status?.status === 'queued' || status?.status === 'processing';
   const isDone = status?.status === 'done';
   const progressLabel =
-    status?.status === 'queued' ? 'Queued — waiting for worker…' : 'Rendering export…';
+    status?.status === 'queued'
+      ? 'Queued — waiting for worker…'
+      : isApply
+        ? 'Rendering on worker…'
+        : 'Rendering export…';
 
   return (
     <div
@@ -75,9 +99,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       }}
     >
       <div className="w-[440px] max-w-[92vw] rounded-2xl border border-[#243043] bg-[#141B28] p-6 text-[#E8EDF6]">
-        <h2 className="m-0 mb-1 text-base font-semibold">Export mp4</h2>
+        <h2 className="m-0 mb-1 text-base font-semibold">{isApply ? 'Apply to video' : 'Export mp4'}</h2>
         <p className="mb-4 text-[13px] text-[#96A2B8]">
-          Renders the edit list to a downloadable mp4. The portal video is not modified.
+          {isApply
+            ? 'Renders the edit list into a new original.mp4 (the old file is backed up), then queues a re-transcode. This replaces the published video.'
+            : 'Renders the edit list to a downloadable mp4. The portal video is not modified.'}
         </p>
 
         {/* Edit-list summary */}
@@ -111,8 +137,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           )}
         </ul>
 
-        {/* Quality picker + Start, hidden once a render is in flight */}
-        {!isActive && (
+        {/* Quality picker + Start, hidden once a render is in flight — Apply
+            always renders at source resolution, so it has no quality picker. */}
+        {!isActive && !isApply && (
           <div className="mb-4 flex items-center gap-2.5">
             <label htmlFor="export-quality" className="text-[13px] text-[#96A2B8]">
               Export quality
@@ -160,8 +187,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </div>
         )}
 
-        {/* Download row */}
-        {isDone && status?.download_available && downloadUrl && (
+        {/* Download row — download mode only; apply has no standalone file */}
+        {isDone && !isApply && status?.download_available && downloadUrl && (
           <div className="mb-4 flex items-center gap-2.5 rounded-lg border border-[#243043] bg-[#0F1520] px-3.5 py-2.5 text-[13px]">
             <span>📦</span>
             <div className="min-w-0 flex-1">
@@ -181,21 +208,67 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </div>
         )}
 
+        {/* Apply success panel (issue #261) — cuts/speed edits shift
+            downstream timestamps, so a stale transcript/chapters prompt
+            replaces the download row once the swap into original.mp4 is
+            done. Nothing regenerates without an explicit click here. */}
+        {isDone && isApply && (
+          <>
+            <div className="mb-4 flex items-center gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2.5 text-[13px] text-emerald-300">
+              <span className="material-symbols-outlined text-base">check_circle</span>
+              Applied — the video has been updated and a re-transcode is queued.
+            </div>
+            {pipelineStale && (
+              <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-[13px] text-amber-200">
+                <b>Timestamps changed.</b> The transcript, captions and chapters no longer
+                match the edited video. Regenerate them now?
+              </div>
+            )}
+            {regenerateError && (
+              <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-[13px] text-red-300">
+                {regenerateError}
+              </div>
+            )}
+          </>
+        )}
+
         <div className="flex justify-end gap-2.5">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-[#243043] bg-[#0F1520] px-3.5 py-1.5 text-[13px] font-medium hover:border-[#5C6880]"
-          >
-            {isActive ? 'Hide' : 'Cancel'}
-          </button>
-          {!isActive && (
-            <button
-              onClick={onStart}
-              disabled={starting}
-              className="rounded-lg bg-primary px-3.5 py-1.5 text-[13px] font-medium text-white hover:bg-blue-500 disabled:opacity-50"
-            >
-              {starting ? 'Starting…' : isDone ? 'Render again' : 'Start render'}
-            </button>
+          {isDone && isApply ? (
+            <>
+              <button
+                onClick={onClose}
+                className="rounded-lg border border-[#243043] bg-[#0F1520] px-3.5 py-1.5 text-[13px] font-medium hover:border-[#5C6880]"
+              >
+                {pipelineStale ? 'Later' : 'Done'}
+              </button>
+              {pipelineStale && (
+                <button
+                  onClick={onRegenerateStale}
+                  disabled={regeneratingStale}
+                  className="rounded-lg bg-primary px-3.5 py-1.5 text-[13px] font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+                >
+                  {regeneratingStale ? 'Queuing…' : 'Regenerate transcript & chapters'}
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <button
+                onClick={onClose}
+                className="rounded-lg border border-[#243043] bg-[#0F1520] px-3.5 py-1.5 text-[13px] font-medium hover:border-[#5C6880]"
+              >
+                {isActive ? 'Hide' : 'Cancel'}
+              </button>
+              {!isActive && (
+                <button
+                  onClick={onStart}
+                  disabled={starting}
+                  className="rounded-lg bg-primary px-3.5 py-1.5 text-[13px] font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+                >
+                  {starting ? 'Starting…' : isDone ? 'Render again' : 'Start render'}
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>

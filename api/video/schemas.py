@@ -290,6 +290,8 @@ class VideoAdminResponse(VideoResponse):
     custom_thumbnail: Optional[str] = None
     job_status: Optional[str] = None
     job_error: Optional[str] = None
+    # Apply-to-video staleness (issue #261) — see VideoEditorInfoResponse.
+    pipeline_stale: bool = False
 
 
 class ContinueWatchingResponse(VideoResponse):
@@ -491,6 +493,11 @@ class VideoEditorInfoResponse(BaseModel):
     source_width: Optional[int] = None
     source_height: Optional[int] = None
     aspect_ratio: Optional[float] = None
+    # Apply-to-video staleness (issue #261) — a successful 'apply' render
+    # shifts downstream timestamps, so an existing transcript/chapters no
+    # longer line up. `pipeline_stale` drives the regenerate prompt.
+    pipeline_stale: bool = False
+    editor_applied_at: Optional[datetime] = None
 
 
 # ── Video editor EDL draft (issue #256) ────────────────────────────────────
@@ -636,10 +643,12 @@ class EditorExportRequest(BaseModel):
 
 
 class EditorExportJobResponse(BaseModel):
-    """Returned immediately after POST .../editor-export — the job snapshot."""
+    """Returned immediately after POST .../editor-export or .../editor-apply
+    — the job snapshot. `mode` distinguishes the two (issue #261)."""
     id: int
     video_id: str
     status: Literal['queued', 'processing', 'done', 'error']
+    mode: Literal['download', 'apply'] = 'download'
     progress_pct: int = 0
     quality: Optional[str] = None
     error: Optional[str] = None
@@ -647,14 +656,18 @@ class EditorExportJobResponse(BaseModel):
 
 
 class EditorExportStatusResponse(BaseModel):
-    """Polled by the export modal. `status='none'` means no render has ever
-    been requested for this video — the modal renders its idle state."""
+    """Polled by the export/apply modal. `status='none'` means no render has
+    ever been requested for this video — the modal renders its idle state.
+    `mode` (issue #261) tells the frontend which flow the latest job belongs
+    to, since both modes share this single status endpoint."""
     id: Optional[int] = None
     status: Literal['none', 'queued', 'processing', 'done', 'error'] = 'none'
+    mode: Literal['download', 'apply'] = 'download'
     progress_pct: int = 0
     quality: Optional[str] = None
     error: Optional[str] = None
     download_available: bool = False
     output_filename: Optional[str] = None
     created_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
