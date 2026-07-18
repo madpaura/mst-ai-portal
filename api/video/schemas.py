@@ -289,6 +289,13 @@ class VideoAdminResponse(VideoResponse):
     job_error: Optional[str] = None
 
 
+class ContinueWatchingResponse(VideoResponse):
+    """Video + the current user's saved progress — powers Ignite's
+    'Continue Watching' row (issue #244)."""
+    watched_seconds: int = 0
+    last_position: int = 0
+
+
 class ChapterResponse(BaseModel):
     id: str
     video_id: str
