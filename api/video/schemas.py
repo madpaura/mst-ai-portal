@@ -67,6 +67,9 @@ class CourseResponse(BaseModel):
     objectives: list[str] = []
     prerequisites: Optional[str] = None
     curriculum_published: bool = False
+    # curriculum shape, for the Admin Courses list (issue #245)
+    module_count: int = 0
+    item_count: int = 0
 
 
 class CourseCreate(BaseModel):
