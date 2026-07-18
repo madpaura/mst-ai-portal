@@ -225,6 +225,19 @@ def get_duration_precise(input_path: str) -> float | None:
     return None
 
 
+def has_audio_stream(input_path: str) -> bool:
+    """True if the file has at least one audio stream (ffprobe)."""
+    cmd = [
+        "ffprobe", "-v", "error", "-select_streams", "a",
+        "-show_entries", "stream=index", "-of", "csv=p=0", input_path,
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        return False
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
 def get_video_dims(input_path: str) -> tuple[int, int] | None:
     """Return (width, height) of the first video stream via ffprobe."""
     cmd = [
@@ -642,6 +655,14 @@ async def process_render_job(pool: asyncpg.Pool, job):
         await fail("Could not determine source dimensions")
         return
     source_width, source_height = dims
+
+    # A source with no audio track (screen recordings, or a raw file produced
+    # by an earlier muted apply) must render as if muted — the filter graph
+    # would otherwise reference [0:a], which matches no streams and kills the
+    # whole render. Found in live system testing.
+    if not muted and not await asyncio.to_thread(has_audio_stream, raw_path):
+        log.info(f"Render job #{job_id}: source has no audio stream — rendering without audio")
+        muted = True
 
     segments = normalize_edl(edits, float(duration))
     if not segments:
