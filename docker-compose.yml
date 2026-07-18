@@ -164,7 +164,9 @@ services:
           cpus: "0.25"
           memory: 256m
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h db -U ${POSTGRES_USER:-portal} -d ${POSTGRES_DB:-mst_portal} || exit 1"]
+      # pg_isready is not installed in the api image — probe db reachability
+      # with the Python stdlib instead.
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('db', 5432), 3)\" || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -216,7 +218,9 @@ services:
           cpus: "0.1"
           memory: 128m
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h db -U ${POSTGRES_USER:-portal} -d ${POSTGRES_DB:-mst_portal} || exit 1"]
+      # pg_isready is not installed in the api image — probe db reachability
+      # with the Python stdlib instead.
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('db', 5432), 3)\" || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -246,7 +250,9 @@ services:
       - "${VIDEO_DATA_VOLUME}:/data/videos:ro"
       - "${MEDIA_DATA_VOLUME}:/data/media:ro"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ >/dev/null 2>&1 || exit 1"]
+      # 127.0.0.1, not localhost: in-container localhost resolves to ::1
+      # first and nginx only listens on IPv4 (same fix as hostnet variant).
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/ >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
