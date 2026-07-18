@@ -25,6 +25,7 @@ export const AdminLayout: React.FC = () => {
   // Content creators see only the pages they can manage
   const navItems = [
     { path: '/admin/videos', label: 'Videos', icon: 'videocam' },
+    { path: '/admin/courses', label: 'Courses', icon: 'school' },
     { path: '/admin/marketplace', label: 'Marketplace', icon: 'storefront' },
     { path: '/admin/articles', label: 'Articles', icon: 'article' },
     { path: '/admin/memes', label: 'Memes', icon: 'collections' },

@@ -20,7 +20,10 @@ import cache
 router = APIRouter()
 
 
-def _course_resp(row, video_count: int = 0, thumbnail: Optional[str] = None) -> CourseResponse:
+def _course_resp(
+    row, video_count: int = 0, thumbnail: Optional[str] = None,
+    module_count: int = 0, item_count: int = 0,
+) -> CourseResponse:
     return CourseResponse(
         id=str(row["id"]), title=row["title"], slug=row["slug"],
         description=row.get("description"), sort_order=row["sort_order"],
@@ -31,6 +34,7 @@ def _course_resp(row, video_count: int = 0, thumbnail: Optional[str] = None) -> 
         objectives=list(row.get("objectives") or []),
         prerequisites=row.get("prerequisites"),
         curriculum_published=row.get("curriculum_published", False),
+        module_count=module_count, item_count=item_count,
     )
 
 
@@ -63,8 +67,19 @@ async def _video_duration_min(db, video_id: str) -> Optional[int]:
 @router.get("/courses", response_model=list[CourseResponse])
 async def admin_list_courses(admin: dict = Depends(require_admin)):
     db = await get_db()
-    rows = await db.fetch("SELECT * FROM courses ORDER BY sort_order")
-    return [_course_resp(r) for r in rows]
+    rows = await db.fetch(
+        """
+        SELECT c.*,
+               COUNT(DISTINCT m.id) AS module_count,
+               COUNT(i.id) AS item_count
+        FROM courses c
+        LEFT JOIN course_modules m ON m.course_id = c.id
+        LEFT JOIN course_items i ON i.module_id = m.id
+        GROUP BY c.id
+        ORDER BY c.sort_order
+        """
+    )
+    return [_course_resp(r, module_count=r["module_count"], item_count=r["item_count"]) for r in rows]
 
 
 @router.get("/courses/{course_id}", response_model=CourseResponse)

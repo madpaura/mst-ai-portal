@@ -15,6 +15,7 @@ const IgniteBrowse     = React.lazy(() => import('./pages/IgniteBrowse').then(m 
 const Howto            = React.lazy(() => import('./pages/Howto').then(m => ({ default: m.Howto })));
 const Login            = React.lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
 const AdminVideos      = React.lazy(() => import('./pages/AdminVideos').then(m => ({ default: m.AdminVideos })));
+const AdminCourses     = React.lazy(() => import('./pages/AdminCourses').then(m => ({ default: m.AdminCourses })));
 const AdminCourseCurriculum = React.lazy(() => import('./pages/AdminCourseCurriculum').then(m => ({ default: m.AdminCourseCurriculum })));
 const Courses          = React.lazy(() => import('./pages/Courses').then(m => ({ default: m.Courses })));
 const CourseDetail     = React.lazy(() => import('./pages/CourseDetail').then(m => ({ default: m.CourseDetail })));
@@ -101,6 +102,7 @@ function App() {
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<Navigate to="/admin/videos" replace />} />
             <Route path="videos" element={<AdminVideos />} />
+            <Route path="courses" element={<AdminCourses />} />
             <Route path="courses/:courseId/curriculum" element={<AdminCourseCurriculum />} />
             <Route path="marketplace" element={<AdminMarketplace />} />
             <Route path="solutions" element={<AdminSolutions />} />
