@@ -38,10 +38,12 @@ export function stylePresetCss(key: string): string {
 }
 
 // Picking a non-none preset while padding is still 0 auto-sets a sensible
-// default inset (mockup behavior) rather than leaving the backdrop
-// invisible behind an un-padded, square-cornered video.
-export const AUTO_PAD_PCT_ON_PRESET_PICK = 5;
-export const AUTO_RADIUS_PX_ON_PRESET_PICK = 14;
+// default inset rather than leaving the backdrop invisible behind an
+// un-padded, square-cornered video. Kept thin (ScreenArc-style): the
+// backdrop should read as a small border around the video, not a frame
+// the video floats in.
+export const AUTO_PAD_PCT_ON_PRESET_PICK = 2;
+export const AUTO_RADIUS_PX_ON_PRESET_PICK = 12;
 
 export const STYLE_PAD_MIN = 0;
 export const STYLE_PAD_MAX = 12;
