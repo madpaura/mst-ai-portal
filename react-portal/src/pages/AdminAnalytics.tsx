@@ -99,6 +99,26 @@ interface MemeBreakdownGroup {
   memes: MemeBreakdownMeme[];
 }
 
+interface CourseOverviewRow {
+  id: string;
+  slug: string;
+  title: string;
+  curriculum_published: boolean;
+  is_active: boolean;
+  total_items: number;
+  enrolled_count: number;
+  active_7d: number;
+  active_30d: number;
+  completion_rate: number;
+  avg_rating: number | null;
+  rating_count: number;
+}
+
+interface EnrollmentTrendDay {
+  day: string;
+  enrollments: number;
+}
+
 // ── Constants ────────────────────────────────────────────
 
 const SECTION_COLORS: Record<string, string> = {
@@ -138,7 +158,7 @@ const fmtDate = (d: string) => {
 export const AdminAnalytics: React.FC = () => {
   const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState<'overview' | 'traffic' | 'videos' | 'marketplace' | 'news' | 'memes'>('overview');
+  const [activeSection, setActiveSection] = useState<'overview' | 'traffic' | 'videos' | 'courses' | 'marketplace' | 'news' | 'memes'>('overview');
 
   const [overview, setOverview] = useState<Overview | null>(null);
   const [traffic, setTraffic] = useState<TrafficDay[]>([]);
@@ -151,6 +171,8 @@ export const AdminAnalytics: React.FC = () => {
   const [heatmap, setHeatmap] = useState<HeatmapCell[]>([]);
   const [memeClicks, setMemeClicks] = useState<MemeClickDay[]>([]);
   const [memeBreakdown, setMemeBreakdown] = useState<MemeBreakdownGroup[]>([]);
+  const [courseOverview, setCourseOverview] = useState<CourseOverviewRow[]>([]);
+  const [enrollmentTrend, setEnrollmentTrend] = useState<EnrollmentTrendDay[]>([]);
 
   useEffect(() => {
     setLoading(true);
@@ -166,6 +188,8 @@ export const AdminAnalytics: React.FC = () => {
       api.get<HeatmapCell[]>(`/admin/analytics/hourly-heatmap?days=${Math.min(days, 90)}`).then(setHeatmap).catch(() => {}),
       api.get<MemeClickDay[]>(`/admin/analytics/memes/daily?days=${days}`).then(setMemeClicks).catch(() => {}),
       api.get<MemeBreakdownGroup[]>(`/admin/analytics/memes/by-meme?days=${days}`).then(setMemeBreakdown).catch(() => {}),
+      api.get<CourseOverviewRow[]>(`/admin/analytics/courses`).then(setCourseOverview).catch(() => {}),
+      api.get<EnrollmentTrendDay[]>(`/admin/analytics/courses/enrollment-trend?days=${days}`).then(setEnrollmentTrend).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, [days]);
 
@@ -249,10 +273,15 @@ export const AdminAnalytics: React.FC = () => {
     return grid;
   }, [heatmap]);
 
+  const chartEnrollmentTrend = useMemo(() =>
+    enrollmentTrend.map(d => ({ ...d, day: fmtDate(d.day) })),
+  [enrollmentTrend]);
+
   const sections = [
     { key: 'overview', label: 'Overview', icon: 'dashboard' },
     { key: 'traffic', label: 'Traffic', icon: 'trending_up' },
     { key: 'videos', label: 'Videos', icon: 'videocam' },
+    { key: 'courses', label: 'Courses', icon: 'school' },
     { key: 'marketplace', label: 'Marketplace', icon: 'storefront' },
     { key: 'news', label: 'News', icon: 'newspaper' },
     { key: 'memes', label: 'Memes', icon: 'sentiment_very_satisfied' },
@@ -570,6 +599,90 @@ export const AdminAnalytics: React.FC = () => {
                   </ResponsiveContainer>
                 </ChartCard>
               )}
+            </div>
+          )}
+
+          {/* ─── COURSES ─── */}
+          {(isExporting || activeSection === 'courses') && (
+            <div className="space-y-6 mb-12">
+              {isExporting && <div className="html2pdf__page-break" />}
+              {isExporting && <h2 className="text-2xl font-bold text-white mb-4 border-b border-white/10 pb-2 mt-8">Courses</h2>}
+              {/* Course summary cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <StatCard icon="school" label="Curriculum Courses" value={fmtNum(courseOverview.length)} color="text-primary" />
+                <StatCard icon="how_to_reg" label="Total Enrollments" value={fmtNum(courseOverview.reduce((s, c) => s + c.enrolled_count, 0))} color="text-green-400" />
+                <StatCard icon="bolt" label="Active Learners (7d)" value={fmtNum(courseOverview.reduce((s, c) => s + c.active_7d, 0))} color="text-amber-400" />
+                <StatCard icon="star" label="Avg Rating" value={
+                  (() => {
+                    const rated = courseOverview.filter(c => c.avg_rating !== null);
+                    if (rated.length === 0) return '—';
+                    return (rated.reduce((s, c) => s + (c.avg_rating || 0), 0) / rated.length).toFixed(1);
+                  })()
+                } color="text-purple-400" />
+              </div>
+
+              {/* Enrollment trend chart */}
+              <ChartCard title="Enrollment Trend" icon="trending_up" subtitle={`Daily enrollments across all curriculum courses, last ${days} days`}>
+                <ResponsiveContainer width="100%" height={220}>
+                  <AreaChart data={chartEnrollmentTrend}>
+                    <defs>
+                      <linearGradient id="gradEnrollments" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#258cf4" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#258cf4" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                    <XAxis dataKey="day" stroke="#64748b" fontSize={11} />
+                    <YAxis stroke="#64748b" fontSize={11} allowDecimals={false} />
+                    <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} />
+                    <Area type="monotone" dataKey="enrollments" stroke="#258cf4" fill="url(#gradEnrollments)" strokeWidth={2} name="Enrollments" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </ChartCard>
+
+              {isExporting && <div className="html2pdf__page-break" />}
+              {/* Course overview table */}
+              <ChartCard title="Course Overview" icon="school" subtitle="Every curriculum course, published and draft">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10 text-slate-400">
+                        <th className="text-left py-2 px-3 font-medium">Course</th>
+                        <th className="text-left py-2 px-3 font-medium">Status</th>
+                        <th className="text-right py-2 px-3 font-medium">Enrolled</th>
+                        <th className="text-right py-2 px-3 font-medium">Active 7d</th>
+                        <th className="text-right py-2 px-3 font-medium">Active 30d</th>
+                        <th className="text-right py-2 px-3 font-medium">Completion</th>
+                        <th className="text-right py-2 px-3 font-medium">Rating</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {courseOverview.map(c => (
+                        <tr key={c.id} className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                          <td className="py-2.5 px-3 text-white font-medium">{c.title}</td>
+                          <td className="py-2.5 px-3">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium uppercase ${
+                              c.curriculum_published
+                                ? 'bg-green-500/10 text-green-400'
+                                : 'bg-slate-500/10 text-slate-400'
+                            }`}>
+                              {c.curriculum_published ? 'Published' : 'Draft'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-primary font-bold">{c.enrolled_count}</td>
+                          <td className="py-2.5 px-3 text-right text-amber-400">{c.active_7d}</td>
+                          <td className="py-2.5 px-3 text-right text-amber-400">{c.active_30d}</td>
+                          <td className="py-2.5 px-3 text-right text-green-400 font-mono">{c.completion_rate}%</td>
+                          <td className="py-2.5 px-3 text-right text-purple-400">
+                            {c.avg_rating !== null ? `${c.avg_rating.toFixed(1)} (${c.rating_count})` : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {courseOverview.length === 0 && <p className="text-sm text-slate-500 text-center py-8">No curriculum courses yet</p>}
+                </div>
+              </ChartCard>
             </div>
           )}
 
