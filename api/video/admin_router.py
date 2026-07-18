@@ -472,7 +472,7 @@ async def _run_remotion_async(*args: str, cwd: str | None = None) -> tuple[int, 
 async def _probe_duration_async(path: str) -> int | None:
     """Return video duration in seconds via ffprobe (non-blocking)."""
     ffprobe = settings.FFMPEG_PATH.replace("ffmpeg", "ffprobe")
-    rc, out = await _run_ffmpeg_async(
+    rc, out = await _run_probe_async(
         ffprobe, "-v", "quiet", "-print_format", "json", "-show_format", path,
     )
     if rc == 0:
