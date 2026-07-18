@@ -1,6 +1,7 @@
 import React from 'react';
 import type { EditOp, EditorStyle } from './types';
 import { fmtClock, opLabel } from './types';
+import { stylePresetName } from './stylePresets';
 
 // Export mp4 / Apply to video confirm/progress modal (issue #260, extended
 // for apply by issue #261). Pure presentation — all state (quality
@@ -81,6 +82,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 }) => {
   if (!open) return null;
 
+  // Mirrors the worker's style_is_active() (issue #263): 'none' preset with
+  // padding/radius already nonzero still renders a (black) backdrop, so it
+  // counts as "styling active" for the summary too.
+  const styleActive = style.preset !== 'none' || !!style.image || style.pad_pct > 0 || style.radius_px > 0;
+
   const isApply = mode === 'apply';
   const isActive = status?.status === 'queued' || status?.status === 'processing';
   const isDone = status?.status === 'done';
@@ -108,7 +114,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
         {/* Edit-list summary */}
         <ul className="m-0 mb-4 list-none p-0">
-          {edits.length === 0 && !muted && style.preset === 'none' && (
+          {edits.length === 0 && !muted && !styleActive && (
             <li className="py-1.5 text-[13px] text-[#96A2B8] border-b border-[#243043]">
               No edits — render would be a plain copy.
             </li>
@@ -132,6 +138,16 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             <li className="flex items-center gap-2 py-1.5 text-[13px] text-[#96A2B8] border-b border-[#243043]">
               <span className="inline-block h-[9px] w-[9px] rounded-[3px] shrink-0 bg-[#F0564A]" />
               Remove audio track
+              <span className="ml-auto shrink-0 font-mono text-[11px] text-[#5C6880]">whole video</span>
+            </li>
+          )}
+          {styleActive && (
+            <li className="flex items-center gap-2 py-1.5 text-[13px] text-[#96A2B8] border-b border-[#243043]">
+              <span className="inline-block h-[9px] w-[9px] rounded-[3px] shrink-0 bg-primary" />
+              <span className="truncate">
+                Background {style.image ? '"Custom image"' : `"${stylePresetName(style.preset)}"`} · pad{' '}
+                {style.pad_pct}% · corners {style.radius_px}px
+              </span>
               <span className="ml-auto shrink-0 font-mono text-[11px] text-[#5C6880]">whole video</span>
             </li>
           )}
