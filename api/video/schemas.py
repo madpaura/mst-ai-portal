@@ -570,6 +570,11 @@ class VideoEditorDraftUpdate(BaseModel):
 
 class EditorSuggestAnalyzeRequest(BaseModel):
     threshold_s: float = 2.0
+    # issue #262: the LLM skippable-span pass runs alongside the gap pass by
+    # default. Callers that only want the deterministic gap suggestions (or
+    # want to retry just the LLM pass without recomputing gaps) can set this
+    # to False.
+    include_llm: bool = True
 
 
 class EditorSuggestAnalyzeResponse(BaseModel):
@@ -583,6 +588,10 @@ class EditorSuggestAnalyzeResponse(BaseModel):
     transcript_error: Optional[str] = None
     threshold_s: float
     suggestions: list[EditorSuggestion] = []
+    # issue #262: non-fatal notice when the LLM pass failed (timeout,
+    # malformed JSON, no provider configured) — gap suggestions are still
+    # returned and this is surfaced as a dismissible warning, not an error.
+    warning: Optional[str] = None
 
 
 class EditorSuggestionStateUpdate(BaseModel):

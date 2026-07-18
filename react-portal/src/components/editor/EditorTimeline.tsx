@@ -298,9 +298,11 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
               </div>
             ))}
 
-            {/* Suggestion regions (issue #259) — dashed outline, distinct from
-                committed edit ops; clicking one switches the side panel to
-                the Suggestions tab rather than opening the cut/trim popover. */}
+            {/* Suggestion regions — dashed outline, distinct from committed
+                edit ops; clicking one switches the side panel to the
+                Suggestions tab rather than opening the cut/trim popover.
+                Gap (issue #259, amber/∅) and LLM (issue #262, violet/✨) kinds
+                share the lane, differentiated by color + icon + title. */}
             {openSuggestions.map((s) => (
               <div
                 key={s.id}
@@ -310,8 +312,12 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                   e.stopPropagation();
                   onSelectSuggestion(s.id);
                 }}
-                title={`${fmtClock(s.start_s)} – ${fmtClock(s.end_s)} · ${s.kind === 'gap' ? 'Silence' : 'Suggestion'}`}
-                className="absolute rounded-md border border-dashed flex items-center justify-center text-[10.5px] font-semibold cursor-pointer overflow-hidden whitespace-nowrap bg-[#F5A524]/15 border-[#F5A524] text-[#F5A524]"
+                title={`${fmtClock(s.start_s)} – ${fmtClock(s.end_s)} · ${s.kind === 'gap' ? 'Silence' : 'LLM'}${s.reason ? ` — ${s.reason}` : ''}`}
+                className={`absolute rounded-md border border-dashed flex items-center justify-center text-[10.5px] font-semibold cursor-pointer overflow-hidden whitespace-nowrap ${
+                  s.kind === 'gap'
+                    ? 'bg-[#F5A524]/15 border-[#F5A524] text-[#F5A524]'
+                    : 'bg-[#A78BFA]/15 border-[#A78BFA] text-[#A78BFA]'
+                }`}
                 style={{
                   top: RULER_H + TRACK_H + CUT_LANE_H + SPEED_LANE_H + 4,
                   height: SUGG_LANE_H - 8,

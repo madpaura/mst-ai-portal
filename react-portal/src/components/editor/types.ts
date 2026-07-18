@@ -20,10 +20,12 @@ export interface EditOp {
   source?: 'suggestion';
 }
 
-// ── Silence-gap suggestions (issue #259) ─────────────────────────────────
+// ── Editor suggestions: silence-gap (#259) + LLM skippable-span (#262) ────
 //
-// Mirrors api/video/schemas.py::EditorSuggestion. `kind` is 'gap' this slice;
-// issue #262 plugs an 'llm' kind (with a `reason`) into the same shape.
+// Mirrors api/video/schemas.py::EditorSuggestion. `kind` is 'gap' for the
+// deterministic transcript-timestamp pass, 'llm' for spans the configured
+// LLM provider flags (with a `reason` string). Both come back from the same
+// analyze call and share review state (accept/ignore) by `id`.
 
 export type SuggestionKind = 'gap' | 'llm';
 export type SuggestionState = 'open' | 'accepted' | 'ignored';

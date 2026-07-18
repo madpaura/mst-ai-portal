@@ -3,6 +3,7 @@ import hashlib
 import math
 import os
 import re
+import time
 import uuid
 import json
 import shutil
@@ -1226,6 +1227,11 @@ def _gap_suggestion_id(start_s: float, end_s: float) -> str:
     return hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
 
 
+def _llm_suggestion_id(start_s: float, end_s: float) -> str:
+    key = f"{round(start_s, 1)}:{round(end_s, 1)}"
+    return "llm:" + hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
+
+
 def _compute_gap_suggestions(transcript: dict, threshold_s: float) -> list[dict]:
     """Flag gaps >= threshold_s between consecutive transcript segments."""
     segments = transcript.get("segments") or []
@@ -1249,6 +1255,122 @@ def _compute_gap_suggestions(transcript: dict, threshold_s: float) -> list[dict]
                 "state": "open",
             })
     return out
+
+
+# ── LLM skippable-span suggestions (issue #262) ─────────────────────────────
+#
+# Second suggestion source, plugged into the same analyze endpoint: sends the
+# (compacted, possibly chunked) transcript to the portal's configured LLM
+# provider (same provider-selection rules as every other AI feature — see
+# api/articles/llm.py::call_llm) and asks it to flag low-value spans. Never
+# raises: any failure (no provider configured, timeout, malformed JSON) is
+# swallowed into a warning string so the gap suggestions computed above still
+# reach the frontend.
+
+_LLM_SUGGEST_CHUNK_MAX_CHARS = 12000
+_LLM_SUGGEST_CHUNK_TIMEOUT_S = 45.0
+_LLM_SUGGEST_TOTAL_TIMEOUT_S = 100.0  # stays under the /backend/ nginx proxy_read_timeout (120s)
+_LLM_SUGGEST_MAX_CHUNKS = 6
+
+
+async def _compute_llm_suggestions(transcript: dict, duration: float | None) -> tuple[list[dict], Optional[str]]:
+    """Run the LLM skippable-span pass. Returns (raw_spans, warning) — never raises."""
+    from video.llm_prompts import (
+        chunk_transcript_segments, compact_transcript_segments,
+        editor_llm_suggestions_prompt, parse_json_strict,
+    )
+    from articles.llm import call_llm
+
+    compact = compact_transcript_segments(transcript.get("segments") or [])
+    if not compact:
+        return [], None
+
+    chunks = chunk_transcript_segments(compact, max_chars=_LLM_SUGGEST_CHUNK_MAX_CHARS)[:_LLM_SUGGEST_MAX_CHUNKS]
+
+    spans: list[dict] = []
+    errors: list[str] = []
+    started = time.monotonic()
+
+    for chunk in chunks:
+        if not chunk:
+            continue
+        if time.monotonic() - started > _LLM_SUGGEST_TOTAL_TIMEOUT_S:
+            errors.append("Time budget exceeded before all transcript chunks were analyzed")
+            break
+        prompt = editor_llm_suggestions_prompt(chunk, duration)
+        try:
+            raw = await asyncio.wait_for(call_llm(prompt), timeout=_LLM_SUGGEST_CHUNK_TIMEOUT_S)
+            parsed = parse_json_strict(raw)
+            chunk_spans = parsed.get("spans") if isinstance(parsed, dict) else None
+            if not isinstance(chunk_spans, list):
+                raise ValueError("LLM response missing a 'spans' list")
+            for sp in chunk_spans:
+                if not isinstance(sp, dict):
+                    continue
+                try:
+                    start_s = float(sp["start_s"])
+                    end_s = float(sp["end_s"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                reason = str(sp.get("reason") or "").strip() or "Skippable section"
+                spans.append({"start_s": start_s, "end_s": end_s, "reason": reason[:200]})
+        except asyncio.TimeoutError:
+            errors.append("LLM request timed out")
+        except Exception as e:  # HTTPException from call_llm, JSON errors, etc.
+            detail = getattr(e, "detail", None) or str(e)
+            errors.append(str(detail)[:200])
+
+    warning = None
+    if errors:
+        warning = (
+            f"LLM suggestion pass failed: {errors[0]}" if not spans
+            else f"LLM suggestion pass partially failed: {errors[0]}"
+        )
+    return spans, warning
+
+
+def _sanitize_llm_spans(spans: list[dict], duration: Optional[float], existing_edits: list[dict]) -> list[dict]:
+    """Clamp spans to [0, duration]; drop degenerate/out-of-range spans and
+    spans fully overlapped by an existing cut op (acceptance criteria)."""
+    cuts = [e for e in existing_edits if isinstance(e, dict) and e.get("type") == "cut"]
+    dur = float(duration) if duration else None
+    out: list[dict] = []
+    seen: set[tuple[float, float]] = set()
+    for sp in spans:
+        start_s, end_s = sp["start_s"], sp["end_s"]
+        if dur is not None:
+            if start_s >= dur or end_s <= 0:
+                continue  # fully outside the video's duration
+            start_s = max(0.0, start_s)
+            end_s = min(dur, end_s)
+        else:
+            start_s = max(0.0, start_s)
+        if end_s <= start_s:
+            continue  # degenerate
+        if any(c.get("start_s", 0) <= start_s and c.get("end_s", 0) >= end_s for c in cuts):
+            continue  # fully overlapped by an existing cut
+        key = (round(start_s, 1), round(end_s, 1))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({
+            "id": _llm_suggestion_id(start_s, end_s),
+            "kind": "llm",
+            "start_s": round(start_s, 2),
+            "end_s": round(end_s, 2),
+            "gap_s": None,
+            "reason": sp["reason"],
+            "state": "open",
+        })
+    return out
+
+
+async def _load_draft_edits(db, video_id: str) -> list[dict]:
+    row = await db.fetchrow("SELECT edits FROM video_editor_drafts WHERE video_id = $1", video_id)
+    if not row or not row["edits"]:
+        return []
+    raw = row["edits"]
+    return raw if isinstance(raw, list) else json.loads(raw or "[]")
 
 
 def _merge_suggestion_review_state(fresh: list[dict], stored: list) -> list[dict]:
@@ -1288,7 +1410,9 @@ async def _save_suggestions(db, video_id: str, suggestions: list[dict]) -> None:
 async def admin_analyze_suggestions(
     video_id: str, req: EditorSuggestAnalyzeRequest, admin: dict = Depends(verify_video_access)
 ):
-    """Compute silence-gap suggestions from the video's transcript.
+    """Compute silence-gap suggestions from the video's transcript, plus (by
+    default) an LLM pass flagging low-value spans (issue #262) — one Analyze
+    click returns both, merged with any prior accepted/ignored review state.
 
     Re-runnable with a different `threshold_s`. If the transcript isn't
     `ready` yet, returns `transcript_status` unchanged (and no suggestions) so
@@ -1296,7 +1420,7 @@ async def admin_analyze_suggestions(
     """
     db = await get_db()
     video = await db.fetchrow(
-        "SELECT transcript_status, transcript_error FROM videos WHERE id = $1", video_id
+        "SELECT transcript_status, transcript_error, duration_s FROM videos WHERE id = $1", video_id
     )
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
@@ -1333,6 +1457,13 @@ async def admin_analyze_suggestions(
         )
 
     fresh = _compute_gap_suggestions(transcript, req.threshold_s)
+
+    warning: Optional[str] = None
+    if req.include_llm:
+        existing_edits = await _load_draft_edits(db, video_id)
+        raw_spans, warning = await _compute_llm_suggestions(transcript, video["duration_s"])
+        fresh += _sanitize_llm_spans(raw_spans, video["duration_s"], existing_edits)
+
     stored = await _load_stored_suggestions(db, video_id)
     merged = _merge_suggestion_review_state(fresh, stored)
     await _save_suggestions(db, video_id, merged)
@@ -1342,6 +1473,7 @@ async def admin_analyze_suggestions(
         transcript_error=None,
         threshold_s=req.threshold_s,
         suggestions=[EditorSuggestion(**s) for s in merged],
+        warning=warning,
     )
 
 
