@@ -692,7 +692,9 @@ async def process_render_job(pool: asyncpg.Pool, job):
         # directory as a scratch file and gets os.replace()'d into
         # original.mp4 once ffmpeg succeeds (see the completion block below).
         output_path = None
-        tmp_output = os.path.join(raw_dir, f"original.apply_{ts}.mp4.partial")
+        # Must end in .mp4 — ffmpeg infers the muxer from the extension and
+        # rejects a trailing .partial (same convention as the download branch).
+        tmp_output = os.path.join(raw_dir, f"original.apply_{ts}.partial.mp4")
     else:
         exports_dir = os.path.join(video_dir, "exports")
         os.makedirs(exports_dir, exist_ok=True)
