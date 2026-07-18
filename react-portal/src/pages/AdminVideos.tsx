@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { api, toApiError } from '../api/client';
 import { HlsPlayer, type HlsPlayerHandle } from '../components/HlsPlayer';
@@ -25,7 +24,7 @@ interface Video {
   is_published: boolean;
   is_active: boolean;
   sort_order: number;
-  course_id: string | null;
+  series_id: string | null;
   job_status: string | null;
   job_error: string | null;
   created_at: string;
@@ -39,7 +38,7 @@ interface Chapter {
   sort_order: number;
 }
 
-interface Course {
+interface Series {
   id: string;
   title: string;
   slug: string;
@@ -103,7 +102,7 @@ export const AdminVideos: React.FC = () => {
   const isContent = !isAdmin && user?.role === 'content';
   const [showPublishRequests, setShowPublishRequests] = useState(false);
   const [videos, setVideos] = useState<Video[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
+  const [series, setSeries] = useState<Series[]>([]);
   const [selected, setSelected] = useState<Video | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('metadata');
   const [loading, setLoading] = useState(true);
@@ -122,10 +121,10 @@ export const AdminVideos: React.FC = () => {
 
   // Create video form
   const [showCreate, setShowCreate] = useState(false);
-  const [createForm, setCreateForm] = useState({ title: '', slug: '', description: '', category: 'Code-mate', course_id: '' });
+  const [createForm, setCreateForm] = useState({ title: '', slug: '', description: '', category: 'Code-mate', series_id: '' });
 
   // Edit metadata form
-  const [editForm, setEditForm] = useState({ title: '', description: '', category: '', course_id: '', sort_order: 0 });
+  const [editForm, setEditForm] = useState({ title: '', description: '', category: '', series_id: '', sort_order: 0 });
 
   // Shared video player
   const playerRef = useRef<HlsPlayerHandle>(null);
@@ -227,27 +226,27 @@ export const AdminVideos: React.FC = () => {
   // Message
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Course creation popup
-  const [showCourseCreate, setShowCourseCreate] = useState(false);
-  const [courseForm, setCourseForm] = useState({ title: '', slug: '', description: '' });
+  // Series creation popup
+  const [showSeriesCreate, setShowSeriesCreate] = useState(false);
+  const [seriesForm, setSeriesForm] = useState({ title: '', slug: '', description: '' });
 
-  // Course edit modal
-  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
-  const [courseEditForm, setCourseEditForm] = useState({ title: '', slug: '', description: '', sort_order: 0, is_featured: false });
+  // Series edit modal
+  const [editingSeries, setEditingSeries] = useState<Series | null>(null);
+  const [seriesEditForm, setSeriesEditForm] = useState({ title: '', slug: '', description: '', sort_order: 0, is_featured: false });
 
-  // Course delete modal
-  type CourseDeleteMode = 'migrate' | 'delete_videos';
-  const [deletingCourse, setDeletingCourse] = useState<Course | null>(null);
-  const [courseDeleteMode, setCourseDeleteMode] = useState<CourseDeleteMode>('migrate');
-  const [courseDeleteMigrateTarget, setCourseDeleteMigrateTarget] = useState('');
+  // Series delete modal
+  type SeriesDeleteMode = 'migrate' | 'delete_videos';
+  const [deletingSeries, setDeletingSeries] = useState<Series | null>(null);
+  const [seriesDeleteMode, setSeriesDeleteMode] = useState<SeriesDeleteMode>('migrate');
+  const [seriesDeleteMigrateTarget, setSeriesDeleteMigrateTarget] = useState('');
 
   // Category management
   const [customCategories, setCustomCategories] = useState<string[]>([]);
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
 
-  // Expand/collapse for course groups
-  const [collapsedCourses, setCollapsedCourses] = useState<Set<string>>(new Set());
+  // Expand/collapse for series groups
+  const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set());
 
   const allCategories = [...DEFAULT_CATEGORIES, ...customCategories];
 
@@ -282,22 +281,22 @@ export const AdminVideos: React.FC = () => {
     }
   }, []);
 
-  const fetchCourses = useCallback(async () => {
+  const fetchSeries = useCallback(async () => {
     try {
-      const data = await api.get<Course[]>('/admin/courses');
-      setCourses(data);
+      const data = await api.get<Series[]>('/admin/series');
+      setSeries(data);
     } catch { /* ignore */ }
   }, []);
 
   useEffect(() => {
     fetchVideos();
-    fetchCourses();
+    fetchSeries();
     // Load custom categories from localStorage
     const saved = localStorage.getItem('mst_custom_categories');
     if (saved) {
       try { setCustomCategories(JSON.parse(saved)); } catch { /* ignore */ }
     }
-  }, [fetchVideos, fetchCourses]);
+  }, [fetchVideos, fetchSeries]);
 
   const selectVideo = async (video: Video) => {
     // Stop all background polls and clear per-video state before switching
@@ -313,7 +312,7 @@ export const AdminVideos: React.FC = () => {
       title: video.title,
       description: video.description || '',
       category: video.category,
-      course_id: video.course_id || '',
+      series_id: video.series_id || '',
       sort_order: video.sort_order,
     });
     // Load tab data
@@ -357,10 +356,10 @@ export const AdminVideos: React.FC = () => {
           ? `${Math.floor(video.duration_s / 60)}:${String(video.duration_s % 60).padStart(2, '0')}`
           : '0:00';
         const autoEpisode = (() => {
-          if (!video.course_id) return 'EP 01';
-          const courseVids = [...videos.filter(v => v.course_id === video.course_id)]
+          if (!video.series_id) return 'EP 01';
+          const seriesVids = [...videos.filter(v => v.series_id === video.series_id)]
             .sort((a, b) => a.sort_order - b.sort_order || new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-          const idx = courseVids.findIndex(v => v.id === video.id);
+          const idx = seriesVids.findIndex(v => v.id === video.id);
           return `EP ${String(idx >= 0 ? idx + 1 : 1).padStart(2, '0')}`;
         })();
         setBannerForm({
@@ -416,10 +415,10 @@ export const AdminVideos: React.FC = () => {
     try {
       const v = await api.post<Video>('/admin/videos', {
         ...createForm,
-        course_id: createForm.course_id || null,
+        series_id: createForm.series_id || null,
       });
       setShowCreate(false);
-      setCreateForm({ title: '', slug: '', description: '', category: 'Code-mate', course_id: '' });
+      setCreateForm({ title: '', slug: '', description: '', category: 'Code-mate', series_id: '' });
       await fetchVideos();
       selectVideo(v);
       showMsg('success', 'Video created');
@@ -428,74 +427,74 @@ export const AdminVideos: React.FC = () => {
     }
   };
 
-  const handleCreateCourse = async () => {
-    if (!courseForm.title.trim()) return;
+  const handleCreateSeries = async () => {
+    if (!seriesForm.title.trim()) return;
     try {
-      const slug = courseForm.slug || courseForm.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-      await api.post('/admin/courses', {
-        title: courseForm.title,
+      const slug = seriesForm.slug || seriesForm.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      await api.post('/admin/series', {
+        title: seriesForm.title,
         slug,
-        description: courseForm.description || null,
+        description: seriesForm.description || null,
       });
-      setShowCourseCreate(false);
-      setCourseForm({ title: '', slug: '', description: '' });
-      await fetchCourses();
-      showMsg('success', 'Course created');
+      setShowSeriesCreate(false);
+      setSeriesForm({ title: '', slug: '', description: '' });
+      await fetchSeries();
+      showMsg('success', 'Series created');
     } catch (err: unknown) {
       showMsg('error', toApiError(err));
     }
   };
 
-  const openEditCourse = (course: Course, e: React.MouseEvent) => {
+  const openEditSeries = (s: Series, e: React.MouseEvent) => {
     e.stopPropagation();
-    setCourseEditForm({ title: course.title, slug: course.slug, description: course.description || '', sort_order: course.sort_order, is_featured: !!course.is_featured });
-    setEditingCourse(course);
+    setSeriesEditForm({ title: s.title, slug: s.slug, description: s.description || '', sort_order: s.sort_order, is_featured: !!s.is_featured });
+    setEditingSeries(s);
   };
 
-  const handleSaveCourse = async () => {
-    if (!editingCourse) return;
+  const handleSaveSeries = async () => {
+    if (!editingSeries) return;
     try {
-      const slug = courseEditForm.slug.trim() || courseEditForm.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-      await api.put(`/admin/courses/${editingCourse.id}`, {
-        title: courseEditForm.title.trim(),
+      const slug = seriesEditForm.slug.trim() || seriesEditForm.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      await api.put(`/admin/series/${editingSeries.id}`, {
+        title: seriesEditForm.title.trim(),
         slug,
-        description: courseEditForm.description.trim() || null,
-        sort_order: courseEditForm.sort_order,
-        is_featured: courseEditForm.is_featured,
+        description: seriesEditForm.description.trim() || null,
+        sort_order: seriesEditForm.sort_order,
+        is_featured: seriesEditForm.is_featured,
       });
-      setEditingCourse(null);
-      await fetchCourses();
-      showMsg('success', 'Course updated');
+      setEditingSeries(null);
+      await fetchSeries();
+      showMsg('success', 'Series updated');
     } catch (err: unknown) {
       showMsg('error', toApiError(err));
     }
   };
 
-  const openDeleteCourse = (course: Course, e: React.MouseEvent) => {
+  const openDeleteSeries = (s: Series, e: React.MouseEvent) => {
     e.stopPropagation();
-    setCourseDeleteMode('migrate');
-    setCourseDeleteMigrateTarget('');
-    setDeletingCourse(course);
+    setSeriesDeleteMode('migrate');
+    setSeriesDeleteMigrateTarget('');
+    setDeletingSeries(s);
   };
 
-  const handleDeleteCourse = async () => {
-    if (!deletingCourse) return;
+  const handleDeleteSeries = async () => {
+    if (!deletingSeries) return;
     try {
-      const hasVideos = deletingCourse.video_count > 0;
-      let url = `/admin/courses/${deletingCourse.id}`;
+      const hasVideos = deletingSeries.video_count > 0;
+      let url = `/admin/series/${deletingSeries.id}`;
       if (hasVideos) {
-        if (courseDeleteMode === 'migrate') {
-          if (!courseDeleteMigrateTarget) { showMsg('error', 'Select a target course'); return; }
-          url += `?migrate_to_id=${courseDeleteMigrateTarget}`;
+        if (seriesDeleteMode === 'migrate') {
+          if (!seriesDeleteMigrateTarget) { showMsg('error', 'Select a target series'); return; }
+          url += `?migrate_to_id=${seriesDeleteMigrateTarget}`;
         } else {
           url += '?delete_videos=true';
         }
       }
       await api.delete(url);
-      setDeletingCourse(null);
-      await fetchCourses();
+      setDeletingSeries(null);
+      await fetchSeries();
       await fetchVideos();
-      showMsg('success', 'Course deleted');
+      showMsg('success', 'Series deleted');
     } catch (err: unknown) {
       showMsg('error', toApiError(err));
     }
@@ -512,19 +511,19 @@ export const AdminVideos: React.FC = () => {
     showMsg('success', `Category "${name}" added`);
   };
 
-  const toggleCourseCollapse = (courseId: string) => {
-    setCollapsedCourses(prev => {
+  const toggleSeriesCollapse = (seriesId: string) => {
+    setCollapsedSeries(prev => {
       const next = new Set(prev);
-      if (next.has(courseId)) next.delete(courseId);
-      else next.add(courseId);
+      if (next.has(seriesId)) next.delete(seriesId);
+      else next.add(seriesId);
       return next;
     });
   };
 
   const toggleCollapseAll = () => {
     // Build IDs at call time so groupedVideos (declared later) isn't needed here
-    setCollapsedCourses(prev => {
-      const ids = [...courses.map(c => c.id), '__uncategorized__'];
+    setCollapsedSeries(prev => {
+      const ids = [...series.map(c => c.id), '__uncategorized__'];
       const allAreCollapsed = ids.every(id => prev.has(id));
       return allAreCollapsed ? new Set<string>() : new Set<string>(ids);
     });
@@ -535,7 +534,7 @@ export const AdminVideos: React.FC = () => {
     try {
       await api.put(`/admin/videos/${selected.id}`, {
         ...editForm,
-        course_id: editForm.course_id || null,
+        series_id: editForm.series_id || null,
       });
       await fetchVideos();
       showMsg('success', 'Metadata updated');
@@ -1161,27 +1160,27 @@ export const AdminVideos: React.FC = () => {
     return `${m}:${sec.toString().padStart(2, '0')}`;
   };
 
-  // Group videos by course for sidebar
+  // Group videos by series for sidebar
   const groupedVideos = (() => {
-    const groups: { course: Course | null; videos: Video[] }[] = [];
-    const courseMap = new Map<string, Video[]>();
+    const groups: { series: Series | null; videos: Video[] }[] = [];
+    const seriesMap = new Map<string, Video[]>();
     const uncategorized: Video[] = [];
     for (const v of filteredVideos) {
-      if (v.course_id) {
-        if (!courseMap.has(v.course_id)) courseMap.set(v.course_id, []);
-        courseMap.get(v.course_id)!.push(v);
+      if (v.series_id) {
+        if (!seriesMap.has(v.series_id)) seriesMap.set(v.series_id, []);
+        seriesMap.get(v.series_id)!.push(v);
       } else {
         uncategorized.push(v);
       }
     }
-    for (const c of courses) {
-      const vids = courseMap.get(c.id);
+    for (const c of series) {
+      const vids = seriesMap.get(c.id);
       if (vids && vids.length > 0) {
-        groups.push({ course: c, videos: vids });
+        groups.push({ series: c, videos: vids });
       }
     }
     if (uncategorized.length > 0) {
-      groups.push({ course: null, videos: uncategorized });
+      groups.push({ series: null, videos: uncategorized });
     }
     return groups;
   })();
@@ -1205,24 +1204,24 @@ export const AdminVideos: React.FC = () => {
         </div>
       )}
 
-      {/* Course Creation Popup Modal */}
-      {showCourseCreate && (
+      {/* Series Creation Popup Modal */}
+      {showSeriesCreate && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-input-light dark:bg-input-dark rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-lg p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary">library_add</span>
-                Add New Course
+                Add New Series
               </h3>
-              <button onClick={() => setShowCourseCreate(false)} className="text-text-muted hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
+              <button onClick={() => setShowSeriesCreate(false)} className="text-text-muted hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
             <div>
-              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Course Title *</label>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Series Title *</label>
               <input
-                value={courseForm.title}
-                onChange={(e) => setCourseForm(f => ({ ...f, title: e.target.value }))}
+                value={seriesForm.title}
+                onChange={(e) => setSeriesForm(f => ({ ...f, title: e.target.value }))}
                 placeholder="e.g. Introduction to AI Agents"
                 className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
               />
@@ -1230,8 +1229,8 @@ export const AdminVideos: React.FC = () => {
             <div>
               <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Slug</label>
               <input
-                value={courseForm.slug}
-                onChange={(e) => setCourseForm(f => ({ ...f, slug: e.target.value }))}
+                value={seriesForm.slug}
+                onChange={(e) => setSeriesForm(f => ({ ...f, slug: e.target.value }))}
                 placeholder="auto-generated from title if empty"
                 className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
               />
@@ -1239,18 +1238,18 @@ export const AdminVideos: React.FC = () => {
             <div>
               <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Description</label>
               <textarea
-                value={courseForm.description}
-                onChange={(e) => setCourseForm(f => ({ ...f, description: e.target.value }))}
+                value={seriesForm.description}
+                onChange={(e) => setSeriesForm(f => ({ ...f, description: e.target.value }))}
                 rows={3}
-                placeholder="Brief description of this course..."
+                placeholder="Brief description of this series..."
                 className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
               />
             </div>
             <div className="flex gap-3 pt-2">
-              <button onClick={handleCreateCourse} className="px-6 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
-                Create Course
+              <button onClick={handleCreateSeries} className="px-6 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
+                Create Series
               </button>
-              <button onClick={() => setShowCourseCreate(false)} className="px-6 py-2 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+              <button onClick={() => setShowSeriesCreate(false)} className="px-6 py-2 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
                 Cancel
               </button>
             </div>
@@ -1258,24 +1257,24 @@ export const AdminVideos: React.FC = () => {
         </div>
       )}
 
-      {/* ── Edit Course Modal ───────────────────────────── */}
-      {editingCourse && (
+      {/* ── Edit Series Modal ───────────────────────────── */}
+      {editingSeries && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-input-light dark:bg-input-dark rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-lg p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary">edit</span>
-                Edit Course
+                Edit Series
               </h3>
-              <button onClick={() => setEditingCourse(null)} className="text-text-muted hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
+              <button onClick={() => setEditingSeries(null)} className="text-text-muted hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
             <div>
               <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Title *</label>
               <input
-                value={courseEditForm.title}
-                onChange={(e) => setCourseEditForm(f => ({ ...f, title: e.target.value }))}
+                value={seriesEditForm.title}
+                onChange={(e) => setSeriesEditForm(f => ({ ...f, title: e.target.value }))}
                 className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
               />
             </div>
@@ -1283,8 +1282,8 @@ export const AdminVideos: React.FC = () => {
               <div>
                 <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Slug</label>
                 <input
-                  value={courseEditForm.slug}
-                  onChange={(e) => setCourseEditForm(f => ({ ...f, slug: e.target.value }))}
+                  value={seriesEditForm.slug}
+                  onChange={(e) => setSeriesEditForm(f => ({ ...f, slug: e.target.value }))}
                   placeholder="auto from title if empty"
                   className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />
@@ -1293,8 +1292,8 @@ export const AdminVideos: React.FC = () => {
                 <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Sort Order</label>
                 <input
                   type="number"
-                  value={courseEditForm.sort_order}
-                  onChange={(e) => setCourseEditForm(f => ({ ...f, sort_order: parseInt(e.target.value) || 0 }))}
+                  value={seriesEditForm.sort_order}
+                  onChange={(e) => setSeriesEditForm(f => ({ ...f, sort_order: parseInt(e.target.value) || 0 }))}
                   className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                 />
               </div>
@@ -1302,8 +1301,8 @@ export const AdminVideos: React.FC = () => {
             <div>
               <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Description</label>
               <textarea
-                value={courseEditForm.description}
-                onChange={(e) => setCourseEditForm(f => ({ ...f, description: e.target.value }))}
+                value={seriesEditForm.description}
+                onChange={(e) => setSeriesEditForm(f => ({ ...f, description: e.target.value }))}
                 rows={2}
                 className="w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none resize-none"
               />
@@ -1311,8 +1310,8 @@ export const AdminVideos: React.FC = () => {
             <label className="flex items-center gap-3 cursor-pointer select-none">
               <input
                 type="checkbox"
-                checked={courseEditForm.is_featured}
-                onChange={(e) => setCourseEditForm(f => ({ ...f, is_featured: e.target.checked }))}
+                checked={seriesEditForm.is_featured}
+                onChange={(e) => setSeriesEditForm(f => ({ ...f, is_featured: e.target.checked }))}
                 className="w-4 h-4 accent-primary"
               />
               <span className="text-sm text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
@@ -1322,10 +1321,10 @@ export const AdminVideos: React.FC = () => {
               </span>
             </label>
             <div className="flex gap-3 pt-2">
-              <button onClick={handleSaveCourse} className="px-6 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
+              <button onClick={handleSaveSeries} className="px-6 py-2 bg-primary hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors">
                 Save Changes
               </button>
-              <button onClick={() => setEditingCourse(null)} className="px-6 py-2 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+              <button onClick={() => setEditingSeries(null)} className="px-6 py-2 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
                 Cancel
               </button>
             </div>
@@ -1333,50 +1332,50 @@ export const AdminVideos: React.FC = () => {
         </div>
       )}
 
-      {/* ── Delete Course Modal ─────────────────────────── */}
-      {deletingCourse && (
+      {/* ── Delete Series Modal ─────────────────────────── */}
+      {deletingSeries && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-input-light dark:bg-input-dark rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-lg p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <span className="material-symbols-outlined text-red-500">delete</span>
-                Delete Course
+                Delete Series
               </h3>
-              <button onClick={() => setDeletingCourse(null)} className="text-text-muted hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
+              <button onClick={() => setDeletingSeries(null)} className="text-text-muted hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white transition-colors">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
 
             <p className="text-sm text-slate-600 dark:text-slate-300">
-              Delete <span className="font-bold text-slate-900 dark:text-white">"{deletingCourse.title}"</span>
-              {deletingCourse.video_count > 0 && (
-                <> — it contains <span className="font-bold text-amber-500">{deletingCourse.video_count} video{deletingCourse.video_count !== 1 ? 's' : ''}</span></>
+              Delete <span className="font-bold text-slate-900 dark:text-white">"{deletingSeries.title}"</span>
+              {deletingSeries.video_count > 0 && (
+                <> — it contains <span className="font-bold text-amber-500">{deletingSeries.video_count} video{deletingSeries.video_count !== 1 ? 's' : ''}</span></>
               )}.
             </p>
 
-            {deletingCourse.video_count > 0 && (
+            {deletingSeries.video_count > 0 && (
               <div className="space-y-3">
                 <p className="text-xs font-bold text-text-muted uppercase tracking-wider">What should happen to the videos?</p>
 
                 <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-white/10 cursor-pointer hover:border-primary/50 transition-colors">
                   <input
                     type="radio"
-                    name="course-delete-mode"
+                    name="series-delete-mode"
                     value="migrate"
-                    checked={courseDeleteMode === 'migrate'}
-                    onChange={() => setCourseDeleteMode('migrate')}
+                    checked={seriesDeleteMode === 'migrate'}
+                    onChange={() => setSeriesDeleteMode('migrate')}
                     className="mt-0.5 accent-primary"
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-900 dark:text-white">Migrate videos to another course</p>
-                    {courseDeleteMode === 'migrate' && (
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white">Migrate videos to another series</p>
+                    {seriesDeleteMode === 'migrate' && (
                       <select
-                        value={courseDeleteMigrateTarget}
-                        onChange={(e) => setCourseDeleteMigrateTarget(e.target.value)}
+                        value={seriesDeleteMigrateTarget}
+                        onChange={(e) => setSeriesDeleteMigrateTarget(e.target.value)}
                         className="mt-2 w-full px-3 py-2 rounded-lg bg-panel-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                       >
-                        <option value="">— Select target course —</option>
-                        {courses.filter(c => c.id !== deletingCourse.id).map(c => (
+                        <option value="">— Select target series —</option>
+                        {series.filter(c => c.id !== deletingSeries.id).map(c => (
                           <option key={c.id} value={c.id}>{c.title} ({c.video_count} videos)</option>
                         ))}
                       </select>
@@ -1387,10 +1386,10 @@ export const AdminVideos: React.FC = () => {
                 <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-white/10 cursor-pointer hover:border-red-500/50 transition-colors">
                   <input
                     type="radio"
-                    name="course-delete-mode"
+                    name="series-delete-mode"
                     value="delete_videos"
-                    checked={courseDeleteMode === 'delete_videos'}
-                    onChange={() => setCourseDeleteMode('delete_videos')}
+                    checked={seriesDeleteMode === 'delete_videos'}
+                    onChange={() => setSeriesDeleteMode('delete_videos')}
                     className="mt-0.5 accent-red-500"
                   />
                   <div>
@@ -1403,14 +1402,14 @@ export const AdminVideos: React.FC = () => {
 
             <div className="flex gap-3 pt-2">
               <button
-                onClick={handleDeleteCourse}
+                onClick={handleDeleteSeries}
                 className="px-6 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-bold rounded-lg transition-colors"
               >
-                {deletingCourse.video_count > 0
-                  ? courseDeleteMode === 'migrate' ? 'Migrate & Delete Course' : 'Delete Videos & Course'
-                  : 'Delete Course'}
+                {deletingSeries.video_count > 0
+                  ? seriesDeleteMode === 'migrate' ? 'Migrate & Delete Series' : 'Delete Videos & Series'
+                  : 'Delete Series'}
               </button>
-              <button onClick={() => setDeletingCourse(null)} className="px-6 py-2 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
+              <button onClick={() => setDeletingSeries(null)} className="px-6 py-2 bg-muted-light dark:bg-muted-dark hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-lg transition-colors">
                 Cancel
               </button>
             </div>
@@ -1534,7 +1533,7 @@ export const AdminVideos: React.FC = () => {
         </div>
       )}
 
-      {/* Left Panel — Video List grouped by course */}
+      {/* Left Panel — Video List grouped by series */}
       <aside className="w-80 border-r border-slate-200 dark:border-white/10 bg-sidebar-light dark:bg-sidebar-dark flex flex-col shrink-0">
         <div className="p-4 border-b border-slate-200 dark:border-white/10 space-y-3">
           <div className="flex items-center justify-between">
@@ -1550,8 +1549,8 @@ export const AdminVideos: React.FC = () => {
                 </button>
               )}
               {(() => {
-                const ids = groupedVideos.map(g => g.course?.id || '__uncategorized__');
-                const allCollapsed = ids.length > 0 && ids.every(id => collapsedCourses.has(id));
+                const ids = groupedVideos.map(g => g.series?.id || '__uncategorized__');
+                const allCollapsed = ids.length > 0 && ids.every(id => collapsedSeries.has(id));
                 return (
                   <button
                     onClick={toggleCollapseAll}
@@ -1563,9 +1562,9 @@ export const AdminVideos: React.FC = () => {
                 );
               })()}
               <button
-                onClick={() => setShowCourseCreate(true)}
+                onClick={() => setShowSeriesCreate(true)}
                 className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 transition-colors"
-                title="Add new course"
+                title="Add new series"
               >
                 <span className="material-symbols-outlined text-sm">library_add</span>
               </button>
@@ -1597,54 +1596,46 @@ export const AdminVideos: React.FC = () => {
 
         <div className="flex-1 overflow-y-auto">
           {groupedVideos.map((group) => {
-            const courseId = group.course?.id || '__uncategorized__';
-            const isCollapsed = collapsedCourses.has(courseId);
+            const seriesId = group.series?.id || '__uncategorized__';
+            const isCollapsed = collapsedSeries.has(seriesId);
             return (
-              <div key={courseId}>
-                {/* Course header with expand/collapse + edit/delete */}
+              <div key={seriesId}>
+                {/* Series header with expand/collapse + edit/delete */}
                 <div className="w-full flex items-center gap-1 px-2 py-1.5 bg-input-light dark:bg-input-dark/50 border-b border-slate-200 dark:border-white/5">
                   <button
-                    onClick={() => toggleCourseCollapse(courseId)}
+                    onClick={() => toggleSeriesCollapse(seriesId)}
                     className="flex items-center gap-1.5 flex-1 min-w-0 hover:bg-slate-100 dark:hover:bg-slate-800 rounded px-1 py-0.5 transition-colors"
                   >
                     <span className={`material-symbols-outlined text-sm text-slate-500 dark:text-slate-400 transition-transform duration-200 shrink-0 ${isCollapsed ? '' : 'rotate-90'}`}>
                       chevron_right
                     </span>
                     <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider flex-1 text-left truncate">
-                      {group.course?.title || 'Uncategorized'}
+                      {group.series?.title || 'Uncategorized'}
                     </span>
                     <span className="text-[10px] text-text-muted bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded-full shrink-0">
                       {group.videos.length}
                     </span>
                   </button>
-                  {group.course && (
+                  {group.series && (
                     <div className="flex items-center gap-0.5 shrink-0">
                       <button
-                        onClick={(e) => openEditCourse(group.course!, e)}
+                        onClick={(e) => openEditSeries(group.series!, e)}
                         className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-900 dark:hover:text-white transition-colors"
-                        title="Rename / edit course"
+                        title="Rename / edit series"
                       >
                         <span className="material-symbols-outlined text-[14px]">edit</span>
                       </button>
-                      <Link
-                        to={`/admin/courses/${group.course!.id}/curriculum`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-primary transition-colors"
-                        title="Edit curriculum (weeks, items, publish)"
-                      >
-                        <span className="material-symbols-outlined text-[14px]">view_timeline</span>
-                      </Link>
                       <button
-                        onClick={(e) => openDeleteCourse(group.course!, e)}
+                        onClick={(e) => openDeleteSeries(group.series!, e)}
                         className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-500/20 text-slate-400 hover:text-red-500 transition-colors"
-                        title="Delete course"
+                        title="Delete series"
                       >
                         <span className="material-symbols-outlined text-[14px]">delete</span>
                       </button>
                     </div>
                   )}
                 </div>
-                {/* Videos in this course */}
+                {/* Videos in this series */}
                 {!isCollapsed && group.videos.map((v) => (
                   <button
                     key={v.id}
@@ -1728,20 +1719,20 @@ export const AdminVideos: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Course</label>
+                  <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Series</label>
                   <select
-                    value={createForm.course_id}
+                    value={createForm.series_id}
                     onChange={(e) => {
-                      if (e.target.value === '__new__') { setShowCourseCreate(true); return; }
-                      setCreateForm((f) => ({ ...f, course_id: e.target.value }));
+                      if (e.target.value === '__new__') { setShowSeriesCreate(true); return; }
+                      setCreateForm((f) => ({ ...f, series_id: e.target.value }));
                     }}
                     className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none"
                   >
                     <option value="">None</option>
-                    {courses.map((c) => (
+                    {series.map((c) => (
                       <option key={c.id} value={c.id}>{c.title}</option>
                     ))}
-                    <option value="__new__">+ Add New Course...</option>
+                    <option value="__new__">+ Add New Series...</option>
                   </select>
                 </div>
               </div>
@@ -2057,15 +2048,15 @@ export const AdminVideos: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Course</label>
-                    <select value={editForm.course_id} onChange={(e) => {
-                      if (e.target.value === '__new__') { setShowCourseCreate(true); return; }
-                      setEditForm((f) => ({ ...f, course_id: e.target.value }));
+                    <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Series</label>
+                    <select value={editForm.series_id} onChange={(e) => {
+                      if (e.target.value === '__new__') { setShowSeriesCreate(true); return; }
+                      setEditForm((f) => ({ ...f, series_id: e.target.value }));
                     }}
                       className="w-full px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none">
                       <option value="">None</option>
-                      {courses.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
-                      <option value="__new__">+ Add New Course...</option>
+                      {series.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+                      <option value="__new__">+ Add New Series...</option>
                     </select>
                   </div>
                   <div>
@@ -2926,14 +2917,14 @@ export const AdminVideos: React.FC = () => {
                               className="min-w-0 flex-1 px-2.5 py-1.5 rounded-lg bg-input-light dark:bg-input-dark border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:border-primary outline-none" />
                             <button
                               onClick={() => {
-                                if (!selected?.course_id) return;
-                                const courseVids = [...videos.filter(v => v.course_id === selected.course_id)]
+                                if (!selected?.series_id) return;
+                                const seriesVids = [...videos.filter(v => v.series_id === selected.series_id)]
                                   .sort((a, b) => a.sort_order - b.sort_order || new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-                                const idx = courseVids.findIndex(v => v.id === selected.id);
+                                const idx = seriesVids.findIndex(v => v.id === selected.id);
                                 setBannerForm((f) => ({ ...f, episode: `EP ${String(idx >= 0 ? idx + 1 : 1).padStart(2, '0')}` }));
                               }}
                               className="shrink-0 p-1.5 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary transition-colors border border-primary/30"
-                              title="Sync episode number from video position in course"
+                              title="Sync episode number from video position in series"
                             >
                               <span className="material-symbols-outlined text-sm">sync</span>
                             </button>

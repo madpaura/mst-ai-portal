@@ -19,32 +19,34 @@ def _make_db(rows=None, row=None, val=None):
 # ── Tool registry / role gating ───────────────────────────────────────────────
 
 class TestToolRegistry:
-    def test_get_tools_for_user_role_returns_16_schemas(self):
+    def test_get_tools_for_user_role_returns_17_schemas(self):
         from assistant.tools import get_tools_for_role
         tools = get_tools_for_role("user")
-        assert len(tools) == 16
+        assert len(tools) == 17
         names = {t["function"]["name"] for t in tools}
         assert "search_videos" in names
         assert "global_search" in names
         assert "list_all_videos" in names
+        assert "list_courses" in names
+        assert "list_series" in names
         # content-only tools must NOT appear
         assert "get_my_articles" not in names
         assert "get_video_job_status" not in names
         assert "list_videos_pending_publish" not in names
 
-    def test_get_tools_for_content_role_returns_23_schemas(self):
+    def test_get_tools_for_content_role_returns_24_schemas(self):
         from assistant.tools import get_tools_for_role
         tools = get_tools_for_role("content")
-        assert len(tools) == 23
+        assert len(tools) == 24
         names = {t["function"]["name"] for t in tools}
         assert "get_my_articles" in names
         assert "get_video_job_status" in names
         assert "list_videos_pending_publish" in names
 
-    def test_get_tools_for_admin_role_returns_23_schemas(self):
+    def test_get_tools_for_admin_role_returns_24_schemas(self):
         from assistant.tools import get_tools_for_role
         tools = get_tools_for_role("admin")
-        assert len(tools) == 23
+        assert len(tools) == 24
         names = {t["function"]["name"] for t in tools}
         assert "list_videos_pending_publish" in names
 
@@ -98,17 +100,39 @@ class TestSearchVideos:
 
 class TestListCourses:
     def test_returns_course_list(self):
+        """issue #243: list_courses is curriculum-only, linking to /courses/{slug}."""
         from assistant.tools import list_courses
         row = MagicMock()
         row.__getitem__ = lambda s, k: {
             "title": "LLM Foundations", "slug": "llm-foundations",
-            "description": "Learn LLMs", "video_count": 5,
+            "description": "Learn LLMs",
         }[k]
         db = _make_db(rows=[row])
         with patch("assistant.tools.get_db", AsyncMock(return_value=db)):
             result = _run(list_courses(user_id="u1", user_role="user"))
         assert result["found"] is True
         assert result["courses"][0]["title"] == "LLM Foundations"
+        assert result["courses"][0]["url"] == "/courses/llm-foundations"
+
+
+# ── list_series ───────────────────────────────────────────────────────────────
+
+class TestListSeries:
+    def test_returns_series_list(self):
+        """issue #243: list_series covers Ignite browsing (video_series table)."""
+        from assistant.tools import list_series
+        row = MagicMock()
+        row.__getitem__ = lambda s, k: {
+            "id": "s1", "title": "AI Ignite Foundations", "slug": "ai-ignite-foundations",
+            "video_count": 5,
+        }[k]
+        db = _make_db(rows=[row])
+        with patch("assistant.tools.get_db", AsyncMock(return_value=db)):
+            result = _run(list_series(user_id="u1", user_role="user"))
+        assert result["found"] is True
+        assert result["series"][0]["title"] == "AI Ignite Foundations"
+        assert result["series"][0]["video_count"] == 5
+        assert "/ignite?series=" in result["series"][0]["url"]
 
 
 # ── search_articles ───────────────────────────────────────────────────────────

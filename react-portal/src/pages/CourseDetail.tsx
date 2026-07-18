@@ -169,10 +169,10 @@ export const CourseDetail: React.FC = () => {
     setBusy(true);
     try {
       if (detail.user?.is_enrolled) {
-        await api.delete(`/video/courses/${detail.course.slug}/enroll`);
+        await api.delete(`/courses/${detail.course.slug}/enroll`);
         toast('success', 'Unsubscribed — progress kept, hidden until you re-subscribe');
       } else {
-        await api.post(`/video/courses/${detail.course.slug}/enroll`);
+        await api.post(`/courses/${detail.course.slug}/enroll`);
         toast('success', 'Subscribed');
       }
       await load();

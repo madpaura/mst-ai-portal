@@ -14,7 +14,7 @@ export interface Video {
   description: string | null;
   hls_path: string | null;
   thumbnail: string | null;
-  course_id?: string | null;
+  series_id?: string | null;
   sort_order: number;
   transcript_status?: string | null;
 }
@@ -33,25 +33,16 @@ interface ApiVideo {
   sort_order: number;
   created_at: string;
   transcript_status?: string | null;
-  course_id?: string | null;
+  series_id?: string | null;
 }
 
-export interface Course {
+export interface Series {
   id: string;
   slug: string;
   title?: string;
   description?: string | null;
   video_count?: number;
   thumbnail?: string | null;
-}
-
-export interface CourseProgress {
-  course_id: string;
-  course_slug: string;
-  total_videos: number;
-  completed_videos: number;
-  progress_pct: number;
-  is_enrolled: boolean;
 }
 
 const formatDuration = (s: number | null): string => {
@@ -70,34 +61,34 @@ const HEADER_H = 41;
 const VIDEO_H = 88;
 
 type FlatItem =
-  | { type: 'header'; courseId: string; courseName: string; videoCount: number }
+  | { type: 'header'; seriesId: string; seriesName: string; videoCount: number }
   | { type: 'video'; video: Video; idx: number };
 
 interface RowData {
   items: FlatItem[];
   activeVideoId: string;
-  collapsedCourses: Set<string>;
+  collapsedSeries: Set<string>;
   onSelectVideo: (v: Video) => void;
-  onToggleCourse: (courseId: string) => void;
+  onToggleSeries: (seriesId: string) => void;
 }
 
 const Row = React.memo(({ index, style, data }: ListChildComponentProps<RowData>) => {
-  const { items, activeVideoId, collapsedCourses, onSelectVideo, onToggleCourse } = data;
+  const { items, activeVideoId, collapsedSeries, onSelectVideo, onToggleSeries } = data;
   const item = items[index];
 
   if (item.type === 'header') {
-    const isCollapsed = collapsedCourses.has(item.courseId);
+    const isCollapsed = collapsedSeries.has(item.seriesId);
     return (
       <div style={style} className="bg-slate-50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-white/5">
         <button
-          onClick={() => onToggleCourse(item.courseId)}
+          onClick={() => onToggleSeries(item.seriesId)}
           className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors"
         >
           <span className={`material-symbols-outlined text-sm text-primary transition-transform duration-200 ${isCollapsed ? '' : 'rotate-90'}`}>
             chevron_right
           </span>
           <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex-1 text-left truncate">
-            {item.courseName}
+            {item.seriesName}
           </span>
           <span className="text-[10px] text-slate-400 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded-full">
             {item.videoCount}
@@ -166,88 +157,88 @@ const Row = React.memo(({ index, style, data }: ListChildComponentProps<RowData>
 interface IgniteSidebarProps {
   activeVideoId: string;
   onSelectVideo: (video: Video) => void;
-  onBrowseCourses?: () => void;
-  onCoursesLoaded?: (courses: Course[], progress: Record<string, CourseProgress>) => void;
+  onBrowseSeries?: () => void;
+  onSeriesLoaded?: (series: Series[]) => void;
 }
 
 export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
   activeVideoId,
   onSelectVideo,
-  onBrowseCourses,
-  onCoursesLoaded,
+  onBrowseSeries,
+  onSeriesLoaded,
 }) => {
   const { videoSlug: urlSlug } = useParams<{ videoSlug?: string }>();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [videos, setVideos] = useState<Video[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [courseNames, setCourseNames] = useState<Record<string, string>>({});
-  const [videoCourseMap, setVideoCourseMap] = useState<Record<string, string>>({});
-  // Default: all courses collapsed — user expands what they need
-  const [collapsedCourses, setCollapsedCourses] = useState<Set<string>>(new Set());
+  const [series, setSeries] = useState<Series[]>([]);
+  const [seriesNames, setSeriesNames] = useState<Record<string, string>>({});
+  const [videoSeriesMap, setVideoSeriesMap] = useState<Record<string, string>>({});
+  // Default: all series collapsed — user expands what they need
+  const [collapsedSeries, setCollapsedSeries] = useState<Set<string>>(new Set());
   const listRef = useRef<VariableSizeList<RowData>>(null);
 
   // Single load: 2 parallel cached requests
   useEffect(() => {
     Promise.all([
-      api.get<Course[]>('/video/courses'),
+      api.get<Series[]>('/video/series'),
       api.get<ApiVideo[]>('/video/videos'),
-    ]).then(([courseList, apiVideos]) => {
+    ]).then(([seriesList, apiVideos]) => {
       const names: Record<string, string> = {};
-      courseList.forEach((c) => { names[c.id] = c.title || c.slug; });
-      setCourses(courseList);
-      setCourseNames(names);
+      seriesList.forEach((s) => { names[s.id] = s.title || s.slug; });
+      setSeries(seriesList);
+      setSeriesNames(names);
 
       const vids: Video[] = apiVideos.map((v) => ({
         id: v.id, slug: v.slug, title: v.title, category: v.category,
         duration: formatDuration(v.duration_s), duration_s: v.duration_s,
         description: v.description, hls_path: v.hls_path, thumbnail: v.thumbnail,
-        course_id: v.course_id || null, sort_order: v.sort_order,
+        series_id: v.series_id || null, sort_order: v.sort_order,
         transcript_status: v.transcript_status,
       }));
 
-      const vidCourse: Record<string, string> = {};
-      vids.forEach((v) => { if (v.course_id) vidCourse[v.id] = v.course_id; });
+      const vidSeries: Record<string, string> = {};
+      vids.forEach((v) => { if (v.series_id) vidSeries[v.id] = v.series_id; });
 
       ALL_VIDEOS = vids;
       setVideos(vids);
-      setVideoCourseMap(vidCourse);
+      setVideoSeriesMap(vidSeries);
       setLoaded(true);
 
-      if (onCoursesLoaded) onCoursesLoaded(courseList, {});
+      if (onSeriesLoaded) onSeriesLoaded(seriesList);
 
-      // Default: all courses collapsed; expand only the active one
-      const allCollapsed = new Set(courseList.map((c) => c.id));
+      // Default: all series collapsed; expand only the active one
+      const allCollapsed = new Set(seriesList.map((s) => s.id));
 
       if (urlSlug) {
         const match = vids.find((v) => v.slug === urlSlug);
         if (match) {
           onSelectVideo(match);
-          if (match.course_id) allCollapsed.delete(match.course_id);
+          if (match.series_id) allCollapsed.delete(match.series_id);
         }
       } else if (vids.length > 0) {
         onSelectVideo(vids[0]);
-        if (vids[0].course_id) allCollapsed.delete(vids[0].course_id);
+        if (vids[0].series_id) allCollapsed.delete(vids[0].series_id);
       }
-      setCollapsedCourses(allCollapsed);
+      setCollapsedSeries(allCollapsed);
     }).catch(() => setLoaded(true));
   }, []);
 
-  const toggleCourse = useCallback((courseId: string) => {
-    setCollapsedCourses((prev) => {
+  const toggleSeries = useCallback((seriesId: string) => {
+    setCollapsedSeries((prev) => {
       const next = new Set(prev);
-      if (next.has(courseId)) next.delete(courseId);
-      else next.add(courseId);
+      if (next.has(seriesId)) next.delete(seriesId);
+      else next.add(seriesId);
       return next;
     });
   }, []);
 
-  const allCourseIds = useMemo(() => courses.map((c) => c.id), [courses]);
-  const allCollapsed = allCourseIds.length > 0 && allCourseIds.every((id) => collapsedCourses.has(id));
+  const allSeriesIds = useMemo(() => series.map((s) => s.id), [series]);
+  const allCollapsed = allSeriesIds.length > 0 && allSeriesIds.every((id) => collapsedSeries.has(id));
   const toggleCollapseAll = useCallback(() => {
-    setCollapsedCourses(allCollapsed ? new Set() : new Set(allCourseIds));
-  }, [allCollapsed, allCourseIds]);
+    setCollapsedSeries(allCollapsed ? new Set() : new Set(allSeriesIds));
+  }, [allCollapsed, allSeriesIds]);
 
   const filteredVideos = useMemo(() => videos.filter((v) => {
     const matchesCategory = activeCategory === 'All' || v.category === activeCategory;
@@ -257,35 +248,35 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
 
   // Build grouped structure
   const groupedVideos = useMemo(() => {
-    const groups: { courseId: string; courseName: string; videos: Video[] }[] = [];
-    const courseMap = new Map<string, Video[]>();
+    const groups: { seriesId: string; seriesName: string; videos: Video[] }[] = [];
+    const seriesMap = new Map<string, Video[]>();
     const uncategorized: Video[] = [];
     for (const v of filteredVideos) {
-      const cId = videoCourseMap[v.id];
-      if (cId) {
-        if (!courseMap.has(cId)) courseMap.set(cId, []);
-        courseMap.get(cId)!.push(v);
+      const sId = videoSeriesMap[v.id];
+      if (sId) {
+        if (!seriesMap.has(sId)) seriesMap.set(sId, []);
+        seriesMap.get(sId)!.push(v);
       } else {
         uncategorized.push(v);
       }
     }
-    for (const course of courses) {
-      const vids = courseMap.get(course.id);
+    for (const s of series) {
+      const vids = seriesMap.get(s.id);
       if (vids && vids.length > 0)
-        groups.push({ courseId: course.id, courseName: courseNames[course.id] || 'Course', videos: vids });
+        groups.push({ seriesId: s.id, seriesName: seriesNames[s.id] || 'Series', videos: vids });
     }
     if (uncategorized.length > 0)
-      groups.push({ courseId: '__uncategorized__', courseName: 'Videos', videos: uncategorized });
+      groups.push({ seriesId: '__uncategorized__', seriesName: 'Videos', videos: uncategorized });
     return groups;
-  }, [filteredVideos, courses, courseNames, videoCourseMap]);
+  }, [filteredVideos, series, seriesNames, videoSeriesMap]);
 
   // Flat item list for react-window
   const flatItems = useMemo<FlatItem[]>(() => {
     const items: FlatItem[] = [];
     let idx = 0;
     for (const group of groupedVideos) {
-      items.push({ type: 'header', courseId: group.courseId, courseName: group.courseName, videoCount: group.videos.length });
-      if (!collapsedCourses.has(group.courseId)) {
+      items.push({ type: 'header', seriesId: group.seriesId, seriesName: group.seriesName, videoCount: group.videos.length });
+      if (!collapsedSeries.has(group.seriesId)) {
         for (const video of group.videos) {
           idx++;
           items.push({ type: 'video', video, idx });
@@ -293,7 +284,7 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
       }
     }
     return items;
-  }, [groupedVideos, collapsedCourses]);
+  }, [groupedVideos, collapsedSeries]);
 
   // Reset list sizing cache when flat items change
   useEffect(() => {
@@ -307,22 +298,22 @@ export const IgniteSidebar: React.FC<IgniteSidebarProps> = ({
   const listData = useMemo<RowData>(() => ({
     items: flatItems,
     activeVideoId,
-    collapsedCourses,
+    collapsedSeries,
     onSelectVideo,
-    onToggleCourse: toggleCourse,
-  }), [flatItems, activeVideoId, collapsedCourses, onSelectVideo, toggleCourse]);
+    onToggleSeries: toggleSeries,
+  }), [flatItems, activeVideoId, collapsedSeries, onSelectVideo, toggleSeries]);
 
   return (
     <aside className="w-80 bg-sidebar-light dark:bg-sidebar-dark border-r border-slate-200 dark:border-white/5 flex flex-col shrink-0 z-40 font-sans">
       {/* Top controls */}
       <div className="p-4 border-b border-slate-200 dark:border-white/5">
-        {onBrowseCourses && (
+        {onBrowseSeries && (
           <button
-            onClick={onBrowseCourses}
+            onClick={onBrowseSeries}
             className="w-full flex items-center justify-center gap-2 px-4 py-2 mb-3 text-xs font-bold text-primary border border-primary/30 bg-primary/5 hover:bg-primary/10 rounded-lg transition-colors"
           >
             <span className="material-symbols-outlined text-[16px]">grid_view</span>
-            Browse Courses
+            Browse Series
           </button>
         )}
         <div className="flex items-center gap-2">

@@ -18,13 +18,13 @@ interface ApiVideo {
   description: string | null;
   hls_path: string | null;
   thumbnail: string | null;
-  course_id: string | null;
+  series_id: string | null;
   sort_order: number;
   created_at: string;
   author_name: string | null;
 }
 
-interface ApiCourse {
+interface ApiSeries {
   id: string;
   slug: string;
   title: string;
@@ -41,14 +41,6 @@ interface Playlist {
   video_count: number;
   video_slugs: string[];
   created_at: string;
-}
-
-interface MyCourse {
-  course_id: string;
-  course_slug: string;
-  course_title: string;
-  total_videos: number;
-  is_enrolled: boolean;
 }
 
 // Discover modes. "rated" = Top Rated (likes proxy until dedicated ratings land).
@@ -131,24 +123,23 @@ export const IgniteBrowse: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const [videos, setVideos] = useState<ApiVideo[]>([]);
-  const [courses, setCourses] = useState<ApiCourse[]>([]);
+  const [series, setSeries] = useState<ApiSeries[]>([]);
   const [views, setViews] = useState<Record<string, number>>({});
   const [likes, setLikes] = useState<Record<string, number>>({});
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [myCourses, setMyCourses] = useState<MyCourse[]>([]);
   const [loading, setLoading] = useState(true);
   const [fullLoaded, setFullLoaded] = useState(false);
   const fullLoadedRef = useRef(false);
 
   // Filtering: a single discover mode + an optional exclusive "scope"
-  // (a course/series or a playlist) + a category + free-text search.
+  // (a series or a playlist) + a category + free-text search.
   // All of these are mirrored in the URL so browser-back from a video restores
   // the exact view (My Playlists / Saved / Series / a category / search …)
   // instead of falling back to the default browse page.
   const [mode, setMode] = useState<DiscoverMode>(() => (searchParams.get('view') as DiscoverMode) || 'all');
   const [category, setCategory] = useState<string>(() => searchParams.get('cat') || 'all');
-  const [courseScope, setCourseScope] = useState<string | null>(() => searchParams.get('course'));
+  const [seriesScope, setSeriesScope] = useState<string | null>(() => searchParams.get('series'));
   const [playlistScope, setPlaylistScope] = useState<string | null>(() => searchParams.get('playlist'));
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
 
@@ -158,14 +149,14 @@ export const IgniteBrowse: React.FC = () => {
   const viewParams = useMemo(() => {
     const p = new URLSearchParams();
     if (search.trim()) p.set('q', search);
-    if (courseScope) p.set('course', courseScope);
+    if (seriesScope) p.set('series', seriesScope);
     else if (playlistScope) p.set('playlist', playlistScope);
     else {
       if (mode !== 'all') p.set('view', mode);
       if (category !== 'all') p.set('cat', category);
     }
     return p;
-  }, [search, courseScope, playlistScope, mode, category]);
+  }, [search, seriesScope, playlistScope, mode, category]);
 
   // Keep the URL in sync with the active view (replace — no history spam).
   useEffect(() => {
@@ -191,7 +182,7 @@ export const IgniteBrowse: React.FC = () => {
   const [playlistMenuFor, setPlaylistMenuFor] = useState<string | null>(null); // video slug
 
   useEffect(() => {
-    api.get<ApiCourse[]>('/video/courses').then(setCourses).catch(() => {});
+    api.get<ApiSeries[]>('/video/series').then(setSeries).catch(() => {});
     // Two-phase load: paint the first batch immediately, then swap in the
     // full catalogue once the background request lands.
     api.get<ApiVideo[]>(`/video/videos?limit=${PAGE_SIZE}`)
@@ -224,29 +215,27 @@ export const IgniteBrowse: React.FC = () => {
     if (!user) {
       setSaved(new Set());
       setPlaylists([]);
-      setMyCourses([]);
       return;
     }
     api.get<string[]>('/video/bookmarks')
       .then((slugs) => setSaved(new Set(slugs))).catch(() => {});
     api.get<Playlist[]>('/video/playlists').then(setPlaylists).catch(() => {});
-    api.get<MyCourse[]>('/video/my-courses').then(setMyCourses).catch(() => {});
   }, [user]);
 
   // ── Scope/mode selection helpers (keep the four filters mutually consistent) ──
   // Any sidebar selection also exits search so the chosen view is shown.
   const selectMode = (m: DiscoverMode) => {
-    updateSearch(''); setMode(m); setCourseScope(null); setPlaylistScope(null);
+    updateSearch(''); setMode(m); setSeriesScope(null); setPlaylistScope(null);
   };
   const selectCategory = (c: string) => {
-    updateSearch(''); setCategory(c); setCourseScope(null); setPlaylistScope(null);
+    updateSearch(''); setCategory(c); setSeriesScope(null); setPlaylistScope(null);
   };
-  const selectCourse = (id: string) => {
-    updateSearch(''); setCourseScope(id); setPlaylistScope(null); setMode('all'); setCategory('all');
+  const selectSeries = (id: string) => {
+    updateSearch(''); setSeriesScope(id); setPlaylistScope(null); setMode('all'); setCategory('all');
     document.getElementById('all-videos')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   const selectPlaylist = (id: string) => {
-    updateSearch(''); setPlaylistScope(id); setCourseScope(null); setMode('all'); setCategory('all');
+    updateSearch(''); setPlaylistScope(id); setSeriesScope(null); setMode('all'); setCategory('all');
     document.getElementById('all-videos')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
@@ -316,15 +305,15 @@ export const IgniteBrowse: React.FC = () => {
     } catch { /* ignore */ }
   };
 
-  const courseTitle = useMemo(() => {
+  const seriesTitle = useMemo(() => {
     const m: Record<string, string> = {};
-    courses.forEach((c) => { m[c.id] = c.title || c.slug; });
+    series.forEach((s) => { m[s.id] = s.title || s.slug; });
     return m;
-  }, [courses]);
+  }, [series]);
 
-  const coursesWithVideos = useMemo(
-    () => courses.filter((c) => c.video_count > 0),
-    [courses],
+  const seriesWithVideos = useMemo(
+    () => series.filter((s) => s.video_count > 0),
+    [series],
   );
 
   // Dynamic category list from published videos.
@@ -353,12 +342,6 @@ export const IgniteBrowse: React.FC = () => {
     [videos, progressBySlug],
   );
 
-  // Subscribed (enrolled) courses that still have videos.
-  const subscribedCourses = useMemo(
-    () => myCourses.filter((c) => c.is_enrolled && c.total_videos > 0),
-    [myCourses],
-  );
-
   // Apply scope → mode → category → search to the grid.
   const filtered = useMemo(() => {
     let list = [...videos];
@@ -366,8 +349,8 @@ export const IgniteBrowse: React.FC = () => {
       const pl = playlists.find((p) => p.id === playlistScope);
       const set = new Set(pl?.video_slugs || []);
       list = list.filter((v) => set.has(v.slug));
-    } else if (courseScope) {
-      list = list.filter((v) => v.course_id === courseScope);
+    } else if (seriesScope) {
+      list = list.filter((v) => v.series_id === seriesScope);
     } else if (mode === 'recent') {
       list.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
     } else if (mode === 'trending') {
@@ -381,18 +364,18 @@ export const IgniteBrowse: React.FC = () => {
     }
     if (category !== 'all') list = list.filter((v) => v.category === category);
     return list;
-  }, [videos, mode, category, progressBySlug, views, likes, saved, courseScope, playlistScope, playlists]);
+  }, [videos, mode, category, progressBySlug, views, likes, saved, seriesScope, playlistScope, playlists]);
 
   // Paginate the main grid; reset to page 1 whenever the active view changes.
   const paged = usePagedList(filtered, PAGE_SIZE, viewParams.toString());
 
-  // Fuzzy search index (YouTube-style results). Includes the resolved course
-  // title so a series name matches even though videos only store course_id.
+  // Fuzzy search index (YouTube-style results). Includes the resolved series
+  // title so a series name matches even though videos only store series_id.
   const fuse = useMemo(() => {
     const docs = videos.map((v) => ({
       v,
       title: v.title,
-      series: v.course_id ? courseTitle[v.course_id] || '' : '',
+      series: v.series_id ? seriesTitle[v.series_id] || '' : '',
       category: v.category,
       author: v.author_name || '',
       description: v.description || '',
@@ -412,7 +395,7 @@ export const IgniteBrowse: React.FC = () => {
         { name: 'description', weight: 0.05 },
       ],
     });
-  }, [videos, courseTitle]);
+  }, [videos, seriesTitle]);
 
   const searchQuery = search.trim();
   const searching = searchQuery.length >= 2;
@@ -421,17 +404,17 @@ export const IgniteBrowse: React.FC = () => {
     [fuse, searchQuery, searching],
   );
 
-  // Featured = admin-flagged course; else first populated course by sort_order.
-  const featuredCourse = useMemo(() => {
-    if (coursesWithVideos.length === 0) return null;
-    return coursesWithVideos.find((c) => c.is_featured)
-      ?? [...coursesWithVideos].sort((a, b) => a.sort_order - b.sort_order)[0];
-  }, [coursesWithVideos]);
+  // Featured = admin-flagged series; else first populated series by sort_order.
+  const featuredSeries = useMemo(() => {
+    if (seriesWithVideos.length === 0) return null;
+    return seriesWithVideos.find((s) => s.is_featured)
+      ?? [...seriesWithVideos].sort((a, b) => a.sort_order - b.sort_order)[0];
+  }, [seriesWithVideos]);
 
-  const startCourse = (courseId: string | undefined) => {
-    if (!courseId) return;
+  const startSeries = (seriesId: string | undefined) => {
+    if (!seriesId) return;
     const first = videos
-      .filter((v) => v.course_id === courseId)
+      .filter((v) => v.series_id === seriesId)
       .sort((a, b) => a.sort_order - b.sort_order)[0];
     if (first) navigate(`/ignite/${first.slug}`);
   };
@@ -449,7 +432,7 @@ export const IgniteBrowse: React.FC = () => {
   // Heading reflects the active scope/mode.
   const gridTitle =
     playlistScope ? (playlists.find((p) => p.id === playlistScope)?.name || 'Playlist')
-    : courseScope ? (courseTitle[courseScope] || 'Series')
+    : seriesScope ? (seriesTitle[seriesScope] || 'Series')
     : mode === 'recent' ? 'Recently Added'
     : mode === 'history' ? 'Watch History'
     : mode === 'trending' ? 'Trending'
@@ -540,7 +523,7 @@ export const IgniteBrowse: React.FC = () => {
         </div>
         <div className="p-4">
           <div className="text-[10.5px] font-bold uppercase tracking-wider text-primary mb-1.5 truncate">
-            {v.course_id ? courseTitle[v.course_id] || v.category : v.category}
+            {v.series_id ? seriesTitle[v.series_id] || v.category : v.category}
           </div>
           <h3 className="text-[14.5px] font-semibold leading-snug text-text-strong line-clamp-2 mb-3">{v.title}</h3>
           <div className="flex items-center justify-between">
@@ -583,7 +566,7 @@ export const IgniteBrowse: React.FC = () => {
     const thumb = v.thumbnail ? `${apiBase}${v.thumbnail}` : null;
     const author = v.author_name?.trim();
     const viewCount = views[v.slug] || 0;
-    const series = v.course_id ? courseTitle[v.course_id] : null;
+    const series = v.series_id ? seriesTitle[v.series_id] : null;
     const pct = progressBySlug[v.slug];
     return (
       <div
@@ -645,7 +628,7 @@ export const IgniteBrowse: React.FC = () => {
 
   const empty = !loading && videos.length === 0;
   const noResults = !loading && videos.length > 0 && filtered.length === 0;
-  const scopeActive = !!(courseScope || playlistScope);
+  const scopeActive = !!(seriesScope || playlistScope);
   const menuVideoSlug = playlistMenuFor;
 
   return (
@@ -678,19 +661,19 @@ export const IgniteBrowse: React.FC = () => {
               </div>
             )}
 
-            {/* Part A — all courses/series with videos; click filters the grid */}
-            {coursesWithVideos.length > 0 && (
+            {/* All series with videos; click filters the grid */}
+            {seriesWithVideos.length > 0 && (
               <div>
                 <div className={navLabel}>Series</div>
                 <div className="space-y-0.5">
-                  {coursesWithVideos.map((c) => (
+                  {seriesWithVideos.map((s) => (
                     <NavItem
-                      key={c.id}
+                      key={s.id}
                       icon="video_library"
-                      label={c.title}
-                      badge={c.video_count}
-                      active={courseScope === c.id}
-                      onClick={() => selectCourse(c.id)}
+                      label={s.title}
+                      badge={s.video_count}
+                      active={seriesScope === s.id}
+                      onClick={() => selectSeries(s.id)}
                     />
                   ))}
                 </div>
@@ -713,25 +696,6 @@ export const IgniteBrowse: React.FC = () => {
                 <NavItem icon="history" label="Watch History" active={!scopeActive && mode === 'history'} onClick={() => selectMode('history')} />
               </div>
             </div>
-
-            {/* Subscribed courses (enrollment) */}
-            {user && subscribedCourses.length > 0 && (
-              <div>
-                <div className={navLabel}>Subscribed</div>
-                <div className="space-y-0.5">
-                  {subscribedCourses.map((c) => (
-                    <NavItem
-                      key={c.course_id}
-                      icon="subscriptions"
-                      label={c.course_title}
-                      badge={c.total_videos}
-                      active={courseScope === c.course_id}
-                      onClick={() => selectCourse(c.course_id)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* My Playlists (custom) */}
             <div>
@@ -883,13 +847,13 @@ export const IgniteBrowse: React.FC = () => {
             ) : (
               <>
                 {/* Featured hero — hidden while a scope filter is active */}
-                {featuredCourse && !scopeActive && (
+                {featuredSeries && !scopeActive && (
                   <button
-                    onClick={() => startCourse(featuredCourse.id)}
+                    onClick={() => startSeries(featuredSeries.id)}
                     className="group relative block w-full text-left h-[280px] sm:h-[320px] rounded-2xl overflow-hidden border border-border-base mb-10"
                   >
-                    {featuredCourse.thumbnail ? (
-                      <img src={`${apiBase}${featuredCourse.thumbnail}`} alt={featuredCourse.title} className="absolute inset-0 w-full h-full object-cover" />
+                    {featuredSeries.thumbnail ? (
+                      <img src={`${apiBase}${featuredSeries.thumbnail}`} alt={featuredSeries.title} className="absolute inset-0 w-full h-full object-cover" />
                     ) : (
                       <div className="absolute inset-0 bg-gradient-to-br from-[#0a1f3a] via-[#07251c] to-[#0a0f14]" />
                     )}
@@ -903,10 +867,10 @@ export const IgniteBrowse: React.FC = () => {
                         <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
                         Featured Series
                       </span>
-                      <h1 className="text-2xl sm:text-[28px] font-bold leading-tight text-white mb-2.5">{featuredCourse.title}</h1>
+                      <h1 className="text-2xl sm:text-[28px] font-bold leading-tight text-white mb-2.5">{featuredSeries.title}</h1>
                       <div className="flex items-center gap-3.5 text-sm text-white/65">
-                        <span>{featuredCourse.video_count} {featuredCourse.video_count === 1 ? 'episode' : 'episodes'}</span>
-                        {featuredCourse.description && <span className="hidden sm:inline truncate max-w-xs">· {featuredCourse.description}</span>}
+                        <span>{featuredSeries.video_count} {featuredSeries.video_count === 1 ? 'episode' : 'episodes'}</span>
+                        {featuredSeries.description && <span className="hidden sm:inline truncate max-w-xs">· {featuredSeries.description}</span>}
                       </div>
                     </div>
                   </button>
@@ -1009,32 +973,32 @@ export const IgniteBrowse: React.FC = () => {
                 </section>
 
                 {/* Playlists & Series — hidden while a scope filter is active */}
-                {coursesWithVideos.length > 0 && !scopeActive && (
+                {seriesWithVideos.length > 0 && !scopeActive && (
                   <section id="playlists-section" className="mb-6">
                     {sectionHeader('Playlists & Series')}
                     <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
-                      {coursesWithVideos.map((c) => {
-                        const thumb = c.thumbnail ? `${apiBase}${c.thumbnail}` : null;
+                      {seriesWithVideos.map((s) => {
+                        const thumb = s.thumbnail ? `${apiBase}${s.thumbnail}` : null;
                         return (
                           <button
-                            key={c.id}
-                            onClick={() => selectCourse(c.id)}
+                            key={s.id}
+                            onClick={() => selectSeries(s.id)}
                             className="group shrink-0 w-[190px] text-left"
                           >
                             <div className="relative w-[190px] h-[114px] rounded-xl overflow-hidden border border-border-base mb-2.5 transition-transform group-hover:scale-[1.03]">
                               {thumb ? (
-                                <img src={thumb} alt={c.title} className="w-full h-full object-cover" />
+                                <img src={thumb} alt={s.title} className="w-full h-full object-cover" />
                               ) : (
-                                <div className={`w-full h-full bg-gradient-to-br ${gradFor(c.title)} flex items-center justify-center`}>
-                                  <span className="material-symbols-outlined text-white/85 text-[34px]">{iconFor(c.title)}</span>
+                                <div className={`w-full h-full bg-gradient-to-br ${gradFor(s.title)} flex items-center justify-center`}>
+                                  <span className="material-symbols-outlined text-white/85 text-[34px]">{iconFor(s.title)}</span>
                                 </div>
                               )}
                               <span className="absolute bottom-0 right-0 bg-black/70 text-white text-[10.5px] font-semibold px-2 py-1 backdrop-blur flex items-center gap-1">
                                 <span className="material-symbols-outlined text-[13px]" style={{ fontVariationSettings: "'FILL' 1" }}>play_arrow</span>
-                                {c.video_count} videos
+                                {s.video_count} videos
                               </span>
                             </div>
-                            <div className="text-[13px] font-semibold leading-snug text-text-strong line-clamp-2 group-hover:text-primary transition-colors">{c.title}</div>
+                            <div className="text-[13px] font-semibold leading-snug text-text-strong line-clamp-2 group-hover:text-primary transition-colors">{s.title}</div>
                           </button>
                         );
                       })}

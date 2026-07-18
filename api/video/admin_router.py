@@ -49,7 +49,7 @@ def _write_ops_log(raw_dir: str, op: str, filename: str = "original.mp4") -> Non
 def _video_row_to_admin(r, job=None) -> VideoAdminResponse:
     return VideoAdminResponse(
         id=str(r["id"]),
-        course_id=str(r["course_id"]) if r.get("course_id") else None,
+        series_id=str(r["series_id"]) if r.get("series_id") else None,
         title=r["title"], slug=r["slug"], description=r.get("description"),
         category=r["category"], duration_s=r.get("duration_s"),
         status=r["status"], hls_path=r.get("hls_path"),
@@ -127,16 +127,16 @@ async def admin_create_video(req: VideoCreate, admin: dict = Depends(require_adm
     if existing:
         raise HTTPException(status_code=409, detail="Slug already exists")
 
-    course_id = None
-    if req.course_id:
-        course_id = req.course_id
+    series_id = None
+    if req.series_id:
+        series_id = req.series_id
 
     row = await db.fetchrow(
         """
-        INSERT INTO videos (title, slug, description, category, course_id, sort_order, status, created_by)
+        INSERT INTO videos (title, slug, description, category, series_id, sort_order, status, created_by)
         VALUES ($1, $2, $3, $4, $5, $6, 'draft', $7) RETURNING *
         """,
-        req.title, req.slug, req.description, req.category, course_id, req.sort_order, admin["id"],
+        req.title, req.slug, req.description, req.category, series_id, req.sort_order, admin["id"],
     )
 
     # Create default quality settings
@@ -174,7 +174,7 @@ async def admin_update_video(
     db = await get_db()
     existing = await _require_video_access(db, video_id, admin)
 
-    _VIDEO_UPDATABLE_FIELDS = frozenset({"title", "description", "category", "course_id", "sort_order"})
+    _VIDEO_UPDATABLE_FIELDS = frozenset({"title", "description", "category", "series_id", "sort_order"})
     fields = {}
     for field in _VIDEO_UPDATABLE_FIELDS:
         val = getattr(req, field, None)

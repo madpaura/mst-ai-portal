@@ -31,7 +31,15 @@ _USER_TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "list_courses",
-            "description": "List all available courses with their titles and descriptions",
+            "description": "List published curriculum courses in the Courses section (structured learning paths with weekly modules) — with their titles and descriptions",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_series",
+            "description": "List Ignite video series for browsing — organizational groupings of videos (not the Courses section)",
             "parameters": {"type": "object", "properties": {}},
         },
     },
@@ -71,7 +79,7 @@ _USER_TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "get_course_progress",
-            "description": "Get the current user's progress for a specific course",
+            "description": "Get the current user's curriculum progress for a specific course in the Courses section",
             "parameters": {
                 "type": "object",
                 "properties": {"slug": {"type": "string", "description": "Course URL slug"}},
@@ -262,6 +270,7 @@ def get_tools_for_role(role: str) -> list[dict]:
 TOOL_MESSAGES: dict[str, str] = {
     "search_videos": "Searching videos…",
     "list_courses": "Loading courses…",
+    "list_series": "Loading series…",
     "get_video_details": "Getting video details…",
     "get_video_transcript": "Fetching transcript…",
     "get_my_learning_progress": "Checking your progress…",
@@ -379,15 +388,15 @@ async def list_all_videos(user_id: str, user_role: str) -> dict:
 
 @_tool
 async def list_courses(user_id: str, user_role: str) -> dict:
+    """List curriculum courses in the public Courses section (issue #243:
+    courses are curriculum-only — Ignite browsing is covered by list_series)."""
     db = await get_db()
     rows = await db.fetch(
         """
-        SELECT c.title, c.slug, COALESCE(c.description,'') AS description,
-               COUNT(v.id) AS video_count
-        FROM courses c
-        LEFT JOIN videos v ON v.course_id = c.id AND v.is_active = true
-        WHERE c.is_active = true
-        GROUP BY c.id ORDER BY c.sort_order, c.title
+        SELECT title, slug, COALESCE(description,'') AS description
+        FROM courses
+        WHERE is_active = true AND curriculum_published = true
+        ORDER BY sort_order, title
         """
     )
     if not rows:
@@ -397,7 +406,32 @@ async def list_courses(user_id: str, user_role: str) -> dict:
         "courses": [
             {"title": r["title"], "slug": r["slug"],
              "description": (r["description"] or "")[:120],
-             "video_count": r["video_count"], "url": f"/ignite?course={r['slug']}"}
+             "url": f"/courses/{r['slug']}"}
+            for r in rows
+        ],
+    }
+
+
+@_tool
+async def list_series(user_id: str, user_role: str) -> dict:
+    """List Ignite video series for browsing (issue #243)."""
+    db = await get_db()
+    rows = await db.fetch(
+        """
+        SELECT s.id, s.title, s.slug, COUNT(v.id) AS video_count
+        FROM video_series s
+        LEFT JOIN videos v ON v.series_id = s.id AND v.is_active = true AND v.is_published = true
+        WHERE s.is_active = true
+        GROUP BY s.id ORDER BY s.sort_order, s.title
+        """
+    )
+    if not rows:
+        return {"found": False, "message": "No series available"}
+    return {
+        "found": True,
+        "series": [
+            {"title": r["title"], "slug": r["slug"],
+             "video_count": r["video_count"], "url": f"/ignite?series={r['id']}"}
             for r in rows
         ],
     }
@@ -471,32 +505,24 @@ async def get_my_learning_progress(user_id: str, user_role: str) -> dict:
 
 @_tool
 async def get_course_progress(slug: str, user_id: str, user_role: str) -> dict:
+    """Curriculum progress for a course in the Courses section (issue #243:
+    reuses progress_engine, the same logic the public course detail page
+    and item-completion endpoint use)."""
+    from video import progress_engine
+
     db = await get_db()
-    course = await db.fetchrow("SELECT id, title FROM courses WHERE slug=$1", slug)
+    course = await db.fetchrow(
+        "SELECT id, title FROM courses WHERE slug=$1 AND curriculum_published = true", slug
+    )
     if not course:
         return {"found": False, "message": f"Course '{slug}' not found"}
-    rows = await db.fetch(
-        """
-        SELECT v.id, v.title, v.slug, v.sort_order,
-               COALESCE(p.completed, false) AS completed
-        FROM videos v
-        LEFT JOIN user_video_progress p ON p.video_id = v.id AND p.user_id = $2
-        WHERE v.course_id = $1 AND v.is_active = true
-        ORDER BY v.sort_order
-        """,
-        course["id"], user_id,
-    )
-    total = len(rows)
-    done = sum(1 for r in rows if r["completed"])
-    next_video = next((r["slug"] for r in rows if not r["completed"]), None)
+    progress = await progress_engine.course_progress(db, user_id, str(course["id"]))
     return {
         "found": True,
         "course_title": course["title"],
-        "total": total,
-        "completed_count": done,
-        "percentage": round(done / total * 100) if total else 0,
-        "next_video_slug": next_video,
-        "videos": [{"title": r["title"], "slug": r["slug"], "completed": r["completed"]} for r in rows],
+        "total": progress["total"],
+        "completed_count": progress["completed"],
+        "percentage": progress["pct"],
     }
 
 

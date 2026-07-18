@@ -2,7 +2,7 @@ import json
 import math
 import os
 
-from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from typing import Optional
 
 from video.schemas import (
@@ -63,34 +63,17 @@ async def _video_duration_min(db, video_id: str) -> Optional[int]:
 @router.get("/courses", response_model=list[CourseResponse])
 async def admin_list_courses(admin: dict = Depends(require_admin)):
     db = await get_db()
-    rows = await db.fetch(
-        """
-        SELECT c.*, COUNT(v.id) as video_count
-        FROM courses c
-        LEFT JOIN videos v ON v.course_id = c.id
-        GROUP BY c.id
-        ORDER BY c.sort_order
-        """
-    )
-    return [_course_resp(r, video_count=r["video_count"]) for r in rows]
+    rows = await db.fetch("SELECT * FROM courses ORDER BY sort_order")
+    return [_course_resp(r) for r in rows]
 
 
 @router.get("/courses/{course_id}", response_model=CourseResponse)
 async def admin_get_course(course_id: str, admin: dict = Depends(require_admin)):
     db = await get_db()
-    row = await db.fetchrow(
-        """
-        SELECT c.*, COUNT(v.id) as video_count
-        FROM courses c
-        LEFT JOIN videos v ON v.course_id = c.id
-        WHERE c.id = $1
-        GROUP BY c.id
-        """,
-        course_id,
-    )
+    row = await db.fetchrow("SELECT * FROM courses WHERE id = $1", course_id)
     if not row:
         raise HTTPException(status_code=404, detail="Course not found")
-    return _course_resp(row, video_count=row["video_count"])
+    return _course_resp(row)
 
 
 @router.post("/courses", response_model=CourseResponse)
@@ -148,53 +131,20 @@ async def admin_update_course(
         set_clause = ", ".join(set_parts)
         await db.execute(f"UPDATE courses SET {set_clause} WHERE id = $1", *params)
 
-    row = await db.fetchrow(
-        """
-        SELECT c.*, COUNT(v.id) as video_count
-        FROM courses c
-        LEFT JOIN videos v ON v.course_id = c.id
-        WHERE c.id = $1
-        GROUP BY c.id
-        """,
-        course_id,
-    )
+    row = await db.fetchrow("SELECT * FROM courses WHERE id = $1", course_id)
     await cache.bump_version(cache.NS_VIDEO)
-    return _course_resp(row, video_count=row["video_count"])
+    return _course_resp(row)
 
 
 @router.delete("/courses/{course_id}")
-async def admin_delete_course(
-    course_id: str,
-    migrate_to_id: Optional[str] = Query(None, description="Move videos to this course before deleting"),
-    delete_videos: bool = Query(False, description="Delete all videos in this course"),
-    admin: dict = Depends(require_admin),
-):
+async def admin_delete_course(course_id: str, admin: dict = Depends(require_admin)):
+    """Delete a curriculum course. Videos are never owned by a course directly
+    (issue #243: that's what video_series/series_id is for) — deleting a
+    course only cascades its own modules/items/feedback/enrollments."""
     db = await get_db()
     course = await db.fetchrow("SELECT * FROM courses WHERE id = $1", course_id)
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
-
-    video_count = await db.fetchval(
-        "SELECT COUNT(*) FROM videos WHERE course_id = $1", course_id
-    )
-
-    if video_count and video_count > 0:
-        if migrate_to_id:
-            target = await db.fetchrow("SELECT id FROM courses WHERE id = $1", migrate_to_id)
-            if not target:
-                raise HTTPException(status_code=404, detail="Target course not found")
-            await db.execute(
-                "UPDATE videos SET course_id = $1 WHERE course_id = $2",
-                migrate_to_id, course_id,
-            )
-        elif delete_videos:
-            # Physically delete videos and their dependent rows
-            await db.execute("DELETE FROM videos WHERE course_id = $1", course_id)
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Course has {video_count} video(s). Provide migrate_to_id or delete_videos=true.",
-            )
 
     await db.execute("DELETE FROM courses WHERE id = $1", course_id)
     await cache.bump_version(cache.NS_VIDEO)
@@ -540,13 +490,6 @@ async def admin_publish_curriculum(
         "UPDATE courses SET curriculum_published = $2 WHERE id = $1",
         course_id, req.published,
     )
-    row = await db.fetchrow(
-        """
-        SELECT c.*, COUNT(v.id) as video_count
-        FROM courses c LEFT JOIN videos v ON v.course_id = c.id
-        WHERE c.id = $1 GROUP BY c.id
-        """,
-        course_id,
-    )
+    row = await db.fetchrow("SELECT * FROM courses WHERE id = $1", course_id)
     await cache.bump_version(cache.NS_VIDEO)
-    return _course_resp(row, video_count=row["video_count"])
+    return _course_resp(row)

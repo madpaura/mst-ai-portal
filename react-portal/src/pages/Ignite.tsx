@@ -9,9 +9,9 @@ import '../styles/howto-markdown.css';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { IgniteSidebar, ALL_VIDEOS } from '../components/IgniteSidebar';
-import type { Video, Course, CourseProgress } from '../components/IgniteSidebar';
+import type { Video, Series } from '../components/IgniteSidebar';
 import { CourseBrowser } from '../components/CourseBrowser';
-import type { CourseInfo } from '../components/CourseBrowser';
+import type { SeriesInfo } from '../components/CourseBrowser';
 import { HlsPlayer, type HlsPlayerHandle } from '../components/HlsPlayer';
 import { api } from '../api/client';
 import { useAuth } from '../api/auth';
@@ -218,34 +218,34 @@ export const Ignite: React.FC = () => {
   }, []);
 
   const progressSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Course browser state
-  const [showCourseBrowser, setShowCourseBrowser] = useState(false);
-  const [allCourses, setAllCourses] = useState<CourseInfo[]>([]);
+  // Series browser state (issue #243: Ignite browses by Series, not Courses)
+  const [showSeriesBrowser, setShowSeriesBrowser] = useState(false);
+  const [allSeries, setAllSeries] = useState<SeriesInfo[]>([]);
 
-  const handleCoursesLoaded = useCallback((courses: Course[], _progress: Record<string, CourseProgress>) => {
-    setAllCourses(courses.map((c) => ({
-      id: c.id,
-      slug: c.slug,
-      title: c.title || c.slug,
-      description: c.description ?? null,
-      video_count: c.video_count ?? 0,
-      thumbnail: c.thumbnail ?? null,
+  const handleSeriesLoaded = useCallback((series: Series[]) => {
+    setAllSeries(series.map((s) => ({
+      id: s.id,
+      slug: s.slug,
+      title: s.title || s.slug,
+      description: s.description ?? null,
+      video_count: s.video_count ?? 0,
+      thumbnail: s.thumbnail ?? null,
     })));
   }, []);
 
-  const handleStartCourse = useCallback((courseSlug: string) => {
-    // Find first video of this course and start playing it
-    const courseId = allCourses.find((c) => c.slug === courseSlug)?.id;
-    if (courseId) {
-      const firstVideo = ALL_VIDEOS.find((v) => v.course_id === courseId);
+  const handleStartSeries = useCallback((seriesSlug: string) => {
+    // Find first video of this series and start playing it
+    const seriesId = allSeries.find((s) => s.slug === seriesSlug)?.id;
+    if (seriesId) {
+      const firstVideo = ALL_VIDEOS.find((v) => v.series_id === seriesId);
       if (firstVideo) {
-        setShowCourseBrowser(false);
+        setShowSeriesBrowser(false);
         handleSelectVideo(firstVideo);
         return;
       }
     }
-    setShowCourseBrowser(false);
-  }, [allCourses]);
+    setShowSeriesBrowser(false);
+  }, [allSeries]);
 
   const handleTimeUpdate = (time: number, dur: number) => {
     setCurrentTime(time);
@@ -322,13 +322,13 @@ export const Ignite: React.FC = () => {
 
   const handleTabClick = (tab: 'notes' | 'howto') => setActiveTab(tab);
 
-  // Prev/next video within the same course
-  const courseVideos = activeVideo?.course_id
-    ? ALL_VIDEOS.filter((v) => v.course_id === activeVideo.course_id).sort((a, b) => a.sort_order - b.sort_order)
+  // Prev/next video within the same series
+  const seriesVideos = activeVideo?.series_id
+    ? ALL_VIDEOS.filter((v) => v.series_id === activeVideo.series_id).sort((a, b) => a.sort_order - b.sort_order)
     : [];
-  const activeVideoIdx = courseVideos.findIndex((v) => v.id === activeVideo?.id);
-  const prevVideo = activeVideoIdx > 0 ? courseVideos[activeVideoIdx - 1] : null;
-  const nextVideo = activeVideoIdx >= 0 && activeVideoIdx < courseVideos.length - 1 ? courseVideos[activeVideoIdx + 1] : null;
+  const activeVideoIdx = seriesVideos.findIndex((v) => v.id === activeVideo?.id);
+  const prevVideo = activeVideoIdx > 0 ? seriesVideos[activeVideoIdx - 1] : null;
+  const nextVideo = activeVideoIdx >= 0 && activeVideoIdx < seriesVideos.length - 1 ? seriesVideos[activeVideoIdx + 1] : null;
   const handleFormatBold = () => {};
   const handleFormatCode = () => {};
   const handleFormatList = () => {};
@@ -340,21 +340,21 @@ export const Ignite: React.FC = () => {
       <div className="flex flex-1 overflow-hidden pt-16">
         <IgniteSidebar
           activeVideoId={activeVideo?.id || ''}
-          onSelectVideo={(v) => { setShowCourseBrowser(false); handleSelectVideo(v); }}
-          onBrowseCourses={() => setShowCourseBrowser(true)}
-          onCoursesLoaded={handleCoursesLoaded}
+          onSelectVideo={(v) => { setShowSeriesBrowser(false); handleSelectVideo(v); }}
+          onBrowseSeries={() => setShowSeriesBrowser(true)}
+          onSeriesLoaded={handleSeriesLoaded}
         />
 
         <main className="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark relative p-6 lg:p-10">
           <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
 
-          {/* Course browser overlay */}
-          {showCourseBrowser && (
+          {/* Series browser overlay */}
+          {showSeriesBrowser && (
             <div className="relative z-10">
               <div className="flex items-center gap-3 mb-6">
                 {activeVideo && (
                   <button
-                    onClick={() => setShowCourseBrowser(false)}
+                    onClick={() => setShowSeriesBrowser(false)}
                     className="flex items-center gap-2 text-sm text-slate-500 hover:text-primary transition-colors"
                   >
                     <span className="material-symbols-outlined text-[18px]">arrow_back</span>
@@ -363,13 +363,13 @@ export const Ignite: React.FC = () => {
                 )}
               </div>
               <CourseBrowser
-                courses={allCourses}
-                onStartCourse={handleStartCourse}
+                series={allSeries}
+                onStartSeries={handleStartSeries}
               />
             </div>
           )}
 
-          <div className={`max-w-7xl mx-auto flex flex-col gap-8 relative z-10 ${showCourseBrowser ? 'hidden' : ''}`}>
+          <div className={`max-w-7xl mx-auto flex flex-col gap-8 relative z-10 ${showSeriesBrowser ? 'hidden' : ''}`}>
             {/* Interested in Contributing? CTA — shown to all users */}
             {showContributeCTA && (
               <div className="flex flex-col gap-2 px-4 py-3 rounded-xl border border-primary/20 bg-primary/5">
@@ -507,7 +507,7 @@ export const Ignite: React.FC = () => {
             </div>
             )}
 
-            {/* Course video navigation */}
+            {/* Series video navigation */}
             {(prevVideo || nextVideo) && (
               <div className="flex items-stretch gap-3">
                 <button
@@ -765,7 +765,7 @@ export const Ignite: React.FC = () => {
             </div>
             )}
           </div>
-          {/* End of video content area (hidden when course browser is open) */}
+          {/* End of video content area (hidden when series browser is open) */}
           <Footer />
         </main>
       </div>

@@ -23,6 +23,34 @@ class PlaylistVideoAdd(BaseModel):
     slug: str
 
 
+class SeriesResponse(BaseModel):
+    """Ignite browse bucket (issue #243) — pure organization, no enrollment."""
+    id: str
+    title: str
+    slug: str
+    description: Optional[str] = None
+    sort_order: int
+    video_count: int = 0
+    thumbnail: Optional[str] = None
+    is_featured: bool = False
+
+
+class SeriesCreate(BaseModel):
+    title: str
+    slug: str
+    description: Optional[str] = None
+    sort_order: int = 0
+    is_featured: bool = False
+
+
+class SeriesUpdate(BaseModel):
+    title: Optional[str] = None
+    slug: Optional[str] = None
+    description: Optional[str] = None
+    sort_order: Optional[int] = None
+    is_featured: Optional[bool] = None
+
+
 class CourseResponse(BaseModel):
     id: str
     title: str
@@ -221,7 +249,7 @@ class CourseFeedbackAdminEntry(BaseModel):
 
 class VideoResponse(BaseModel):
     id: str
-    course_id: Optional[str] = None
+    series_id: Optional[str] = None
     title: str
     slug: str
     description: Optional[str] = None
@@ -242,7 +270,7 @@ class VideoCreate(BaseModel):
     slug: Optional[str] = ""
     description: Optional[str] = None
     category: str
-    course_id: Optional[str] = None
+    series_id: Optional[str] = None
     sort_order: int = 0
 
 
@@ -250,7 +278,7 @@ class VideoUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     category: Optional[str] = None
-    course_id: Optional[str] = None
+    series_id: Optional[str] = None
     sort_order: Optional[int] = None
 
 
