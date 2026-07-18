@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import math
 import os
 import re
@@ -19,7 +20,8 @@ from video.schemas import (
     SeedNoteResponse, JobStatusResponse, BannerConfigResponse, BannerConfigUpdate,
     TrimRequest, CutRequest, SpeedSectionRequest, AttachmentResponse, AttachmentUpdate,
     VideoEditorInfoResponse, VideoEditorDraftResponse, VideoEditorDraftUpdate,
-    VideoFilmstripResponse,
+    VideoFilmstripResponse, EditorSuggestion, EditorSuggestAnalyzeRequest,
+    EditorSuggestAnalyzeResponse, EditorSuggestionStateUpdate,
 )
 from pydantic import BaseModel
 from auth.dependencies import require_content as require_admin
@@ -990,11 +992,13 @@ _DEFAULT_EDITOR_STYLE = {"preset": "none", "pad_pct": 0, "radius_px": 0}
 def _draft_row_to_response(video_id: str, r) -> VideoEditorDraftResponse:
     edits = r["edits"] if isinstance(r["edits"], list) else json.loads(r["edits"] or "[]")
     style = r["style"] if isinstance(r["style"], dict) else json.loads(r["style"] or "{}")
+    suggestions = r["suggestions"] if isinstance(r["suggestions"], list) else json.loads(r["suggestions"] or "[]")
     return VideoEditorDraftResponse(
         video_id=video_id,
         edits=edits,
         muted=r["muted"],
         style={**_DEFAULT_EDITOR_STYLE, **style},
+        suggestions=suggestions,
         updated_at=r["updated_at"],
     )
 
@@ -1035,6 +1039,176 @@ async def admin_upsert_editor_draft(
         video_id, edits_json, req.muted, style_json,
     )
     return _draft_row_to_response(video_id, row)
+
+
+# ── Silence-gap suggestions (issue #259) ────────────────────
+#
+# Deterministic, on-demand: reads the Whisper transcript already produced by
+# the auto-mode pipeline (worker/auto_processor.py) and flags gaps between
+# consecutive segment timestamps that exceed `threshold_s`. Nothing here
+# touches the raw file or the transcript — accepting a suggestion just adds a
+# normal `cut` op to the draft's `edits` (via the existing PUT above), tagged
+# `source: "suggestion"`. Review state (accepted/ignored) is stored alongside
+# the suggestions themselves in `video_editor_drafts.suggestions` so a
+# re-analyze — even with a different threshold — doesn't resurrect a
+# suggestion the user already dealt with, as long as its id is unchanged.
+#
+# Suggestion ids are a short hash of the rounded start/end timestamps, so
+# re-running analyze with the same transcript + threshold reproduces the same
+# ids deterministically (see `_gap_suggestion_id`).
+
+def _transcript_json_path(video_id: str) -> str:
+    return os.path.join(settings.VIDEO_STORAGE_PATH, video_id, "transcript.json")
+
+
+def _gap_suggestion_id(start_s: float, end_s: float) -> str:
+    key = f"gap:{round(start_s, 1)}:{round(end_s, 1)}"
+    return hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
+
+
+def _compute_gap_suggestions(transcript: dict, threshold_s: float) -> list[dict]:
+    """Flag gaps >= threshold_s between consecutive transcript segments."""
+    segments = transcript.get("segments") or []
+    segments = sorted(
+        (s for s in segments if s.get("start") is not None and s.get("end") is not None),
+        key=lambda s: s["start"],
+    )
+    out: list[dict] = []
+    for prev, nxt in zip(segments, segments[1:]):
+        prev_end = float(prev["end"])
+        next_start = float(nxt["start"])
+        gap = next_start - prev_end
+        if gap >= threshold_s:
+            out.append({
+                "id": _gap_suggestion_id(prev_end, next_start),
+                "kind": "gap",
+                "start_s": prev_end,
+                "end_s": next_start,
+                "gap_s": round(gap, 2),
+                "reason": f"Silence — {round(gap, 1)}s gap between segments",
+                "state": "open",
+            })
+    return out
+
+
+def _merge_suggestion_review_state(fresh: list[dict], stored: list) -> list[dict]:
+    """Carry forward accepted/ignored state from a prior analyze pass, keyed
+    by suggestion id, so reviewed suggestions don't reappear as `open`."""
+    stored_by_id = {s["id"]: s for s in (stored or []) if isinstance(s, dict) and s.get("id")}
+    merged = []
+    for s in fresh:
+        prior = stored_by_id.get(s["id"])
+        if prior and prior.get("state") in ("accepted", "ignored"):
+            s = {**s, "state": prior["state"]}
+        merged.append(s)
+    return merged
+
+
+async def _load_stored_suggestions(db, video_id: str) -> list:
+    row = await db.fetchrow("SELECT suggestions FROM video_editor_drafts WHERE video_id = $1", video_id)
+    if not row or not row["suggestions"]:
+        return []
+    raw = row["suggestions"]
+    return raw if isinstance(raw, list) else json.loads(raw or "[]")
+
+
+async def _save_suggestions(db, video_id: str, suggestions: list[dict]) -> None:
+    await db.execute(
+        """
+        INSERT INTO video_editor_drafts (video_id, suggestions, updated_at)
+        VALUES ($1, $2, now())
+        ON CONFLICT (video_id) DO UPDATE
+            SET suggestions = EXCLUDED.suggestions, updated_at = now()
+        """,
+        video_id, json.dumps(suggestions),
+    )
+
+
+@router.post("/videos/{video_id}/editor-suggestions/analyze", response_model=EditorSuggestAnalyzeResponse)
+async def admin_analyze_suggestions(
+    video_id: str, req: EditorSuggestAnalyzeRequest, admin: dict = Depends(verify_video_access)
+):
+    """Compute silence-gap suggestions from the video's transcript.
+
+    Re-runnable with a different `threshold_s`. If the transcript isn't
+    `ready` yet, returns `transcript_status` unchanged (and no suggestions) so
+    the frontend can offer the "generate transcript first" flow instead.
+    """
+    db = await get_db()
+    video = await db.fetchrow(
+        "SELECT transcript_status, transcript_error FROM videos WHERE id = $1", video_id
+    )
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    transcript_status = video["transcript_status"] or "pending"
+    if transcript_status != "ready":
+        return EditorSuggestAnalyzeResponse(
+            transcript_status=transcript_status,
+            transcript_error=video["transcript_error"],
+            threshold_s=req.threshold_s,
+            suggestions=[],
+        )
+
+    t_path = _transcript_json_path(video_id)
+    if not os.path.isfile(t_path):
+        # transcript_status says ready but the file is missing — surface as
+        # an error state rather than silently returning zero suggestions.
+        return EditorSuggestAnalyzeResponse(
+            transcript_status="error",
+            transcript_error="Transcript file missing on disk",
+            threshold_s=req.threshold_s,
+            suggestions=[],
+        )
+
+    try:
+        with open(t_path) as f:
+            transcript = json.load(f)
+    except Exception:
+        return EditorSuggestAnalyzeResponse(
+            transcript_status="error",
+            transcript_error="Failed to read transcript",
+            threshold_s=req.threshold_s,
+            suggestions=[],
+        )
+
+    fresh = _compute_gap_suggestions(transcript, req.threshold_s)
+    stored = await _load_stored_suggestions(db, video_id)
+    merged = _merge_suggestion_review_state(fresh, stored)
+    await _save_suggestions(db, video_id, merged)
+
+    return EditorSuggestAnalyzeResponse(
+        transcript_status="ready",
+        transcript_error=None,
+        threshold_s=req.threshold_s,
+        suggestions=[EditorSuggestion(**s) for s in merged],
+    )
+
+
+@router.patch("/videos/{video_id}/editor-suggestions/{suggestion_id}", response_model=EditorSuggestion)
+async def admin_update_suggestion_state(
+    video_id: str, suggestion_id: str, req: EditorSuggestionStateUpdate,
+    admin: dict = Depends(verify_video_access),
+):
+    """Mark a suggestion accepted/ignored (or back to open) without touching edits.
+
+    "Cut this" on the frontend calls this *and* PUTs the new cut op onto the
+    draft's `edits` via the existing endpoint above; this call only updates
+    the suggestion's own review state so it doesn't reappear as `open` on the
+    next analyze.
+    """
+    db = await get_db()
+    stored = await _load_stored_suggestions(db, video_id)
+    updated = None
+    for s in stored:
+        if s.get("id") == suggestion_id:
+            s["state"] = req.state
+            updated = s
+            break
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    await _save_suggestions(db, video_id, stored)
+    return EditorSuggestion(**updated)
 
 
 # ── Editor timeline filmstrip (issue #257) ──────────────────
