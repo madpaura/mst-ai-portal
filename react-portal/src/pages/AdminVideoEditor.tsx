@@ -29,6 +29,9 @@ interface VideoEditorInfo {
   source_width: number | null;
   source_height: number | null;
   aspect_ratio: number | null;
+  // Apply-to-video staleness (issue #261).
+  pipeline_stale: boolean;
+  editor_applied_at: string | null;
 }
 
 interface VideoEditorDraft {
@@ -133,12 +136,22 @@ export const AdminVideoEditor: React.FC = () => {
   const mountedRef = useRef(true);
   const saveTimerRef = useRef<number | null>(null);
 
-  // ── Export mp4 (issue #260) ─────────────────────────────────────────────
+  // ── Export mp4 / Apply to video (issue #260, apply added by #261) ──────
+  // Both render modes share one modal, one job table/worker, and one status
+  // poll — `renderMode` picks which POST endpoint + modal copy applies.
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [renderMode, setRenderMode] = useState<'download' | 'apply'>('download');
   const [exportQuality, setExportQuality] = useState('source');
   const [exportStarting, setExportStarting] = useState(false);
   const [exportStartError, setExportStartError] = useState<string | null>(null);
   const [exportStatus, setExportStatus] = useState<EditorExportStatus | null>(null);
+
+  // Regenerate transcript/chapters prompt (issue #261) — triggered from the
+  // apply modal's success panel, and mirrored as a persistent banner (below)
+  // for a return visit where `info.pipeline_stale` is still true.
+  const [regeneratingStale, setRegeneratingStale] = useState(false);
+  const [regenerateStaleError, setRegenerateStaleError] = useState<string | null>(null);
+  const [staleBannerDismissed, setStaleBannerDismissed] = useState(false);
 
   // Stale poll / stale closure guard (CLAUDE.md pattern) — must be set
   // before the interval starts, and re-checked after every await so a poll
@@ -472,6 +485,36 @@ export const AdminVideoEditor: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exportQualityOptions]);
 
+  // Refetch bootstrap info + the (now-cleared) draft after a successful
+  // apply — the worker swapped a new original.mp4 in, updated duration, and
+  // cleared video_editor_drafts server-side, so the editor's local state
+  // needs to catch up (issue #261).
+  const refreshAfterApply = useCallback(async () => {
+    if (!id) return;
+    try {
+      const freshInfo = await api.get<VideoEditorInfo>(`/admin/videos/${id}/editor-info`);
+      if (activeExportIdRef.current !== id) return;
+      setInfo(freshInfo);
+      if (freshInfo.duration_s) setDuration(freshInfo.duration_s);
+    } catch {
+      // Best-effort — the modal's success panel already reflects the apply.
+    }
+    try {
+      const freshDraft = await api.get<VideoEditorDraft>(`/admin/videos/${id}/editor-draft`);
+      if (activeExportIdRef.current !== id) return;
+      justLoadedRef.current = true; // this reset shouldn't trigger another autosave
+      setEdits(freshDraft.edits ?? []);
+      setMuted(!!freshDraft.muted);
+      setStyle(freshDraft.style ?? DEFAULT_STYLE);
+      const freshSuggestions = freshDraft.suggestions ?? [];
+      setSuggestions(freshSuggestions);
+      setHasAnalyzedSuggestions(freshSuggestions.length > 0);
+      setSelectedEditId(null);
+    } catch {
+      // Best-effort.
+    }
+  }, [id]);
+
   const startExportPoll = useCallback(() => {
     if (!id) return;
     activeExportIdRef.current = id;
@@ -488,6 +531,7 @@ export const AdminVideoEditor: React.FC = () => {
         if (data.status !== 'queued' && data.status !== 'processing' && exportPollRef.current) {
           window.clearInterval(exportPollRef.current);
           exportPollRef.current = null;
+          if (data.mode === 'apply' && data.status === 'done') refreshAfterApply();
         }
       } catch {
         // Transient poll failure — leave the interval running, next tick retries.
@@ -495,40 +539,47 @@ export const AdminVideoEditor: React.FC = () => {
     };
     exportPollRef.current = window.setInterval(poll, 2000);
     poll();
-  }, [id]);
+  }, [id, refreshAfterApply]);
 
-  const openExportModal = useCallback(() => {
-    setExportStartError(null);
-    setExportModalOpen(true);
-    if (!id) return;
-    activeExportIdRef.current = id;
-    api
-      .get<EditorExportStatus>(`/admin/videos/${id}/editor-export/status`)
-      .then((data) => {
-        if (activeExportIdRef.current !== id) return;
-        setExportStatus(data);
-        if (data.status === 'queued' || data.status === 'processing') startExportPoll();
-      })
-      .catch(() => {
-        // No job yet, or the fetch failed — the modal just starts from its idle state.
-      });
-  }, [id, startExportPoll]);
+  const openExportModal = useCallback(
+    (mode: 'download' | 'apply') => {
+      setRenderMode(mode);
+      setExportStartError(null);
+      setRegenerateStaleError(null);
+      setExportModalOpen(true);
+      if (!id) return;
+      activeExportIdRef.current = id;
+      api
+        .get<EditorExportStatus>(`/admin/videos/${id}/editor-export/status`)
+        .then((data) => {
+          if (activeExportIdRef.current !== id) return;
+          setExportStatus(data);
+          if (data.status === 'queued' || data.status === 'processing') startExportPoll();
+        })
+        .catch(() => {
+          // No job yet, or the fetch failed — the modal just starts from its idle state.
+        });
+    },
+    [id, startExportPoll],
+  );
 
   const handleStartExport = useCallback(async () => {
     if (!id) return;
     setExportStarting(true);
     setExportStartError(null);
     try {
-      const job = await api.post<{ id: number; status: string; progress_pct: number; quality: string | null }>(
-        `/admin/videos/${id}/editor-export`,
-        { quality: exportQuality },
+      const endpoint = renderMode === 'apply' ? 'editor-apply' : 'editor-export';
+      const job = await api.post<{ id: number; status: string; mode?: string; progress_pct: number; quality: string | null }>(
+        `/admin/videos/${id}/${endpoint}`,
+        renderMode === 'apply' ? undefined : { quality: exportQuality },
       );
       if (activeExportIdRef.current !== id) return;
       setExportStatus({
         id: job.id,
         status: job.status as EditorExportStatus['status'],
+        mode: (job.mode as 'download' | 'apply' | undefined) ?? renderMode,
         progress_pct: job.progress_pct,
-        quality: job.quality ?? exportQuality,
+        quality: job.quality ?? (renderMode === 'apply' ? 'source' : exportQuality),
         error: null,
         download_available: false,
         output_filename: null,
@@ -540,7 +591,24 @@ export const AdminVideoEditor: React.FC = () => {
     } finally {
       if (activeExportIdRef.current === id) setExportStarting(false);
     }
-  }, [id, exportQuality, startExportPoll]);
+  }, [id, renderMode, exportQuality, startExportPoll]);
+
+  const handleRegenerateStale = useCallback(async () => {
+    if (!id) return;
+    setRegeneratingStale(true);
+    setRegenerateStaleError(null);
+    try {
+      await api.post(`/admin/videos/${id}/regenerate-stale`);
+      if (activeExportIdRef.current !== id) return;
+      setInfo((prev) => (prev ? { ...prev, pipeline_stale: false } : prev));
+      setExportModalOpen(false);
+    } catch (err) {
+      if (activeExportIdRef.current !== id) return;
+      setRegenerateStaleError(toApiError(err));
+    } finally {
+      if (activeExportIdRef.current === id) setRegeneratingStale(false);
+    }
+  }, [id]);
 
   const exportDownloadUrl = id ? `${API_BASE}/admin/videos/${id}/editor-export/download` : null;
 
@@ -557,6 +625,7 @@ export const AdminVideoEditor: React.FC = () => {
       .then((data) => {
         if (cancelled || activeExportIdRef.current !== id) return;
         setExportStatus(data);
+        if (data.mode) setRenderMode(data.mode);
         if (data.status === 'queued' || data.status === 'processing') startExportPoll();
       })
       .catch(() => {
@@ -766,20 +835,42 @@ export const AdminVideoEditor: React.FC = () => {
               </span>
               Remove audio
             </button>
-            <button
-              onClick={openExportModal}
-              title={
-                exportStatus?.status === 'queued' || exportStatus?.status === 'processing'
-                  ? `Rendering… ${exportStatus.progress_pct}%`
-                  : 'Render the edit list to a downloadable mp4'
-              }
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[13px] font-medium bg-primary hover:bg-blue-500 text-white shrink-0"
-            >
-              <span className="material-symbols-outlined text-base">movie</span>
-              {exportStatus?.status === 'queued' || exportStatus?.status === 'processing'
-                ? `Rendering… ${exportStatus.progress_pct}%`
-                : 'Export mp4'}
-            </button>
+            {(() => {
+              const applyActive =
+                exportStatus?.mode === 'apply' &&
+                (exportStatus.status === 'queued' || exportStatus.status === 'processing');
+              const exportActive =
+                (exportStatus?.mode ?? 'download') === 'download' &&
+                (exportStatus?.status === 'queued' || exportStatus?.status === 'processing');
+              return (
+                <>
+                  <button
+                    onClick={() => openExportModal('apply')}
+                    title={
+                      applyActive
+                        ? `Applying… ${exportStatus?.progress_pct}%`
+                        : 'Render the edit list in place, replacing the video (source resolution)'
+                    }
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[13px] font-medium border border-[#243043] bg-[#0F1520] hover:border-[#5C6880] text-[#E8EDF6] shrink-0"
+                  >
+                    <span className="material-symbols-outlined text-base">published_with_changes</span>
+                    {applyActive ? `Applying… ${exportStatus?.progress_pct}%` : 'Apply to video'}
+                  </button>
+                  <button
+                    onClick={() => openExportModal('download')}
+                    title={
+                      exportActive
+                        ? `Rendering… ${exportStatus?.progress_pct}%`
+                        : 'Render the edit list to a downloadable mp4'
+                    }
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[13px] font-medium bg-primary hover:bg-blue-500 text-white shrink-0"
+                  >
+                    <span className="material-symbols-outlined text-base">movie</span>
+                    {exportActive ? `Rendering… ${exportStatus?.progress_pct}%` : 'Export mp4'}
+                  </button>
+                </>
+              );
+            })()}
           </>
         )}
         <span className="text-[10px] font-bold tracking-[0.1em] text-[#F5A524] border border-[#F5A524]/40 rounded-full px-2.5 py-0.5">
@@ -819,6 +910,35 @@ export const AdminVideoEditor: React.FC = () => {
                   This source codec can&apos;t be previewed in the editor (the browser could not decode
                   the raw file — likely HEVC/H.265 or another format outside browser codec support).
                   Transcode the video first, or use a browser with broader codec support.
+                </div>
+              )}
+
+              {/* Stale transcript/chapters prompt (issue #261) — persists across
+                  visits as long as info.pipeline_stale is true; "Later" only
+                  collapses this banner locally, it never clears the flag. */}
+              {info?.pipeline_stale && !staleBannerDismissed && (
+                <div className="shrink-0 flex items-center gap-3 px-4 py-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-sm text-amber-200">
+                  <span className="material-symbols-outlined text-base shrink-0">warning</span>
+                  <span className="flex-1">
+                    Timestamps changed — the transcript, captions and chapters no longer match the
+                    edited video. Regenerate them?
+                  </span>
+                  {regenerateStaleError && (
+                    <span className="text-red-300 text-xs shrink-0">{regenerateStaleError}</span>
+                  )}
+                  <button
+                    onClick={() => setStaleBannerDismissed(true)}
+                    className="shrink-0 px-2.5 py-1 rounded-md text-xs font-medium border border-amber-500/40 hover:bg-amber-500/10"
+                  >
+                    Later
+                  </button>
+                  <button
+                    onClick={handleRegenerateStale}
+                    disabled={regeneratingStale}
+                    className="shrink-0 px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-500 text-black hover:bg-amber-400 disabled:opacity-50"
+                  >
+                    {regeneratingStale ? 'Queuing…' : 'Regenerate transcript & chapters'}
+                  </button>
                 </div>
               )}
 
@@ -934,6 +1054,7 @@ export const AdminVideoEditor: React.FC = () => {
       <ExportModal
         open={exportModalOpen}
         onClose={() => setExportModalOpen(false)}
+        mode={renderMode}
         edits={edits}
         muted={muted}
         style={style}
@@ -945,6 +1066,10 @@ export const AdminVideoEditor: React.FC = () => {
         startError={exportStartError}
         onStart={handleStartExport}
         downloadUrl={exportDownloadUrl}
+        pipelineStale={!!info?.pipeline_stale}
+        onRegenerateStale={handleRegenerateStale}
+        regeneratingStale={regeneratingStale}
+        regenerateError={regenerateStaleError}
       />
     </div>
   );
