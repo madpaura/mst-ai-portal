@@ -1,4 +1,5 @@
 import asyncio
+import math
 import os
 import re
 import uuid
@@ -18,6 +19,7 @@ from video.schemas import (
     SeedNoteResponse, JobStatusResponse, BannerConfigResponse, BannerConfigUpdate,
     TrimRequest, CutRequest, SpeedSectionRequest, AttachmentResponse, AttachmentUpdate,
     VideoEditorInfoResponse, VideoEditorDraftResponse, VideoEditorDraftUpdate,
+    VideoFilmstripResponse,
 )
 from pydantic import BaseModel
 from auth.dependencies import require_content as require_admin
@@ -333,12 +335,29 @@ async def admin_storage_info(video_id: str, admin: dict = Depends(require_admin)
     if os.path.isfile(thumb_path):
         thumb_size = os.path.getsize(thumb_path)
 
-    return {"files": files, "hls_size": hls_size, "thumb_size": thumb_size}
+    # Filmstrip sprite (issue #257) — a derived asset like hls/thumbnails:
+    # tracked here for visibility, but never deleted by cleanup below.
+    filmstrip_size = 0
+    for fname in ("filmstrip.jpg", "filmstrip.json"):
+        fpath = os.path.join(video_dir, fname)
+        if os.path.isfile(fpath):
+            filmstrip_size += os.path.getsize(fpath)
+
+    return {
+        "files": files, "hls_size": hls_size, "thumb_size": thumb_size,
+        "filmstrip_size": filmstrip_size,
+    }
 
 
 @router.post("/videos/{video_id}/cleanup")
 async def admin_cleanup_video(video_id: str, admin: dict = Depends(require_admin)):
-    """Delete intermediate/backup files to free disk space."""
+    """Delete intermediate/backup files to free disk space.
+
+    Only scans raw/ for trim/cut/banner backups. The filmstrip sprite
+    (video_dir/filmstrip.jpg + .json) is a derived asset like hls/ or
+    thumb.jpg, not an intermediate — it's surfaced in storage-info but left
+    alone here; it self-invalidates and regenerates when original.mp4 changes.
+    """
     db = await get_db()
     await _require_video_access(db, video_id, admin)
     video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
@@ -1016,6 +1035,165 @@ async def admin_upsert_editor_draft(
         video_id, edits_json, req.muted, style_json,
     )
     return _draft_row_to_response(video_id, row)
+
+
+# ── Editor timeline filmstrip (issue #257) ──────────────────
+#
+# A single tiled JPEG sprite sampling ~1 frame every few seconds from the raw
+# file, stored alongside the video's other derived assets (video_dir root,
+# same level as thumb.jpg). Cached by comparing the sprite's mtime against
+# raw/original.mp4's mtime, so a later "Apply to video" (or the existing
+# trim/cut endpoints, which already rewrite original.mp4 in place) naturally
+# invalidates it on the next request.
+#
+# Concurrency guard: `_filmstrip_generating` is a plain in-process set,
+# added to synchronously (no `await` between the membership check and the
+# add) right before `asyncio.create_task`, so two requests landing back to
+# back on the same event loop can't both schedule a generation pass for the
+# same video_id. The tmp-file + os.replace() pattern (mirroring the upload
+# endpoint) is a second, independent guard against a torn/partial sprite
+# ever being visible to a GET, and against cross-process races if this ever
+# runs behind multiple workers.
+
+_filmstrip_generating: set[str] = set()
+_filmstrip_failures: dict[str, int] = {}
+_FILMSTRIP_MAX_FAILURES = 3
+
+_FILMSTRIP_TILE_WIDTH = 160
+_FILMSTRIP_MIN_INTERVAL_S = 2.0
+_FILMSTRIP_MAX_INTERVAL_S = 8.0
+_FILMSTRIP_TARGET_TILES = 100
+_FILMSTRIP_MAX_TILES = 240
+
+
+def _filmstrip_paths(video_id: str) -> tuple[str, str, str]:
+    video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
+    sprite_path = os.path.join(video_dir, "filmstrip.jpg")
+    meta_path = os.path.join(video_dir, "filmstrip.json")
+    return video_dir, sprite_path, meta_path
+
+
+def _filmstrip_cache_valid(raw_path: str, sprite_path: str, meta_path: str) -> bool:
+    if not (os.path.isfile(sprite_path) and os.path.isfile(meta_path)):
+        return False
+    try:
+        return os.path.getmtime(sprite_path) >= os.path.getmtime(raw_path)
+    except OSError:
+        return False
+
+
+async def _generate_filmstrip(video_id: str, raw_path: str, video_dir: str) -> None:
+    """Run the ffmpeg sampling pass and atomically publish sprite + sidecar JSON."""
+    sprite_path = os.path.join(video_dir, "filmstrip.jpg")
+    meta_path = os.path.join(video_dir, "filmstrip.json")
+    tmp_sprite = sprite_path + ".tmp"
+    tmp_meta = meta_path + ".tmp"
+
+    try:
+        duration = await _probe_duration_async(raw_path) or 0
+        dims = await _probe_video_dims_async(raw_path)
+        src_w, src_h = dims if dims else (16, 9)
+        aspect = (src_w / src_h) if src_h else (16 / 9)
+
+        tile_w = _FILMSTRIP_TILE_WIDTH
+        tile_h = max(1, round(tile_w / aspect))
+
+        interval = min(
+            _FILMSTRIP_MAX_INTERVAL_S,
+            max(_FILMSTRIP_MIN_INTERVAL_S, (duration or 60) / _FILMSTRIP_TARGET_TILES),
+        )
+        tile_count = max(4, min(_FILMSTRIP_MAX_TILES, math.ceil((duration or interval) / interval)))
+        cols = max(1, math.ceil(math.sqrt(tile_count)))
+        rows = max(1, math.ceil(tile_count / cols))
+
+        os.makedirs(video_dir, exist_ok=True)
+        if os.path.exists(tmp_sprite):
+            os.unlink(tmp_sprite)
+
+        vf = f"fps=1/{interval:.4f},scale={tile_w}:-2,tile={cols}x{rows}"
+        rc, stderr = await _run_ffmpeg_async(
+            settings.FFMPEG_PATH, "-y", "-i", raw_path,
+            "-vf", vf, "-frames:v", "1", "-q:v", "3", tmp_sprite,
+        )
+        if rc != 0 or not os.path.isfile(tmp_sprite):
+            log.warning(
+                "Filmstrip generation failed | video_id={} rc={} stderr={}",
+                video_id, rc, (stderr or "")[-400:],
+            )
+            if os.path.exists(tmp_sprite):
+                os.unlink(tmp_sprite)
+            _filmstrip_failures[video_id] = _filmstrip_failures.get(video_id, 0) + 1
+            return
+
+        meta = {
+            "tile_count": tile_count,
+            "cols": cols,
+            "rows": rows,
+            "tile_width": tile_w,
+            "tile_height": tile_h,
+            "interval_s": interval,
+        }
+        with open(tmp_meta, "w") as f:
+            json.dump(meta, f)
+
+        os.replace(tmp_sprite, sprite_path)  # atomic — GET never sees a partial sprite
+        os.replace(tmp_meta, meta_path)
+        _filmstrip_failures.pop(video_id, None)
+        log.info(
+            "Filmstrip ready | video_id={} tiles={} grid={}x{} interval={}s",
+            video_id, tile_count, cols, rows, round(interval, 2),
+        )
+    except Exception:
+        log.exception("Filmstrip generation crashed | video_id={}", video_id)
+        _filmstrip_failures[video_id] = _filmstrip_failures.get(video_id, 0) + 1
+        for p in (tmp_sprite, tmp_meta):
+            if os.path.exists(p):
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
+    finally:
+        _filmstrip_generating.discard(video_id)
+
+
+@router.get("/videos/{video_id}/filmstrip", response_model=VideoFilmstripResponse)
+async def admin_get_filmstrip(video_id: str, admin: dict = Depends(verify_video_access)):
+    """Return (or kick off generation of) the timeline filmstrip sprite.
+
+    Frontend polls this on a timer (stale-poll `useRef` pattern) while
+    `status == "generating"`; once `status == "ready"`, `sprite_url` is
+    fetchable via the existing `/streams` static mount.
+    """
+    video_dir, sprite_path, meta_path = _filmstrip_paths(video_id)
+    raw_path = os.path.join(video_dir, "raw", "original.mp4")
+
+    if not os.path.isfile(raw_path):
+        return VideoFilmstripResponse(status="unavailable")
+
+    if _filmstrip_cache_valid(raw_path, sprite_path, meta_path):
+        try:
+            meta = json.loads(open(meta_path).read())
+            return VideoFilmstripResponse(
+                status="ready",
+                sprite_url=f"/streams/{video_id}/filmstrip.jpg",
+                tile_count=meta["tile_count"],
+                cols=meta["cols"],
+                rows=meta["rows"],
+                tile_width=meta["tile_width"],
+                tile_height=meta["tile_height"],
+                interval_s=meta["interval_s"],
+            )
+        except Exception:
+            pass  # corrupt sidecar — fall through and regenerate
+
+    if _filmstrip_failures.get(video_id, 0) >= _FILMSTRIP_MAX_FAILURES:
+        return VideoFilmstripResponse(status="error")
+
+    if video_id not in _filmstrip_generating:
+        _filmstrip_generating.add(video_id)  # synchronous — closes the double-spawn race
+        asyncio.create_task(_generate_filmstrip(video_id, raw_path, video_dir))
+
+    return VideoFilmstripResponse(status="generating")
 
 
 # ── Chapters ────────────────────────────────────────────────

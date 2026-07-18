@@ -211,7 +211,7 @@ export const AdminVideos: React.FC = () => {
   // Storage / cleanup
   interface StorageFile { name: string; size: number; is_intermediate: boolean; is_primary: boolean }
   const [showCleanup, setShowCleanup] = useState(false);
-  const [storageInfo, setStorageInfo] = useState<{ files: StorageFile[]; hls_size: number; thumb_size: number } | null>(null);
+  const [storageInfo, setStorageInfo] = useState<{ files: StorageFile[]; hls_size: number; thumb_size: number; filmstrip_size?: number } | null>(null);
   const [cleaningUp, setCleaningUp] = useState(false);
 
   // Message
@@ -918,7 +918,7 @@ export const AdminVideos: React.FC = () => {
   const handleOpenCleanup = async () => {
     if (!selected) return;
     try {
-      const info = await api.get<{ files: any[]; hls_size: number; thumb_size: number }>(`/admin/videos/${selected.id}/storage-info`);
+      const info = await api.get<{ files: any[]; hls_size: number; thumb_size: number; filmstrip_size?: number }>(`/admin/videos/${selected.id}/storage-info`);
       setStorageInfo(info);
       setShowCleanup(true);
     } catch (err: unknown) {
@@ -1411,6 +1411,13 @@ export const AdminVideos: React.FC = () => {
                   <span className="material-symbols-outlined text-sm text-text-muted">image</span>
                   <span className="flex-1 text-text">thumb.jpg</span>
                   <span className="text-slate-500">{fmtBytes(storageInfo.thumb_size)}</span>
+                </div>
+              )}
+              {!!storageInfo.filmstrip_size && storageInfo.filmstrip_size > 0 && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-panel-light dark:bg-input-dark border border-slate-200 dark:border-white/5">
+                  <span className="material-symbols-outlined text-sm text-text-muted">view_carousel</span>
+                  <span className="flex-1 text-text">filmstrip.jpg</span>
+                  <span className="text-slate-500">{fmtBytes(storageInfo.filmstrip_size)}</span>
                 </div>
               )}
             </div>

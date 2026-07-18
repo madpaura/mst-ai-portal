@@ -17,6 +17,7 @@ function niceStep(raw: number): number {
 }
 
 interface EditorTimelineProps {
+  videoId: string;
   duration: number;
   currentTime: number;
   edits: EditOp[];
@@ -44,6 +45,7 @@ interface PendingSelection extends DragRange {
  * treated as seeks.
  */
 export const EditorTimeline: React.FC<EditorTimelineProps> = ({
+  videoId,
   duration,
   currentTime,
   edits,
@@ -188,8 +190,8 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
               ))}
             </div>
 
-            {/* Video track (placeholder filmstrip slot — real filmstrip in #257) */}
-            <VideoTrackRow />
+            {/* Video track — filmstrip sprite (issue #257) */}
+            <VideoTrackRow videoId={videoId} duration={duration} />
 
             {/* Cut lane background */}
             <div className="border-t border-[#243043]" style={{ height: CUT_LANE_H }} />
