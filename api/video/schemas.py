@@ -504,13 +504,16 @@ class EditorEditOp(BaseModel):
     """One non-destructive edit operation on the timeline.
 
     `factor` is only used by `speed` ops (issue #258 adds the UI). Speed
-    factors are restricted to `SPEED_FACTOR_PRESETS`.
+    factors are restricted to `SPEED_FACTOR_PRESETS`. `source` is an optional
+    provenance tag — `'suggestion'` marks a cut created by accepting a
+    suggestion (issue #259), purely informational for the UI.
     """
     id: str
     type: Literal['cut', 'trim', 'speed']
     start_s: float
     end_s: float
     factor: Optional[float] = None
+    source: Optional[Literal['suggestion']] = None
 
     @model_validator(mode='after')
     def _validate_speed_factor(self) -> 'EditorEditOp':
@@ -530,11 +533,32 @@ class EditorStyle(BaseModel):
     radius_px: float = 0
 
 
+# ── Silence-gap suggestions (issue #259) ────────────────────────────────────
+#
+# `kind` is deliberately extensible: this slice only produces 'gap' (deterministic
+# transcript-timestamp gaps), but issue #262 plugs an 'llm' kind into the same
+# shape (with a `reason` string explaining the flag). Suggestion `id`s are a
+# deterministic hash of the rounded start/end so re-analyzing with the same
+# threshold reproduces the same ids — which is what lets accepted/ignored
+# review state (persisted in `video_editor_drafts.suggestions`) survive a
+# re-analyze instead of resurrecting already-reviewed suggestions.
+
+class EditorSuggestion(BaseModel):
+    id: str
+    kind: Literal['gap', 'llm'] = 'gap'
+    start_s: float
+    end_s: float
+    gap_s: Optional[float] = None
+    reason: Optional[str] = None
+    state: Literal['open', 'accepted', 'ignored'] = 'open'
+
+
 class VideoEditorDraftResponse(BaseModel):
     video_id: str
     edits: list[EditorEditOp] = []
     muted: bool = False
     style: EditorStyle = EditorStyle()
+    suggestions: list[EditorSuggestion] = []
     updated_at: datetime
 
 
@@ -542,6 +566,27 @@ class VideoEditorDraftUpdate(BaseModel):
     edits: list[EditorEditOp] = []
     muted: bool = False
     style: EditorStyle = EditorStyle()
+
+
+class EditorSuggestAnalyzeRequest(BaseModel):
+    threshold_s: float = 2.0
+
+
+class EditorSuggestAnalyzeResponse(BaseModel):
+    """Result of an on-demand suggestion analysis pass.
+
+    `transcript_status` mirrors `videos.transcript_status`; the frontend uses
+    it to distinguish "ready — here are suggestions" from "not ready yet —
+    offer the generate-transcript flow" without a second round trip.
+    """
+    transcript_status: str
+    transcript_error: Optional[str] = None
+    threshold_s: float
+    suggestions: list[EditorSuggestion] = []
+
+
+class EditorSuggestionStateUpdate(BaseModel):
+    state: Literal['open', 'accepted', 'ignored']
 
 
 # ── Timeline filmstrip (issue #257) ─────────────────────────────────────────

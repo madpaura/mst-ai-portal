@@ -6,9 +6,11 @@ import { EditorTimeline } from '../components/editor/EditorTimeline';
 import { EditsPanel } from '../components/editor/EditsPanel';
 import { ExportModal } from '../components/editor/ExportModal';
 import type { EditorExportQualityOption, EditorExportStatus } from '../components/editor/ExportModal';
-import type { EditOp, EditorStyle } from '../components/editor/types';
+import type { InspectorTab } from '../components/editor/EditsPanel';
+import type { EditOp, EditorStyle, EditorSuggestion } from '../components/editor/types';
 import {
   DEFAULT_STYLE,
+  DEFAULT_SUGGESTION_THRESHOLD_S,
   UNDO_CAP,
   estimateOutputDuration,
   fmtClock as fmtTime,
@@ -34,10 +36,28 @@ interface VideoEditorDraft {
   edits: EditOp[];
   muted: boolean;
   style: EditorStyle;
+  suggestions: EditorSuggestion[];
   updated_at: string;
 }
 
+interface AutoStatusResponse {
+  transcript_status: string | null;
+  transcript_error: string | null;
+}
+
+interface AnalyzeSuggestionsResponse {
+  transcript_status: string;
+  transcript_error: string | null;
+  threshold_s: number;
+  suggestions: EditorSuggestion[];
+}
+
 type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
+
+// Auto-status is polled (stale-poll `useRef` pattern, per CLAUDE.md) while
+// the transcript is being (re)generated from the "Generate transcript first"
+// flow (issue #259).
+const TRANSCRIPT_POLL_MS = 4000;
 
 // Undo snapshot (issue #258): covers both `edits` and `muted` so the
 // remove-audio toggle participates in the same capped-5 undo stack.
@@ -86,6 +106,20 @@ export const AdminVideoEditor: React.FC = () => {
   const [skipCuts, setSkipCuts] = useState(true);
   const [undoDepth, setUndoDepth] = useState(0);
   const [saveState, setSaveState] = useState<SaveState>('idle');
+
+  // ── Suggestions (issue #259) ────────────────────────────────────────────
+  const [activeInspectorTab, setActiveInspectorTab] = useState<InspectorTab>('edits');
+  const [suggestions, setSuggestions] = useState<EditorSuggestion[]>([]);
+  const [hasAnalyzedSuggestions, setHasAnalyzedSuggestions] = useState(false);
+  const [analyzingSuggestions, setAnalyzingSuggestions] = useState(false);
+  const [analyzeSuggestionsError, setAnalyzeSuggestionsError] = useState<string | null>(null);
+  const [suggestionThreshold, setSuggestionThreshold] = useState(DEFAULT_SUGGESTION_THRESHOLD_S);
+  const [transcriptStatus, setTranscriptStatus] = useState<string | null>(null);
+  const [transcriptError, setTranscriptError] = useState<string | null>(null);
+  const [generatingTranscript, setGeneratingTranscript] = useState(false);
+  // Stale-poll guard (per CLAUDE.md pattern): only the poll started for the
+  // currently-open video id is allowed to keep applying state updates.
+  const transcriptPollVideoIdRef = useRef<string | null>(null);
 
   // Undo snapshots cover both `edits` and `muted` (issue #258 — remove-audio
   // participates in the same capped-5 undo stack as cut/trim/speed edits).
@@ -152,9 +186,35 @@ export const AdminVideoEditor: React.FC = () => {
         setEdits(data.edits ?? []);
         setMuted(!!data.muted);
         setStyle(data.style ?? DEFAULT_STYLE);
+        // A non-empty saved suggestions list means a prior analyze pass ran
+        // (and was persisted) — show it without requiring another click.
+        const savedSuggestions = data.suggestions ?? [];
+        setSuggestions(savedSuggestions);
+        if (savedSuggestions.length > 0) setHasAnalyzedSuggestions(true);
       })
       .catch(() => {
         // No draft yet, or it failed to load — proceed with an empty one.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  // Initial transcript status (issue #259) — drives the Suggestions tab's
+  // gate between "Analyze" and "Generate transcript first".
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    api
+      .get<AutoStatusResponse>(`/admin/videos/${id}/auto-status`)
+      .then((data) => {
+        if (cancelled) return;
+        setTranscriptStatus(data.transcript_status ?? 'pending');
+        setTranscriptError(data.transcript_error ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setTranscriptStatus('pending');
       });
     return () => {
       cancelled = true;
@@ -260,6 +320,111 @@ export const AdminVideoEditor: React.FC = () => {
     },
     [applyEdits, edits],
   );
+
+  // ── Suggestions (issue #259) ────────────────────────────────────────────
+
+  const runAnalyzeSuggestions = useCallback(async () => {
+    if (!id) return;
+    setAnalyzingSuggestions(true);
+    setAnalyzeSuggestionsError(null);
+    try {
+      const data = await api.post<AnalyzeSuggestionsResponse>(
+        `/admin/videos/${id}/editor-suggestions/analyze`,
+        { threshold_s: suggestionThreshold },
+      );
+      if (!mountedRef.current) return;
+      setTranscriptStatus(data.transcript_status);
+      setTranscriptError(data.transcript_error ?? null);
+      setSuggestions(data.suggestions);
+      setHasAnalyzedSuggestions(true);
+    } catch (err) {
+      if (!mountedRef.current) return;
+      setAnalyzeSuggestionsError(toApiError(err));
+    } finally {
+      if (mountedRef.current) setAnalyzingSuggestions(false);
+    }
+  }, [id, suggestionThreshold]);
+
+  const handleAcceptSuggestion = useCallback(
+    (s: EditorSuggestion) => {
+      // The cut op is a normal EDL edit — it goes through applyEdits so it
+      // participates in the same capped-5 undo as any other cut/trim/speed,
+      // just tagged with its origin (issue #259).
+      applyEdits([
+        ...edits,
+        { id: genEditId(), type: 'cut', start_s: s.start_s, end_s: s.end_s, source: 'suggestion' },
+      ]);
+      setSuggestions((cur) => cur.map((x) => (x.id === s.id ? { ...x, state: 'accepted' } : x)));
+      if (id) {
+        api.patch(`/admin/videos/${id}/editor-suggestions/${s.id}`, { state: 'accepted' }).catch(() => {
+          // Best-effort — the local suggestion state already reflects the
+          // accept, and the cut op itself is saved via the normal draft PUT.
+        });
+      }
+    },
+    [applyEdits, edits, id],
+  );
+
+  const handleIgnoreSuggestion = useCallback(
+    (s: EditorSuggestion) => {
+      setSuggestions((cur) => cur.map((x) => (x.id === s.id ? { ...x, state: 'ignored' } : x)));
+      if (id) {
+        api.patch(`/admin/videos/${id}/editor-suggestions/${s.id}`, { state: 'ignored' }).catch(() => {});
+      }
+    },
+    [id],
+  );
+
+  // Stale-poll pattern (CLAUDE.md): guard against navigating away mid-poll.
+  const pollTranscriptStatus = useCallback(
+    (videoId: string) => {
+      const poll = async () => {
+        if (transcriptPollVideoIdRef.current !== videoId) return; // navigated away mid-poll
+        try {
+          const data = await api.get<AutoStatusResponse>(`/admin/videos/${videoId}/auto-status`);
+          if (transcriptPollVideoIdRef.current !== videoId) return; // check again after await
+          const status = data.transcript_status ?? 'pending';
+          setTranscriptStatus(status);
+          setTranscriptError(data.transcript_error ?? null);
+          if (status === 'pending' || status === 'processing') {
+            window.setTimeout(poll, TRANSCRIPT_POLL_MS);
+          } else {
+            setGeneratingTranscript(false);
+          }
+        } catch {
+          if (transcriptPollVideoIdRef.current !== videoId) return;
+          setGeneratingTranscript(false);
+        }
+      };
+      poll();
+    },
+    [],
+  );
+
+  const handleGenerateTranscript = useCallback(async () => {
+    if (!id) return;
+    setGeneratingTranscript(true);
+    setAnalyzeSuggestionsError(null);
+    transcriptPollVideoIdRef.current = id; // must set before starting the poll
+    try {
+      await api.post(`/admin/videos/${id}/auto-process/retry`, { kind: 'transcript' });
+      setTranscriptStatus('pending');
+      pollTranscriptStatus(id);
+    } catch (err) {
+      setGeneratingTranscript(false);
+      setAnalyzeSuggestionsError(toApiError(err));
+    }
+  }, [id, pollTranscriptStatus]);
+
+  useEffect(() => {
+    return () => {
+      transcriptPollVideoIdRef.current = null;
+    };
+  }, []);
+
+  const handleSelectSuggestion = useCallback((_suggestionId: string) => {
+    setActiveInspectorTab('suggestions');
+  }, []);
 
   const outputDuration = useMemo(() => estimateOutputDuration(edits, duration), [edits, duration]);
 
@@ -717,6 +882,21 @@ export const AdminVideoEditor: React.FC = () => {
             selectedEditId={selectedEditId}
             onSelect={setSelectedEditId}
             onDelete={handleDeleteEdit}
+            activeTab={activeInspectorTab}
+            onTabChange={setActiveInspectorTab}
+            suggestions={suggestions}
+            hasAnalyzedSuggestions={hasAnalyzedSuggestions}
+            analyzingSuggestions={analyzingSuggestions}
+            analyzeSuggestionsError={analyzeSuggestionsError}
+            suggestionThreshold={suggestionThreshold}
+            onSuggestionThresholdChange={setSuggestionThreshold}
+            onAnalyzeSuggestions={runAnalyzeSuggestions}
+            transcriptStatus={transcriptStatus}
+            transcriptError={transcriptError}
+            generatingTranscript={generatingTranscript}
+            onGenerateTranscript={handleGenerateTranscript}
+            onAcceptSuggestion={handleAcceptSuggestion}
+            onIgnoreSuggestion={handleIgnoreSuggestion}
           />
         )}
       </main>
@@ -733,6 +913,8 @@ export const AdminVideoEditor: React.FC = () => {
           onCreateCut={handleCreateCut}
           onCreateTrim={handleCreateTrim}
           onCreateSpeed={handleCreateSpeed}
+          suggestions={suggestions}
+          onSelectSuggestion={handleSelectSuggestion}
         />
       )}
 

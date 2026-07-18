@@ -15,6 +15,39 @@ export interface EditOp {
   start_s: number;
   end_s: number;
   factor?: number;
+  /** Provenance tag (issue #259): 'suggestion' marks a cut created by
+   * accepting a suggestion, purely informational for the UI. */
+  source?: 'suggestion';
+}
+
+// ── Silence-gap suggestions (issue #259) ─────────────────────────────────
+//
+// Mirrors api/video/schemas.py::EditorSuggestion. `kind` is 'gap' this slice;
+// issue #262 plugs an 'llm' kind (with a `reason`) into the same shape.
+
+export type SuggestionKind = 'gap' | 'llm';
+export type SuggestionState = 'open' | 'accepted' | 'ignored';
+
+export interface EditorSuggestion {
+  id: string;
+  kind: SuggestionKind;
+  start_s: number;
+  end_s: number;
+  gap_s?: number | null;
+  reason?: string | null;
+  state: SuggestionState;
+}
+
+export const DEFAULT_SUGGESTION_THRESHOLD_S = 2.0;
+
+export function suggestionTagLabel(kind: SuggestionKind): string {
+  return kind === 'gap' ? 'SILENCE' : 'LLM';
+}
+
+export function suggestionReason(s: EditorSuggestion): string {
+  if (s.reason) return s.reason;
+  if (s.kind === 'gap' && s.gap_s != null) return `Silence — ${s.gap_s}s gap between segments`;
+  return 'Skippable section';
 }
 
 export interface EditorStyle {
@@ -69,7 +102,7 @@ export function estimateOutputDuration(edits: EditOp[], sourceDuration: number):
 }
 
 export function opLabel(op: EditOp): string {
-  if (op.type === 'cut') return 'Cut out';
+  if (op.type === 'cut') return op.source === 'suggestion' ? 'Cut (suggestion)' : 'Cut out';
   if (op.type === 'trim') return 'Trim to';
   return `Speed ${op.factor ?? 1}×`;
 }
