@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '../api/client';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -119,6 +119,53 @@ interface EnrollmentTrendDay {
   enrollments: number;
 }
 
+interface RosterRow {
+  user_id: string;
+  display_name: string;
+  email: string | null;
+  completed_items: number;
+  total_items: number;
+  percent_complete: number;
+  last_activity: string | null;
+  enrolled_at: string | null;
+}
+
+interface FunnelItem {
+  item_id: string;
+  item_title: string;
+  item_type: string;
+  completed_count: number;
+}
+
+interface FunnelModule {
+  module_id: string;
+  week_number: number;
+  module_title: string;
+  items: FunnelItem[];
+}
+
+interface FeedbackDistributionBucket {
+  rating: number;
+  count: number;
+}
+
+interface FeedbackComment {
+  display_name: string;
+  rating: number;
+  comment: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+interface CourseFeedbackData {
+  distribution: FeedbackDistributionBucket[];
+  average: number | null;
+  total: number;
+  comments: FeedbackComment[];
+}
+
+type RosterSortKey = 'display_name' | 'percent_complete' | 'completed_items' | 'last_activity' | 'enrolled_at';
+
 // ── Constants ────────────────────────────────────────────
 
 const SECTION_COLORS: Record<string, string> = {
@@ -174,6 +221,17 @@ export const AdminAnalytics: React.FC = () => {
   const [courseOverview, setCourseOverview] = useState<CourseOverviewRow[]>([]);
   const [enrollmentTrend, setEnrollmentTrend] = useState<EnrollmentTrendDay[]>([]);
 
+  // Course drill-down (issue #247)
+  const [selectedCourse, setSelectedCourse] = useState<CourseOverviewRow | null>(null);
+  const [drillTab, setDrillTab] = useState<'roster' | 'funnel' | 'feedback'>('roster');
+  const [drillLoading, setDrillLoading] = useState(false);
+  const [roster, setRoster] = useState<RosterRow[]>([]);
+  const [funnel, setFunnel] = useState<FunnelModule[]>([]);
+  const [courseFeedback, setCourseFeedback] = useState<CourseFeedbackData | null>(null);
+  const [rosterSortKey, setRosterSortKey] = useState<RosterSortKey>('display_name');
+  const [rosterSortDir, setRosterSortDir] = useState<'asc' | 'desc'>('asc');
+  const selectedCourseIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     setLoading(true);
     Promise.all([
@@ -192,6 +250,105 @@ export const AdminAnalytics: React.FC = () => {
       api.get<EnrollmentTrendDay[]>(`/admin/analytics/courses/enrollment-trend?days=${days}`).then(setEnrollmentTrend).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, [days]);
+
+  // Fetch roster/funnel/feedback whenever a course is selected for drill-down.
+  useEffect(() => {
+    if (!selectedCourse) return;
+    const courseId = selectedCourse.id;
+    selectedCourseIdRef.current = courseId;
+    setDrillLoading(true);
+    setRoster([]);
+    setFunnel([]);
+    setCourseFeedback(null);
+    Promise.all([
+      api.get<RosterRow[]>(`/admin/analytics/courses/${courseId}/roster`).then(d => {
+        if (selectedCourseIdRef.current !== courseId) return;
+        setRoster(d);
+      }).catch(() => {}),
+      api.get<FunnelModule[]>(`/admin/analytics/courses/${courseId}/funnel`).then(d => {
+        if (selectedCourseIdRef.current !== courseId) return;
+        setFunnel(d);
+      }).catch(() => {}),
+      api.get<CourseFeedbackData>(`/admin/analytics/courses/${courseId}/feedback`).then(d => {
+        if (selectedCourseIdRef.current !== courseId) return;
+        setCourseFeedback(d);
+      }).catch(() => {}),
+    ]).finally(() => {
+      if (selectedCourseIdRef.current !== courseId) return;
+      setDrillLoading(false);
+    });
+  }, [selectedCourse]);
+
+  const openCourseDrilldown = (course: CourseOverviewRow) => {
+    setDrillTab('roster');
+    setSelectedCourse(course);
+  };
+
+  const closeCourseDrilldown = () => {
+    selectedCourseIdRef.current = null;
+    setSelectedCourse(null);
+  };
+
+  const toggleRosterSort = (key: RosterSortKey) => {
+    if (rosterSortKey === key) {
+      setRosterSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setRosterSortKey(key);
+      setRosterSortDir('asc');
+    }
+  };
+
+  const sortedRoster = useMemo(() => {
+    const sorted = [...roster].sort((a, b) => {
+      let cmp = 0;
+      switch (rosterSortKey) {
+        case 'display_name':
+          cmp = a.display_name.localeCompare(b.display_name);
+          break;
+        case 'percent_complete':
+          cmp = a.percent_complete - b.percent_complete;
+          break;
+        case 'completed_items':
+          cmp = a.completed_items - b.completed_items;
+          break;
+        case 'last_activity':
+          cmp = (a.last_activity ? new Date(a.last_activity).getTime() : 0) -
+                (b.last_activity ? new Date(b.last_activity).getTime() : 0);
+          break;
+        case 'enrolled_at':
+          cmp = (a.enrolled_at ? new Date(a.enrolled_at).getTime() : 0) -
+                (b.enrolled_at ? new Date(b.enrolled_at).getTime() : 0);
+          break;
+      }
+      return rosterSortDir === 'asc' ? cmp : -cmp;
+    });
+    return sorted;
+  }, [roster, rosterSortKey, rosterSortDir]);
+
+  const exportRosterCsv = () => {
+    if (!selectedCourse || roster.length === 0) return;
+    const header = ['Name', 'Email', 'Items Completed', 'Total Items', 'Percent Complete', 'Last Activity', 'Enrolled At'];
+    const escapeCsv = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const lines = [header.map(escapeCsv).join(',')];
+    for (const r of sortedRoster) {
+      lines.push([
+        escapeCsv(r.display_name),
+        escapeCsv(r.email || ''),
+        String(r.completed_items),
+        String(r.total_items),
+        String(r.percent_complete),
+        escapeCsv(r.last_activity || ''),
+        escapeCsv(r.enrolled_at || ''),
+      ].join(','));
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `roster-${selectedCourse.slug}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const [isExporting, setIsExporting] = useState(false);
 
@@ -641,48 +798,70 @@ export const AdminAnalytics: React.FC = () => {
               </ChartCard>
 
               {isExporting && <div className="html2pdf__page-break" />}
-              {/* Course overview table */}
-              <ChartCard title="Course Overview" icon="school" subtitle="Every curriculum course, published and draft">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-white/10 text-slate-400">
-                        <th className="text-left py-2 px-3 font-medium">Course</th>
-                        <th className="text-left py-2 px-3 font-medium">Status</th>
-                        <th className="text-right py-2 px-3 font-medium">Enrolled</th>
-                        <th className="text-right py-2 px-3 font-medium">Active 7d</th>
-                        <th className="text-right py-2 px-3 font-medium">Active 30d</th>
-                        <th className="text-right py-2 px-3 font-medium">Completion</th>
-                        <th className="text-right py-2 px-3 font-medium">Rating</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {courseOverview.map(c => (
-                        <tr key={c.id} className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                          <td className="py-2.5 px-3 text-white font-medium">{c.title}</td>
-                          <td className="py-2.5 px-3">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium uppercase ${
-                              c.curriculum_published
-                                ? 'bg-green-500/10 text-green-400'
-                                : 'bg-slate-500/10 text-slate-400'
-                            }`}>
-                              {c.curriculum_published ? 'Published' : 'Draft'}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-right text-primary font-bold">{c.enrolled_count}</td>
-                          <td className="py-2.5 px-3 text-right text-amber-400">{c.active_7d}</td>
-                          <td className="py-2.5 px-3 text-right text-amber-400">{c.active_30d}</td>
-                          <td className="py-2.5 px-3 text-right text-green-400 font-mono">{c.completion_rate}%</td>
-                          <td className="py-2.5 px-3 text-right text-purple-400">
-                            {c.avg_rating !== null ? `${c.avg_rating.toFixed(1)} (${c.rating_count})` : '—'}
-                          </td>
+              {/* Course overview table, or drill-down for the selected course */}
+              {!isExporting && selectedCourse ? (
+                <CourseDrilldown
+                  course={selectedCourse}
+                  onBack={closeCourseDrilldown}
+                  drillTab={drillTab}
+                  setDrillTab={setDrillTab}
+                  loading={drillLoading}
+                  roster={sortedRoster}
+                  rosterSortKey={rosterSortKey}
+                  rosterSortDir={rosterSortDir}
+                  onSortRoster={toggleRosterSort}
+                  onExportCsv={exportRosterCsv}
+                  funnel={funnel}
+                  feedback={courseFeedback}
+                />
+              ) : (
+                <ChartCard title="Course Overview" icon="school" subtitle="Every curriculum course, published and draft — click a row for the roster, drop-off funnel, and feedback">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-white/10 text-slate-400">
+                          <th className="text-left py-2 px-3 font-medium">Course</th>
+                          <th className="text-left py-2 px-3 font-medium">Status</th>
+                          <th className="text-right py-2 px-3 font-medium">Enrolled</th>
+                          <th className="text-right py-2 px-3 font-medium">Active 7d</th>
+                          <th className="text-right py-2 px-3 font-medium">Active 30d</th>
+                          <th className="text-right py-2 px-3 font-medium">Completion</th>
+                          <th className="text-right py-2 px-3 font-medium">Rating</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {courseOverview.length === 0 && <p className="text-sm text-slate-500 text-center py-8">No curriculum courses yet</p>}
-                </div>
-              </ChartCard>
+                      </thead>
+                      <tbody>
+                        {courseOverview.map(c => (
+                          <tr
+                            key={c.id}
+                            onClick={() => openCourseDrilldown(c)}
+                            className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer"
+                            title="View roster, funnel, and feedback"
+                          >
+                            <td className="py-2.5 px-3 text-white font-medium">{c.title}</td>
+                            <td className="py-2.5 px-3">
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium uppercase ${
+                                c.curriculum_published
+                                  ? 'bg-green-500/10 text-green-400'
+                                  : 'bg-slate-500/10 text-slate-400'
+                              }`}>
+                                {c.curriculum_published ? 'Published' : 'Draft'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right text-primary font-bold">{c.enrolled_count}</td>
+                            <td className="py-2.5 px-3 text-right text-amber-400">{c.active_7d}</td>
+                            <td className="py-2.5 px-3 text-right text-amber-400">{c.active_30d}</td>
+                            <td className="py-2.5 px-3 text-right text-green-400 font-mono">{c.completion_rate}%</td>
+                            <td className="py-2.5 px-3 text-right text-purple-400">
+                              {c.avg_rating !== null ? `${c.avg_rating.toFixed(1)} (${c.rating_count})` : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {courseOverview.length === 0 && <p className="text-sm text-slate-500 text-center py-8">No curriculum courses yet</p>}
+                  </div>
+                </ChartCard>
+              )}
             </div>
           )}
 
@@ -918,3 +1097,231 @@ const ChartCard: React.FC<{ title: string; icon: string; subtitle?: string; chil
     </div>
   </div>
 );
+
+const SortHeader: React.FC<{
+  label: string;
+  sortKey: RosterSortKey;
+  activeKey: RosterSortKey;
+  dir: 'asc' | 'desc';
+  onSort: (key: RosterSortKey) => void;
+  align?: 'left' | 'right';
+}> = ({ label, sortKey, activeKey, dir, onSort, align = 'left' }) => (
+  <th
+    className={`py-2 px-3 font-medium cursor-pointer select-none hover:text-slate-900 dark:hover:text-white ${align === 'right' ? 'text-right' : 'text-left'}`}
+    onClick={() => onSort(sortKey)}
+  >
+    <span className="inline-flex items-center gap-1">
+      {label}
+      {activeKey === sortKey && (
+        <span className="material-symbols-outlined text-xs">{dir === 'asc' ? 'arrow_upward' : 'arrow_downward'}</span>
+      )}
+    </span>
+  </th>
+);
+
+const CourseDrilldown: React.FC<{
+  course: CourseOverviewRow;
+  onBack: () => void;
+  drillTab: 'roster' | 'funnel' | 'feedback';
+  setDrillTab: (t: 'roster' | 'funnel' | 'feedback') => void;
+  loading: boolean;
+  roster: RosterRow[];
+  rosterSortKey: RosterSortKey;
+  rosterSortDir: 'asc' | 'desc';
+  onSortRoster: (key: RosterSortKey) => void;
+  onExportCsv: () => void;
+  funnel: FunnelModule[];
+  feedback: CourseFeedbackData | null;
+}> = ({ course, onBack, drillTab, setDrillTab, loading, roster, rosterSortKey, rosterSortDir, onSortRoster, onExportCsv, funnel, feedback }) => {
+  const funnelMax = useMemo(
+    () => Math.max(1, ...funnel.flatMap(m => m.items.map(i => i.completed_count))),
+    [funnel]
+  );
+
+  const tabs = [
+    { key: 'roster' as const, label: 'Roster', icon: 'groups' },
+    { key: 'funnel' as const, label: 'Drop-off Funnel', icon: 'filter_alt' },
+    { key: 'feedback' as const, label: 'Feedback', icon: 'star' },
+  ];
+
+  return (
+    <ChartCard title={`Drill-down — ${course.title}`} icon="school" subtitle="Roster, drop-off funnel, and feedback for this course">
+      <div className="flex items-center justify-between mb-4 -mt-1">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+        >
+          <span className="material-symbols-outlined text-base">arrow_back</span>
+          Back to course overview
+        </button>
+        <div className="flex items-center gap-1 bg-panel-light dark:bg-panel-dark/50 border border-slate-300 dark:border-white/10 rounded-lg p-1">
+          {tabs.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setDrillTab(t.key)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                drillTab === t.key
+                  ? 'bg-primary text-white'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/50'
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm">{t.icon}</span>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-slate-400 gap-2">
+          <span className="material-symbols-outlined animate-spin">progress_activity</span>
+          Loading...
+        </div>
+      ) : (
+        <>
+          {/* ─── ROSTER ─── */}
+          {drillTab === 'roster' && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs text-slate-500">{roster.length} enrolled learner{roster.length === 1 ? '' : 's'}</p>
+                <button
+                  onClick={onExportCsv}
+                  disabled={roster.length === 0}
+                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-muted-light dark:bg-muted-dark text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-300 dark:border-white/10 flex items-center gap-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <span className="material-symbols-outlined text-sm">download</span> Export CSV
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10 text-slate-400">
+                      <SortHeader label="Name" sortKey="display_name" activeKey={rosterSortKey} dir={rosterSortDir} onSort={onSortRoster} />
+                      <th className="text-left py-2 px-3 font-medium">Email</th>
+                      <SortHeader label="Progress" sortKey="percent_complete" activeKey={rosterSortKey} dir={rosterSortDir} onSort={onSortRoster} align="right" />
+                      <SortHeader label="Items" sortKey="completed_items" activeKey={rosterSortKey} dir={rosterSortDir} onSort={onSortRoster} align="right" />
+                      <SortHeader label="Last Activity" sortKey="last_activity" activeKey={rosterSortKey} dir={rosterSortDir} onSort={onSortRoster} align="right" />
+                      <SortHeader label="Enrolled" sortKey="enrolled_at" activeKey={rosterSortKey} dir={rosterSortDir} onSort={onSortRoster} align="right" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {roster.map(r => (
+                      <tr key={r.user_id} className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                        <td className="py-2.5 px-3 text-white font-medium">{r.display_name}</td>
+                        <td className="py-2.5 px-3 text-slate-400 text-xs">{r.email || '—'}</td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center gap-2 justify-end">
+                            <div className="w-20 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                              <div className="h-full bg-primary rounded-full" style={{ width: `${r.percent_complete}%` }} />
+                            </div>
+                            <span className="text-green-400 font-mono text-xs w-10 text-right">{r.percent_complete}%</span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-slate-400">{r.completed_items}/{r.total_items}</td>
+                        <td className="py-2.5 px-3 text-right text-slate-400 text-xs">
+                          {r.last_activity ? new Date(r.last_activity).toLocaleDateString() : '—'}
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-slate-400 text-xs">
+                          {r.enrolled_at ? new Date(r.enrolled_at).toLocaleDateString() : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {roster.length === 0 && <p className="text-sm text-slate-500 text-center py-8">No enrollments yet</p>}
+              </div>
+            </div>
+          )}
+
+          {/* ─── FUNNEL ─── */}
+          {drillTab === 'funnel' && (
+            <div className="space-y-5">
+              {funnel.map(mod => (
+                <div key={mod.module_id}>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Week {mod.week_number} — {mod.module_title}
+                  </p>
+                  <div className="space-y-1.5">
+                    {mod.items.map(item => {
+                      const pct = funnelMax > 0 ? (item.completed_count / funnelMax) * 100 : 0;
+                      return (
+                        <div key={item.item_id} className="flex items-center gap-3">
+                          <div className="w-40 shrink-0 text-xs text-slate-400 truncate flex items-center gap-1.5" title={item.item_title}>
+                            <span className="material-symbols-outlined text-[13px] text-slate-500">
+                              {item.item_type === 'video' ? 'play_circle' : item.item_type === 'exercise' ? 'edit_note' : item.item_type === 'reading' ? 'menu_book' : 'link'}
+                            </span>
+                            <span className="truncate">{item.item_title}</span>
+                          </div>
+                          <div className="flex-1 h-5 bg-slate-100 dark:bg-slate-800/50 rounded overflow-hidden">
+                            <div
+                              className="h-full bg-primary/70 rounded flex items-center justify-end px-2 transition-all"
+                              style={{ width: `${Math.max(pct, item.completed_count > 0 ? 4 : 0)}%` }}
+                            />
+                          </div>
+                          <span className="w-10 shrink-0 text-right text-xs font-mono text-primary">{item.completed_count}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              {funnel.length === 0 && <p className="text-sm text-slate-500 text-center py-8">No curriculum items yet</p>}
+            </div>
+          )}
+
+          {/* ─── FEEDBACK ─── */}
+          {drillTab === 'feedback' && feedback && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-6">
+                <div>
+                  <p className="text-3xl font-bold text-purple-400">{feedback.average !== null ? feedback.average.toFixed(1) : '—'}</p>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">{feedback.total} rating{feedback.total === 1 ? '' : 's'}</p>
+                </div>
+                <div className="flex-1 space-y-1">
+                  {[...feedback.distribution].reverse().map(b => {
+                    const pct = feedback.total > 0 ? (b.count / feedback.total) * 100 : 0;
+                    return (
+                      <div key={b.rating} className="flex items-center gap-2">
+                        <span className="w-8 shrink-0 text-xs text-slate-400 flex items-center gap-0.5">
+                          {b.rating}<span className="material-symbols-outlined text-[12px] text-amber-400">star</span>
+                        </span>
+                        <div className="flex-1 h-3 bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden">
+                          <div className="h-full bg-amber-400 rounded-full" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="w-6 shrink-0 text-right text-xs font-mono text-slate-400">{b.count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Comments</p>
+                {feedback.comments.length === 0 ? (
+                  <p className="text-sm text-slate-500 text-center py-8">No written feedback yet</p>
+                ) : (
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+                    {feedback.comments.map((c, i) => (
+                      <div key={i} className="p-3 rounded-lg bg-slate-100/40 dark:bg-slate-800/40 border border-slate-100 dark:border-white/5">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-bold text-slate-900 dark:text-white">{c.display_name}</span>
+                          <span className="flex items-center gap-0.5 text-amber-400 text-xs">
+                            {c.rating}<span className="material-symbols-outlined text-[13px]">star</span>
+                          </span>
+                        </div>
+                        <p className="text-sm text-text-muted">{c.comment}</p>
+                        <p className="text-[10px] text-slate-500 mt-1">
+                          {c.updated_at ? new Date(c.updated_at).toLocaleDateString() : ''}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </ChartCard>
+  );
+};

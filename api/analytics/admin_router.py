@@ -1,6 +1,6 @@
 """Admin-only analytics endpoints — comprehensive metrics for all sections."""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
 
 from auth.dependencies import require_admin
@@ -529,3 +529,163 @@ async def analytics_courses_enrollment_trend(
         str(days),
     )
     return [{"day": str(r["day"]), "enrollments": r["enrollments"]} for r in rows]
+
+
+# ── Course Drill-Down (issue #247) ────────────────────────
+#
+# Same completion definition as the #246 overview: raw
+# user_item_progress check-offs (completed = true) against total
+# course_items — NOT the progress_engine video-watch fallback used
+# elsewhere — so these numbers reconcile with the overview table.
+
+async def _require_course(db, course_id: str) -> None:
+    exists = await db.fetchval("SELECT 1 FROM courses WHERE id = $1", course_id)
+    if not exists:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+
+@router.get("/courses/{course_id}/roster")
+async def analytics_course_roster(course_id: str, admin: dict = Depends(require_admin)):
+    """Every user enrolled in the course, with items completed, percent
+    complete, last activity (max completed_at across the course's items),
+    and enrollment date."""
+    db = await get_db()
+    await _require_course(db, course_id)
+
+    total_items = await db.fetchval(
+        """
+        SELECT COUNT(i.id)
+        FROM course_modules m
+        JOIN course_items i ON i.module_id = m.id
+        WHERE m.course_id = $1
+        """,
+        course_id,
+    )
+
+    rows = await db.fetch(
+        """
+        SELECT
+            u.id AS user_id,
+            u.display_name,
+            u.email,
+            e.enrolled_at,
+            COUNT(uip.item_id) FILTER (WHERE uip.completed = true) AS completed_items,
+            MAX(uip.completed_at) FILTER (WHERE uip.completed = true) AS last_activity
+        FROM user_course_enrollments e
+        JOIN users u ON u.id = e.user_id
+        LEFT JOIN course_modules m ON m.course_id = e.course_id
+        LEFT JOIN course_items i ON i.module_id = m.id
+        LEFT JOIN user_item_progress uip ON uip.item_id = i.id AND uip.user_id = e.user_id
+        WHERE e.course_id = $1
+        GROUP BY u.id, u.display_name, u.email, e.enrolled_at
+        ORDER BY u.display_name
+        """,
+        course_id,
+    )
+
+    result = []
+    for r in rows:
+        completed = r["completed_items"]
+        percent = round(completed / total_items * 100, 1) if total_items > 0 else 0.0
+        result.append({
+            "user_id": str(r["user_id"]),
+            "display_name": r["display_name"],
+            "email": r["email"],
+            "completed_items": completed,
+            "total_items": total_items,
+            "percent_complete": percent,
+            "last_activity": str(r["last_activity"]) if r["last_activity"] else None,
+            "enrolled_at": str(r["enrolled_at"]) if r["enrolled_at"] else None,
+        })
+    return result
+
+
+@router.get("/courses/{course_id}/funnel")
+async def analytics_course_funnel(course_id: str, admin: dict = Depends(require_admin)):
+    """Per curriculum item, in curriculum order (module week/sort_order
+    then item sort_order): how many users have completed it. Grouped by
+    module/week so the UI can render a drop-off funnel."""
+    db = await get_db()
+    await _require_course(db, course_id)
+
+    rows = await db.fetch(
+        """
+        SELECT
+            m.id AS module_id, m.week_number, m.title AS module_title, m.sort_order AS module_sort_order,
+            i.id AS item_id, i.title AS item_title, i.item_type, i.sort_order AS item_sort_order,
+            COUNT(uip.user_id) FILTER (WHERE uip.completed = true) AS completed_count
+        FROM course_modules m
+        JOIN course_items i ON i.module_id = m.id
+        LEFT JOIN user_item_progress uip ON uip.item_id = i.id
+        WHERE m.course_id = $1
+        GROUP BY m.id, m.week_number, m.title, m.sort_order, i.id, i.title, i.item_type, i.sort_order
+        ORDER BY m.week_number, m.sort_order, i.sort_order
+        """,
+        course_id,
+    )
+
+    from collections import OrderedDict
+    modules: "OrderedDict[str, dict]" = OrderedDict()
+    for r in rows:
+        mid = str(r["module_id"])
+        if mid not in modules:
+            modules[mid] = {
+                "module_id": mid,
+                "week_number": r["week_number"],
+                "module_title": r["module_title"],
+                "items": [],
+            }
+        modules[mid]["items"].append({
+            "item_id": str(r["item_id"]),
+            "item_title": r["item_title"],
+            "item_type": r["item_type"],
+            "completed_count": r["completed_count"],
+        })
+    return list(modules.values())
+
+
+@router.get("/courses/{course_id}/feedback")
+async def analytics_course_feedback(course_id: str, admin: dict = Depends(require_admin)):
+    """Rating distribution (1..5), average, total, and the individual
+    comments left for the course."""
+    db = await get_db()
+    await _require_course(db, course_id)
+
+    dist_rows = await db.fetch(
+        "SELECT rating, COUNT(*) AS count FROM course_feedback WHERE course_id = $1 GROUP BY rating",
+        course_id,
+    )
+    counts_by_rating = {r["rating"]: r["count"] for r in dist_rows}
+    distribution = [{"rating": n, "count": counts_by_rating.get(n, 0)} for n in range(1, 6)]
+    total = sum(d["count"] for d in distribution)
+    avg_rating = (
+        round(sum(d["rating"] * d["count"] for d in distribution) / total, 2)
+        if total > 0 else None
+    )
+
+    comment_rows = await db.fetch(
+        """
+        SELECT cf.rating, cf.comment, cf.created_at, cf.updated_at, u.display_name
+        FROM course_feedback cf
+        JOIN users u ON u.id = cf.user_id
+        WHERE cf.course_id = $1 AND cf.comment IS NOT NULL AND cf.comment <> ''
+        ORDER BY cf.updated_at DESC
+        """,
+        course_id,
+    )
+
+    return {
+        "distribution": distribution,
+        "average": avg_rating,
+        "total": total,
+        "comments": [
+            {
+                "display_name": r["display_name"],
+                "rating": r["rating"],
+                "comment": r["comment"],
+                "created_at": str(r["created_at"]) if r["created_at"] else None,
+                "updated_at": str(r["updated_at"]) if r["updated_at"] else None,
+            }
+            for r in comment_rows
+        ],
+    }
