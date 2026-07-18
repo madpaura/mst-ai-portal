@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../api/auth';
 import { api, toApiError } from '../api/client';
@@ -101,10 +101,41 @@ export const AdminVideoEditor: React.FC = () => {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  // ScreenArc-style stage geometry: the backdrop canvas (cw×ch) is the
+  // largest source-aspect rect that fits the stage — the same shape the
+  // worker renders to — so the backdrop previews as a proportional border
+  // around the video rather than filling the stage's letterbox dead space.
+  // The pad-inset video frame is derived from it inline at render time.
+  // Explicit pixel sizing also lets low-resolution sources upscale to fill
+  // the frame (a max-w/max-h <video> never grows past its intrinsic size).
+  const [stageCanvas, setStageCanvas] = useState<{ cw: number; ch: number } | null>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playbackError, setPlaybackError] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const aspectNow = info?.aspect_ratio && info.aspect_ratio > 0 ? info.aspect_ratio : 16 / 9;
+    const compute = () => {
+      const sw = el.clientWidth;
+      const sh = el.clientHeight;
+      if (!sw || !sh) return;
+      let cw = sw;
+      let ch = cw / aspectNow;
+      if (ch > sh) {
+        ch = sh;
+        cw = ch * aspectNow;
+      }
+      setStageCanvas({ cw, ch });
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [info]);
 
   // ── EDL draft state (issue #256) ──────────────────────────────────────
   const [edits, setEdits] = useState<EditOp[]>([]);
@@ -470,7 +501,7 @@ export const AdminVideoEditor: React.FC = () => {
     };
   }, []);
 
-  const handleSelectSuggestion = useCallback((_suggestionId: string) => {
+  const handleSelectSuggestion = useCallback(() => {
     setActiveInspectorTab('suggestions');
   }, []);
 
@@ -970,30 +1001,48 @@ export const AdminVideoEditor: React.FC = () => {
                   'None' preset is a flat black CSS value, not "no div") so
                   padding without a preset still shows *something* behind
                   the inset video. */}
-              <div className="flex-1 min-h-0 rounded-lg border border-[#243043] bg-black overflow-hidden relative">
-                <div
-                  className="absolute inset-0"
-                  style={{
-                    background: style.image
-                      ? `center/cover no-repeat url(${API_BASE}${style.image})`
-                      : stylePresetCss(style.preset),
-                  }}
-                />
+              <div
+                ref={stageRef}
+                className="flex-1 min-h-0 rounded-lg border border-[#243043] bg-black overflow-hidden relative flex items-center justify-center"
+              >
                 {muted && (
                   <span className="absolute top-2.5 right-3 z-10 text-[11px] font-semibold tracking-[0.04em] text-[#F0564A] bg-[#0B0F17]/80 border border-[#F0564A] rounded-full px-2.5 py-1">
                     AUDIO REMOVED
                   </span>
                 )}
                 <div
-                  className="absolute flex items-center justify-center"
-                  style={{ inset: `${style.pad_pct}%` }}
+                  className="relative flex items-center justify-center"
+                  style={{
+                    width: stageCanvas ? `${stageCanvas.cw}px` : '100%',
+                    height: stageCanvas ? `${stageCanvas.ch}px` : '100%',
+                    background: style.image
+                      ? `center/cover no-repeat url(${API_BASE}${style.image})`
+                      : stylePresetCss(style.preset),
+                  }}
                 >
                   {info && (
                     <video
                       ref={videoRef}
                       src={`${API_BASE}${info.raw_url}`}
                       className="max-w-full max-h-full"
-                      style={{ aspectRatio: String(aspect), borderRadius: `${style.radius_px}px` }}
+                      style={{
+                        width: stageCanvas
+                          ? `${stageCanvas.cw * (1 - (2 * style.pad_pct) / 100)}px`
+                          : undefined,
+                        height: stageCanvas
+                          ? `${stageCanvas.ch * (1 - (2 * style.pad_pct) / 100)}px`
+                          : undefined,
+                        maxWidth: 'none',
+                        maxHeight: 'none',
+                        aspectRatio: String(aspect),
+                        // Match the worker's radius scaling (radius_px is
+                        // relative to the source height) so preview ≈ export.
+                        borderRadius: `${
+                          stageCanvas && info.source_height
+                            ? style.radius_px * (stageCanvas.ch / info.source_height)
+                            : style.radius_px
+                        }px`,
+                      }}
                       muted={muted}
                       onPlay={() => setPlaying(true)}
                       onPause={() => setPlaying(false)}
