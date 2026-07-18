@@ -391,3 +391,141 @@ async def analytics_hourly_heatmap(
         str(days),
     )
     return [{"dow": r["dow"], "hour": r["hour"], "views": r["views"]} for r in rows]
+
+
+# ── Course Metrics (issue #246) ───────────────────────────
+#
+# Everything here is computed on demand from the curriculum source tables
+# (user_course_enrollments, user_item_progress, course_feedback,
+# course_modules/course_items). The legacy course_analytics event table is
+# intentionally not used.
+#
+# "Active learner" signal: user_course_enrollments.last_accessed_at is set
+# by the table's DEFAULT now() on insert but is never updated anywhere in
+# the codebase (grep confirms no UPDATE touches it), so it's frozen at
+# enrollment time and useless for recency. user_item_progress.completed_at
+# IS actively maintained — progress_engine.set_item_progress() upserts it
+# to now() on every check-off/uncheck-off — so it's the only real recency
+# signal the data maintains. "Active" therefore means "checked off (or
+# unchecked) at least one curriculum item in the window", not "viewed the
+# course page".
+
+@router.get("/courses")
+async def analytics_courses_overview(admin: dict = Depends(require_admin)):
+    """Per-course cross-course overview: enrollment, recent activity,
+    completion rate, and feedback — for every curriculum course
+    (published and draft)."""
+    db = await get_db()
+    rows = await db.fetch(
+        """
+        WITH item_counts AS (
+            SELECT m.course_id, COUNT(i.id) AS total_items
+            FROM course_modules m
+            LEFT JOIN course_items i ON i.module_id = m.id
+            GROUP BY m.course_id
+        ),
+        enrollment_counts AS (
+            SELECT course_id, COUNT(*) AS enrolled_count
+            FROM user_course_enrollments
+            GROUP BY course_id
+        ),
+        active_learners AS (
+            SELECT m.course_id,
+                   COUNT(DISTINCT uip.user_id)
+                       FILTER (WHERE uip.completed_at >= now() - interval '7 days') AS active_7d,
+                   COUNT(DISTINCT uip.user_id)
+                       FILTER (WHERE uip.completed_at >= now() - interval '30 days') AS active_30d
+            FROM course_modules m
+            JOIN course_items i ON i.module_id = m.id
+            JOIN user_item_progress uip ON uip.item_id = i.id
+            GROUP BY m.course_id
+        ),
+        user_progress AS (
+            -- Per enrolled user: how many of the course's items they have
+            -- marked complete in user_item_progress.
+            SELECT e.course_id, e.user_id,
+                   COUNT(uip.item_id) FILTER (WHERE uip.completed = true) AS completed_items
+            FROM user_course_enrollments e
+            LEFT JOIN course_modules m ON m.course_id = e.course_id
+            LEFT JOIN course_items i ON i.module_id = m.id
+            LEFT JOIN user_item_progress uip ON uip.item_id = i.id AND uip.user_id = e.user_id
+            GROUP BY e.course_id, e.user_id
+        ),
+        completion AS (
+            SELECT up.course_id,
+                   COUNT(*) FILTER (
+                       WHERE ic.total_items > 0 AND up.completed_items >= ic.total_items
+                   ) AS fully_completed
+            FROM user_progress up
+            LEFT JOIN item_counts ic ON ic.course_id = up.course_id
+            GROUP BY up.course_id
+        ),
+        feedback AS (
+            SELECT course_id,
+                   ROUND(AVG(rating)::numeric, 2) AS avg_rating,
+                   COUNT(*) AS rating_count
+            FROM course_feedback
+            GROUP BY course_id
+        )
+        SELECT c.id, c.slug, c.title, c.curriculum_published, c.is_active,
+               COALESCE(ic.total_items, 0) AS total_items,
+               COALESCE(ec.enrolled_count, 0) AS enrolled_count,
+               COALESCE(al.active_7d, 0) AS active_7d,
+               COALESCE(al.active_30d, 0) AS active_30d,
+               COALESCE(comp.fully_completed, 0) AS fully_completed,
+               f.avg_rating, COALESCE(f.rating_count, 0) AS rating_count
+        FROM courses c
+        LEFT JOIN item_counts ic ON ic.course_id = c.id
+        LEFT JOIN enrollment_counts ec ON ec.course_id = c.id
+        LEFT JOIN active_learners al ON al.course_id = c.id
+        LEFT JOIN completion comp ON comp.course_id = c.id
+        LEFT JOIN feedback f ON f.course_id = c.id
+        ORDER BY c.sort_order, c.title
+        """
+    )
+
+    result = []
+    for r in rows:
+        enrolled = r["enrolled_count"]
+        completion_rate = (
+            round(r["fully_completed"] / enrolled * 100, 1) if enrolled > 0 else 0.0
+        )
+        result.append({
+            "id": str(r["id"]),
+            "slug": r["slug"],
+            "title": r["title"],
+            "curriculum_published": bool(r["curriculum_published"]),
+            "is_active": bool(r["is_active"]),
+            "total_items": r["total_items"],
+            "enrolled_count": enrolled,
+            "active_7d": r["active_7d"],
+            "active_30d": r["active_30d"],
+            "completion_rate": completion_rate,
+            "avg_rating": float(r["avg_rating"]) if r["avg_rating"] is not None else None,
+            "rating_count": r["rating_count"],
+        })
+    return result
+
+
+@router.get("/courses/enrollment-trend")
+async def analytics_courses_enrollment_trend(
+    days: int = Query(30, ge=1, le=365),
+    admin: dict = Depends(require_admin),
+):
+    """Daily enrollment counts across all curriculum courses, zero-filled
+    for days with no enrollments."""
+    db = await get_db()
+    rows = await db.fetch(
+        """
+        SELECT gs.day::date AS day, COALESCE(COUNT(e.user_id), 0) AS enrollments
+        FROM generate_series(
+            now() - ($1 || ' days')::interval,
+            now(),
+            '1 day'::interval
+        ) AS gs(day)
+        LEFT JOIN user_course_enrollments e ON date_trunc('day', e.enrolled_at) = gs.day::date
+        GROUP BY gs.day ORDER BY gs.day
+        """,
+        str(days),
+    )
+    return [{"day": str(r["day"]), "enrollments": r["enrollments"]} for r in rows]
