@@ -542,3 +542,23 @@ class VideoEditorDraftUpdate(BaseModel):
     edits: list[EditorEditOp] = []
     muted: bool = False
     style: EditorStyle = EditorStyle()
+
+
+# ── Timeline filmstrip (issue #257) ─────────────────────────────────────────
+
+class VideoFilmstripResponse(BaseModel):
+    """Filmstrip sprite metadata for the editor's timeline video track.
+
+    `status` drives frontend polling: `generating` means an ffmpeg pass is
+    in flight (or about to be); `ready` means `sprite_url` is fetchable now;
+    `unavailable` means there's no raw file to sample from; `error` means
+    generation failed (frontend should stop polling and show a fallback).
+    """
+    status: Literal['ready', 'generating', 'unavailable', 'error']
+    sprite_url: Optional[str] = None
+    tile_count: Optional[int] = None
+    cols: Optional[int] = None
+    rows: Optional[int] = None
+    tile_width: Optional[int] = None
+    tile_height: Optional[int] = None
+    interval_s: Optional[float] = None

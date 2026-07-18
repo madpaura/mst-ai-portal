@@ -562,8 +562,9 @@ export const AdminVideoEditor: React.FC = () => {
         )}
       </main>
 
-      {editorReady && (
+      {editorReady && id && (
         <EditorTimeline
+          videoId={id}
           duration={duration}
           currentTime={currentTime}
           edits={edits}
