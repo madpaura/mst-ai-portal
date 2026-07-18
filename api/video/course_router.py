@@ -1,8 +1,13 @@
 """Public Courses section (issue #239, PR 2).
 
 Browse and detail endpoints for courses with a published curriculum,
-per-item progress writes (with auto-subscribe), and course feedback.
-Enroll/unenroll reuses the existing /video/courses/{slug}/enroll routes.
+per-item progress writes (with auto-subscribe), enroll/unenroll, and course
+feedback — all against user_course_enrollments/course_analytics.
+
+issue #243: enroll/unenroll used to reuse the Ignite bucket-course routes at
+/video/courses/{slug}/enroll (courses and Ignite's video buckets were the
+same table). Now that Ignite buckets are video_series, curriculum
+enrollment owns its own routes here instead.
 """
 from fastapi import APIRouter, HTTPException, Depends
 
@@ -88,8 +93,16 @@ async def get_course_detail(slug: str, user: dict = Depends(get_optional_user)):
     course_id = str(course["id"])
 
     curriculum = await _fetch_curriculum(db, course)
+    # Videos aren't owned by a course directly (issue #243: that's series_id);
+    # count the distinct published videos actually linked into the curriculum.
     video_count = await db.fetchval(
-        "SELECT COUNT(*) FROM videos WHERE course_id = $1 AND is_published = true AND is_active = true",
+        """
+        SELECT COUNT(DISTINCT i.video_id)
+        FROM course_items i
+        JOIN course_modules m ON m.id = i.module_id
+        JOIN videos v ON v.id = i.video_id
+        WHERE m.course_id = $1 AND v.is_published = true AND v.is_active = true
+        """,
         course_id,
     )
 
@@ -127,6 +140,40 @@ async def get_course_detail(slug: str, user: dict = Depends(get_optional_user)):
         rating_count=fb["cnt"] if fb else 0,
         user=user_state,
     )
+
+
+@router.post("/{slug}/enroll")
+async def enroll_course(slug: str, user: dict = Depends(get_current_user)):
+    """Subscribe the current user to a curriculum course."""
+    db = await get_db()
+    course = await _published_course(db, slug)
+    course_id = str(course["id"])
+    await db.execute(
+        "INSERT INTO user_course_enrollments (user_id, course_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        user["id"], course_id,
+    )
+    await db.execute(
+        "INSERT INTO course_analytics (user_id, course_id, event_type) VALUES ($1, $2, 'enroll')",
+        user["id"], course_id,
+    )
+    return {"message": "Subscribed"}
+
+
+@router.delete("/{slug}/enroll")
+async def unenroll_course(slug: str, user: dict = Depends(get_current_user)):
+    """Unsubscribe the current user from a curriculum course."""
+    db = await get_db()
+    course = await _published_course(db, slug)
+    course_id = str(course["id"])
+    await db.execute(
+        "DELETE FROM user_course_enrollments WHERE user_id = $1 AND course_id = $2",
+        user["id"], course_id,
+    )
+    await db.execute(
+        "INSERT INTO course_analytics (user_id, course_id, event_type) VALUES ($1, $2, 'unenroll')",
+        user["id"], course_id,
+    )
+    return {"message": "Unsubscribed"}
 
 
 @router.post("/{slug}/items/{item_id}/progress", response_model=ItemProgressResponse)

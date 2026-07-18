@@ -46,9 +46,23 @@ CREATE TABLE courses (
     created_at  TIMESTAMPTZ DEFAULT now()
 );
 
+-- Ignite's browse buckets (issue #243) — split out of courses, which is
+-- curriculum-only from here on. video_series mirrors the columns courses
+-- used to carry for bucket browsing.
+CREATE TABLE video_series (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title       TEXT NOT NULL,
+    slug        TEXT UNIQUE NOT NULL,
+    description TEXT,
+    is_active   BOOLEAN DEFAULT true,
+    is_featured BOOLEAN DEFAULT false,
+    sort_order  INTEGER DEFAULT 0,
+    created_at  TIMESTAMPTZ DEFAULT now()
+);
+
 CREATE TABLE videos (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    course_id       UUID REFERENCES courses(id) ON DELETE SET NULL,
+    series_id       UUID REFERENCES video_series(id) ON DELETE SET NULL,
     title           TEXT NOT NULL,
     slug            TEXT UNIQUE NOT NULL,
     description     TEXT,
@@ -66,6 +80,8 @@ CREATE TABLE videos (
     auto_ready_notified BOOLEAN DEFAULT false,
     created_at      TIMESTAMPTZ DEFAULT now()
 );
+
+CREATE INDEX IF NOT EXISTS idx_videos_series_id ON videos(series_id);
 
 CREATE TABLE video_chapters (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -238,8 +254,9 @@ INSERT INTO capabilities (icon, title, description, sort_order) VALUES
 ('developer_board', 'Spec-to-Code', 'Transform high-level architectural specifications directly into synthesizable, optimized RTL code with minimal manual overhead.', 3),
 ('monitoring', 'Performance Monitoring', 'Real-time telemetry and deep-dive analysis for silicon workloads during simulation and emulation phases.', 4);
 
--- Seed default course
-INSERT INTO courses (title, slug, description, sort_order) VALUES
+-- Seed default Ignite series (issue #243: bucket browsing lives in
+-- video_series, not courses)
+INSERT INTO video_series (title, slug, description, sort_order) VALUES
 ('AI Ignite Foundations', 'ai-ignite-foundations', 'Core training series covering Code-mate, RAG, Agents, and LLM fundamentals.', 1);
 
 -- Seed forge components

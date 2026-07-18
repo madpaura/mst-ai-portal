@@ -24,7 +24,7 @@ async def get_landing_page():
                 v_row = await db.fetchrow("SELECT * FROM videos WHERE id = $1 AND is_active = true", config["video_id"])
                 if v_row:
                     video = VideoResponse(
-                        id=str(v_row["id"]), course_id=str(v_row["course_id"]) if v_row["course_id"] else None,
+                        id=str(v_row["id"]), series_id=str(v_row["series_id"]) if v_row["series_id"] else None,
                         title=v_row["title"], slug=v_row["slug"], description=v_row.get("description"),
                         category=v_row["category"], duration_s=v_row.get("duration_s"),
                         status=v_row["status"], hls_path=v_row.get("hls_path"),

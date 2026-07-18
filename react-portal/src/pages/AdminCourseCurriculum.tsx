@@ -54,7 +54,6 @@ interface AdminVideo {
   id: string;
   title: string;
   slug: string;
-  course_id: string | null;
   duration_s: number | null;
   is_published: boolean;
   status: string;
@@ -102,7 +101,6 @@ export const AdminCourseCurriculum: React.FC = () => {
   const [addingWeek, setAddingWeek] = useState(false);
   const [weekEdit, setWeekEdit] = useState<{ id: string; title: string; summary: string } | null>(null);
   const [itemForm, setItemForm] = useState<ItemForm | null>(null);
-  const [pickerAllVideos, setPickerAllVideos] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const toast = (type: 'success' | 'error', text: string) => {
@@ -253,7 +251,6 @@ export const AdminCourseCurriculum: React.FC = () => {
   // ── Items ─────────────────────────────────────────────
 
   const openAddItem = (moduleId: string, type: CurriculumItem['item_type']) => {
-    setPickerAllVideos(false);
     setItemForm({
       moduleId, itemId: null, item_type: type,
       title: '', description: '', duration_min: '', video_id: '', external_url: '',
@@ -261,7 +258,6 @@ export const AdminCourseCurriculum: React.FC = () => {
   };
 
   const openEditItem = (item: CurriculumItem) => {
-    setPickerAllVideos(false);
     setItemForm({
       moduleId: item.module_id, itemId: item.id, item_type: item.item_type,
       title: item.title, description: item.description || '',
@@ -348,9 +344,9 @@ export const AdminCourseCurriculum: React.FC = () => {
     );
   }
 
-  const pickerVideos = videos
-    .filter(v => pickerAllVideos || v.course_id === courseId)
-    .sort((a, b) => a.title.localeCompare(b.title));
+  // Series are pure Ignite organization (issue #243) — the video picker for
+  // curriculum items always lists every video, not just one series' videos.
+  const pickerVideos = [...videos].sort((a, b) => a.title.localeCompare(b.title));
 
   const itemFormBlock = itemForm && (
     <div className="m-3 p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800/60">
@@ -380,10 +376,6 @@ export const AdminCourseCurriculum: React.FC = () => {
                   </option>
                 ))}
               </select>
-              <label className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                <input type="checkbox" checked={pickerAllVideos} onChange={(e) => setPickerAllVideos(e.target.checked)} />
-                All courses
-              </label>
             </div>
           </div>
         )}

@@ -5,11 +5,10 @@ import anyio
 from fastapi import APIRouter, HTTPException, Depends, Query, Path
 from fastapi.responses import FileResponse
 from typing import Annotated, Optional
-from pydantic import BaseModel
 
 from config import settings
 from video.schemas import (
-    CourseResponse, VideoResponse, ChapterResponse, ProgressResponse,
+    SeriesResponse, VideoResponse, ChapterResponse, ProgressResponse,
     ProgressUpdate, OverallProgressResponse, NoteResponse, NoteCreate,
     NoteUpdate, HowtoResponse, VideoLikeResponse, AttachmentResponse,
     PlaylistResponse, PlaylistCreate, PlaylistUpdate, PlaylistVideoAdd,
@@ -72,64 +71,53 @@ async def get_captions_vtt(video_id: UUIDPath):
     return FileResponse(out, media_type="text/vtt")
 
 
-class CourseProgressResponse(BaseModel):
-    course_id: str
-    course_slug: str
-    course_title: str
-    total_videos: int
-    completed_videos: int
-    progress_pct: float
-    is_enrolled: bool
-    enrolled_at: Optional[str] = None
-
-
-@router.get("/courses", response_model=list[CourseResponse])
-async def list_courses():
+@router.get("/series", response_model=list[SeriesResponse])
+async def list_series():
     async def _fetch():
         db = await get_db()
         rows = await db.fetch(
             """
-            SELECT c.*,
+            SELECT s.*,
                 COUNT(v.id) FILTER (WHERE v.is_published = true AND v.is_active = true) as video_count,
                 (
                     SELECT COALESCE(v2.custom_thumbnail, v2.thumbnail)
                     FROM videos v2
-                    WHERE v2.course_id = c.id AND v2.is_published = true AND v2.is_active = true
+                    WHERE v2.series_id = s.id AND v2.is_published = true AND v2.is_active = true
                     ORDER BY v2.sort_order
                     LIMIT 1
                 ) as thumbnail
-            FROM courses c
-            LEFT JOIN videos v ON v.course_id = c.id
-            WHERE c.is_active = true
-            GROUP BY c.id
-            ORDER BY c.sort_order
+            FROM video_series s
+            LEFT JOIN videos v ON v.series_id = s.id
+            WHERE s.is_active = true
+            GROUP BY s.id
+            ORDER BY s.sort_order
             """
         )
-        from video.course_admin_router import _course_resp
+        from video.series_admin_router import _series_resp
         return [
-            _course_resp(r, video_count=r["video_count"], thumbnail=r.get("thumbnail")).model_dump(mode="json")
+            _series_resp(r, video_count=r["video_count"], thumbnail=r.get("thumbnail")).model_dump(mode="json")
             for r in rows
         ]
-    return await cache.get_or_set(cache.NS_VIDEO, "list", "courses", None, settings.REDIS_DEFAULT_TTL, _fetch)
+    return await cache.get_or_set(cache.NS_VIDEO, "list", "series", None, settings.REDIS_DEFAULT_TTL, _fetch)
 
 
-@router.get("/courses/{slug}")
-async def get_course(slug: str):
+@router.get("/series/{slug}")
+async def get_series(slug: str):
     async def _fetch():
         db = await get_db()
-        course = await db.fetchrow("SELECT * FROM courses WHERE slug = $1 AND is_active = true", slug)
-        if not course:
+        series = await db.fetchrow("SELECT * FROM video_series WHERE slug = $1 AND is_active = true", slug)
+        if not series:
             return None
         videos = await db.fetch(
-            "SELECT * FROM videos WHERE course_id = $1 AND is_published = true AND is_active = true ORDER BY sort_order",
-            course["id"],
+            "SELECT * FROM videos WHERE series_id = $1 AND is_published = true AND is_active = true ORDER BY sort_order",
+            series["id"],
         )
-        from video.course_admin_router import _course_resp
+        from video.series_admin_router import _series_resp
         return {
-            "course": _course_resp(course, video_count=len(videos)).model_dump(mode="json"),
+            "series": _series_resp(series, video_count=len(videos)).model_dump(mode="json"),
             "videos": [
                 VideoResponse(
-                    id=str(v["id"]), course_id=str(v["course_id"]) if v["course_id"] else None,
+                    id=str(v["id"]), series_id=str(v["series_id"]) if v["series_id"] else None,
                     title=v["title"], slug=v["slug"], description=v.get("description"),
                     category=v["category"], duration_s=v.get("duration_s"),
                     status=v["status"], hls_path=v.get("hls_path"),
@@ -140,9 +128,9 @@ async def get_course(slug: str):
                 for v in videos
             ],
         }
-    result = await cache.get_or_set(cache.NS_VIDEO, "course", slug, None, settings.REDIS_DEFAULT_TTL, _fetch)
+    result = await cache.get_or_set(cache.NS_VIDEO, "series", slug, None, settings.REDIS_DEFAULT_TTL, _fetch)
     if result is None:
-        raise HTTPException(status_code=404, detail="Course not found")
+        raise HTTPException(status_code=404, detail="Series not found")
     return result
 
 
@@ -178,7 +166,7 @@ async def list_all_videos(
         rows = await db.fetch(sql, *qparams)
         return [
             VideoResponse(
-                id=str(r["id"]), course_id=str(r["course_id"]) if r["course_id"] else None,
+                id=str(r["id"]), series_id=str(r["series_id"]) if r["series_id"] else None,
                 title=r["title"], slug=r["slug"], description=r.get("description"),
                 category=r["category"], duration_s=r.get("duration_s"),
                 status=r["status"], hls_path=r.get("hls_path"),
@@ -253,7 +241,7 @@ async def get_video(slug: str):
     if not row:
         raise HTTPException(status_code=404, detail="Video not found")
     return VideoResponse(
-        id=str(row["id"]), course_id=str(row["course_id"]) if row["course_id"] else None,
+        id=str(row["id"]), series_id=str(row["series_id"]) if row["series_id"] else None,
         title=row["title"], slug=row["slug"], description=row.get("description"),
         category=row["category"], duration_s=row.get("duration_s"),
         status=row["status"], hls_path=row.get("hls_path"),
@@ -748,147 +736,3 @@ async def remove_from_playlist(
             playlist_id, video["id"],
         )
     return await _playlist_with_slugs(db, row)
-
-
-# ── Course Enrollment & Progress ──────────────────────────
-
-@router.get("/my-courses", response_model=list[CourseProgressResponse])
-async def get_my_courses(user: dict = Depends(get_current_user)):
-    """Return all courses with enrollment status and progress for the current user."""
-    db = await get_db()
-    rows = await db.fetch(
-        """
-        SELECT
-            c.id, c.slug, c.title,
-            COUNT(v.id) FILTER (WHERE v.is_published = true AND v.is_active = true) as total_videos,
-            COUNT(p.video_id) FILTER (WHERE p.completed = true) as completed_videos,
-            e.enrolled_at
-        FROM courses c
-        LEFT JOIN videos v ON v.course_id = c.id
-        LEFT JOIN user_video_progress p ON p.video_id = v.id AND p.user_id = $1
-        LEFT JOIN user_course_enrollments e ON e.course_id = c.id AND e.user_id = $1
-        WHERE c.is_active = true
-        GROUP BY c.id, c.slug, c.title, e.enrolled_at
-        ORDER BY c.sort_order
-        """,
-        user["id"],
-    )
-    result = []
-    for r in rows:
-        total = r["total_videos"] or 0
-        completed = r["completed_videos"] or 0
-        pct = round((completed / total * 100) if total > 0 else 0, 1)
-        result.append(CourseProgressResponse(
-            course_id=str(r["id"]),
-            course_slug=r["slug"],
-            course_title=r["title"],
-            total_videos=total,
-            completed_videos=completed,
-            progress_pct=pct,
-            is_enrolled=r["enrolled_at"] is not None,
-            enrolled_at=r["enrolled_at"].isoformat() if r["enrolled_at"] else None,
-        ))
-    return result
-
-
-@router.get("/courses/{slug}/progress", response_model=CourseProgressResponse)
-async def get_course_progress(slug: str, user: dict = Depends(get_current_user)):
-    """Return enrollment status and video progress for a specific course."""
-    db = await get_db()
-    row = await db.fetchrow(
-        """
-        SELECT
-            c.id, c.slug, c.title,
-            COUNT(v.id) FILTER (WHERE v.is_published = true AND v.is_active = true) as total_videos,
-            COUNT(p.video_id) FILTER (WHERE p.completed = true) as completed_videos,
-            e.enrolled_at
-        FROM courses c
-        LEFT JOIN videos v ON v.course_id = c.id
-        LEFT JOIN user_video_progress p ON p.video_id = v.id AND p.user_id = $1
-        LEFT JOIN user_course_enrollments e ON e.course_id = c.id AND e.user_id = $1
-        WHERE c.slug = $2 AND c.is_active = true
-        GROUP BY c.id, c.slug, c.title, e.enrolled_at
-        """,
-        user["id"], slug,
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Course not found")
-    total = row["total_videos"] or 0
-    completed = row["completed_videos"] or 0
-    pct = round((completed / total * 100) if total > 0 else 0, 1)
-    return CourseProgressResponse(
-        course_id=str(row["id"]),
-        course_slug=row["slug"],
-        course_title=row["title"],
-        total_videos=total,
-        completed_videos=completed,
-        progress_pct=pct,
-        is_enrolled=row["enrolled_at"] is not None,
-        enrolled_at=row["enrolled_at"].isoformat() if row["enrolled_at"] else None,
-    )
-
-
-@router.post("/courses/{slug}/enroll", response_model=CourseProgressResponse)
-async def enroll_course(slug: str, user: dict = Depends(get_current_user)):
-    """Subscribe (enroll) the current user to a course."""
-    db = await get_db()
-    course = await db.fetchrow("SELECT id FROM courses WHERE slug = $1 AND is_active = true", slug)
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
-
-    await db.execute(
-        """
-        INSERT INTO user_course_enrollments (user_id, course_id)
-        VALUES ($1, $2) ON CONFLICT DO NOTHING
-        """,
-        user["id"], course["id"],
-    )
-    # Log analytics event
-    await db.execute(
-        "INSERT INTO course_analytics (user_id, course_id, event_type) VALUES ($1, $2, 'enroll')",
-        user["id"], course["id"],
-    )
-    # Return progress
-    from fastapi import Request
-    return await get_course_progress(slug, user)
-
-
-@router.delete("/courses/{slug}/enroll", response_model=CourseProgressResponse)
-async def unenroll_course(slug: str, user: dict = Depends(get_current_user)):
-    """Unsubscribe the current user from a course."""
-    db = await get_db()
-    course = await db.fetchrow("SELECT id FROM courses WHERE slug = $1 AND is_active = true", slug)
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
-
-    await db.execute(
-        "DELETE FROM user_course_enrollments WHERE user_id = $1 AND course_id = $2",
-        user["id"], course["id"],
-    )
-    await db.execute(
-        "INSERT INTO course_analytics (user_id, course_id, event_type) VALUES ($1, $2, 'unenroll')",
-        user["id"], course["id"],
-    )
-    return await get_course_progress(slug, user)
-
-
-@router.post("/courses/enroll-all", response_model=list[CourseProgressResponse])
-async def enroll_all_courses(user: dict = Depends(get_current_user)):
-    """Subscribe the current user to all active courses at once."""
-    db = await get_db()
-    await db.execute(
-        """
-        INSERT INTO user_course_enrollments (user_id, course_id)
-        SELECT $1, id FROM courses WHERE is_active = true
-        ON CONFLICT DO NOTHING
-        """,
-        user["id"],
-    )
-    await db.execute(
-        """
-        INSERT INTO course_analytics (user_id, course_id, event_type)
-        SELECT $1, id, 'enroll' FROM courses WHERE is_active = true
-        """,
-        user["id"],
-    )
-    return await get_my_courses(user)

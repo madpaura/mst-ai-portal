@@ -116,23 +116,25 @@ class TestGetMyLearningProgress:
 
 class TestGetCourseProgress:
     def test_returns_course_progress(self):
+        """issue #243: get_course_progress reuses progress_engine.course_progress
+        (curriculum progress), the same logic the public course detail page uses."""
         from assistant.tools import get_course_progress
         course_row = MagicMock()
         course_row.__getitem__ = lambda s, k: {
             "id": "c1", "title": "AI Bootcamp",
         }[k]
-        video_row = MagicMock()
-        video_row.__getitem__ = lambda s, k: {
-            "title": "Module 1", "slug": "module-1", "completed": True,
-        }[k]
         db = MagicMock()
         db.fetchrow = AsyncMock(return_value=course_row)
-        db.fetch = AsyncMock(return_value=[video_row])
-        with patch("assistant.tools.get_db", AsyncMock(return_value=db)):
+        with patch("assistant.tools.get_db", AsyncMock(return_value=db)), \
+             patch("video.progress_engine.course_progress", AsyncMock(return_value={
+                 "completed": 3, "total": 5, "pct": 60.0, "completed_item_ids": [],
+             })):
             result = _run(get_course_progress("ai-bootcamp", user_id="u1", user_role="user"))
         assert result["found"] is True
         assert result["course_title"] == "AI Bootcamp"
-        assert len(result["videos"]) == 1
+        assert result["total"] == 5
+        assert result["completed_count"] == 3
+        assert result["percentage"] == 60.0
 
     def test_course_not_found(self):
         from assistant.tools import get_course_progress
