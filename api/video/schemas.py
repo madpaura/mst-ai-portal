@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Literal, Optional
 from datetime import datetime
 
@@ -533,11 +533,33 @@ class EditorEditOp(BaseModel):
 
 
 class EditorStyle(BaseModel):
-    """Background/frame style — only used by a later slice; stored now so the
-    draft round-trips the full shape from day one."""
+    """Whole-video background styling (issue #263): a preset gradient/solid
+    or a custom uploaded image behind the video, with adjustable inset
+    padding and corner radius. `image`, when set, is the served URL of the
+    uploaded background (e.g. `/streams/{video_id}/editor_bg.png` — see
+    `admin_upload_editor_background` in admin_router.py) and takes priority
+    over `preset` at render time; it's cleared back to `None` by the
+    remove-image endpoint.
+
+    Ranges mirror the Style panel's sliders (`pad_pct` 0-12, `radius_px`
+    0-32) — see `react-portal/src/components/editor/StylePanel.tsx`.
+    """
     preset: str = 'none'
-    pad_pct: float = 0
-    radius_px: float = 0
+    pad_pct: float = Field(default=0, ge=0, le=12)
+    radius_px: float = Field(default=0, ge=0, le=32)
+    image: Optional[str] = None
+
+    @field_validator('preset')
+    @classmethod
+    def _normalize_preset(cls, v: str) -> str:
+        from video.style_presets import normalize_preset
+        return normalize_preset(v)
+
+
+class EditorBackgroundUploadResponse(BaseModel):
+    """Returned after a successful custom background image upload — the
+    frontend writes this straight into the draft's `style.image`."""
+    path: str
 
 
 # ── Silence-gap suggestions (issue #259) ────────────────────────────────────

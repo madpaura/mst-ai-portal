@@ -16,6 +16,7 @@ import {
   fmtClock as fmtTime,
   genEditId,
 } from '../components/editor/types';
+import { stylePresetCss } from '../components/editor/stylePresets';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -63,11 +64,14 @@ type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 // flow (issue #259).
 const TRANSCRIPT_POLL_MS = 4000;
 
-// Undo snapshot (issue #258): covers both `edits` and `muted` so the
-// remove-audio toggle participates in the same capped-5 undo stack.
+// Undo snapshot (issue #258, widened for style by issue #263): covers
+// `edits`, `muted` and `style` so the remove-audio toggle and the Style
+// panel (preset pick / image upload / remove) all participate in the same
+// capped-5 undo stack.
 interface UndoSnapshot {
   edits: EditOp[];
   muted: boolean;
+  style: EditorStyle;
 }
 
 // Browsers commonly reject/clamp HTMLMediaElement.playbackRate above 16 (the
@@ -129,8 +133,9 @@ export const AdminVideoEditor: React.FC = () => {
   // currently-open video id is allowed to keep applying state updates.
   const transcriptPollVideoIdRef = useRef<string | null>(null);
 
-  // Undo snapshots cover both `edits` and `muted` (issue #258 — remove-audio
-  // participates in the same capped-5 undo stack as cut/trim/speed edits).
+  // Undo snapshots cover `edits`, `muted` and `style` (issue #258 —
+  // remove-audio, widened by issue #263 to also cover the Style panel —
+  // participate in the same capped-5 undo stack as cut/trim/speed edits).
   const undoStackRef = useRef<UndoSnapshot[]>([]);
   const justLoadedRef = useRef(true); // skips the autosave effect run caused by mount / draft load
   const mountedRef = useRef(true);
@@ -276,14 +281,15 @@ export const AdminVideoEditor: React.FC = () => {
   }, [edits, muted, style]);
 
   // ── Undo (capped at the last 5 actions — explicit product decision) ────
-  // Snapshots capture both `edits` and `muted` so the remove-audio toggle
-  // undoes/redoes alongside cut/trim/speed edits, without changing the cap.
+  // Snapshots capture `edits`, `muted` and `style` so the remove-audio
+  // toggle and Style panel changes undo/redo alongside cut/trim/speed
+  // edits, without changing the cap.
   const pushUndoSnapshot = useCallback(() => {
     const stack = undoStackRef.current;
-    stack.push({ edits, muted });
+    stack.push({ edits, muted, style });
     if (stack.length > UNDO_CAP) stack.shift();
     setUndoDepth(stack.length);
-  }, [edits, muted]);
+  }, [edits, muted, style]);
 
   const applyEdits = useCallback(
     (next: EditOp[]) => {
@@ -298,6 +304,22 @@ export const AdminVideoEditor: React.FC = () => {
     setMuted((m) => !m);
   }, [pushUndoSnapshot]);
 
+  // Style panel (issue #263): preset pick / image upload / remove push an
+  // undo snapshot first (mirrors toggleMuted) — mockup behavior is that
+  // discrete style actions are undoable, while a slider drag (handled by
+  // handleStyleLiveChange below) does not spam the stack on every tick.
+  const handleStyleChange = useCallback(
+    (next: EditorStyle) => {
+      pushUndoSnapshot();
+      setStyle(next);
+    },
+    [pushUndoSnapshot],
+  );
+
+  const handleStyleLiveChange = useCallback((next: EditorStyle) => {
+    setStyle(next);
+  }, []);
+
   const undo = useCallback(() => {
     const stack = undoStackRef.current;
     const last = stack.pop();
@@ -305,6 +327,7 @@ export const AdminVideoEditor: React.FC = () => {
     setUndoDepth(stack.length);
     setEdits(last.edits);
     setMuted(last.muted);
+    setStyle(last.style);
     setSelectedEditId(null);
   }, []);
 
@@ -942,30 +965,47 @@ export const AdminVideoEditor: React.FC = () => {
                 </div>
               )}
 
-              {/* Stage */}
-              <div className="flex-1 min-h-0 rounded-lg border border-[#243043] bg-black flex items-center justify-center overflow-hidden relative">
+              {/* Stage — backdrop + padded/rounded frame (issue #263). The
+                  backdrop is always rendered (matching the mockup, whose
+                  'None' preset is a flat black CSS value, not "no div") so
+                  padding without a preset still shows *something* behind
+                  the inset video. */}
+              <div className="flex-1 min-h-0 rounded-lg border border-[#243043] bg-black overflow-hidden relative">
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background: style.image
+                      ? `center/cover no-repeat url(${API_BASE}${style.image})`
+                      : stylePresetCss(style.preset),
+                  }}
+                />
                 {muted && (
                   <span className="absolute top-2.5 right-3 z-10 text-[11px] font-semibold tracking-[0.04em] text-[#F0564A] bg-[#0B0F17]/80 border border-[#F0564A] rounded-full px-2.5 py-1">
                     AUDIO REMOVED
                   </span>
                 )}
-                {info && (
-                  <video
-                    ref={videoRef}
-                    src={`${API_BASE}${info.raw_url}`}
-                    className="max-w-full max-h-full"
-                    style={{ aspectRatio: String(aspect) }}
-                    muted={muted}
-                    onPlay={() => setPlaying(true)}
-                    onPause={() => setPlaying(false)}
-                    onTimeUpdate={handleTimeUpdate}
-                    onLoadedMetadata={(e) => {
-                      const el = e.target as HTMLVideoElement;
-                      if (el.duration && Number.isFinite(el.duration)) setDuration(el.duration);
-                    }}
-                    onError={() => setPlaybackError(true)}
-                  />
-                )}
+                <div
+                  className="absolute flex items-center justify-center"
+                  style={{ inset: `${style.pad_pct}%` }}
+                >
+                  {info && (
+                    <video
+                      ref={videoRef}
+                      src={`${API_BASE}${info.raw_url}`}
+                      className="max-w-full max-h-full"
+                      style={{ aspectRatio: String(aspect), borderRadius: `${style.radius_px}px` }}
+                      muted={muted}
+                      onPlay={() => setPlaying(true)}
+                      onPause={() => setPlaying(false)}
+                      onTimeUpdate={handleTimeUpdate}
+                      onLoadedMetadata={(e) => {
+                        const el = e.target as HTMLVideoElement;
+                        if (el.duration && Number.isFinite(el.duration)) setDuration(el.duration);
+                      }}
+                      onError={() => setPlaybackError(true)}
+                    />
+                  )}
+                </div>
               </div>
 
               {/* Transport */}
@@ -1008,7 +1048,7 @@ export const AdminVideoEditor: React.FC = () => {
           )}
         </div>
 
-        {editorReady && (
+        {editorReady && id && (
           <EditsPanel
             edits={edits}
             selectedEditId={selectedEditId}
@@ -1016,6 +1056,10 @@ export const AdminVideoEditor: React.FC = () => {
             onDelete={handleDeleteEdit}
             activeTab={activeInspectorTab}
             onTabChange={setActiveInspectorTab}
+            videoId={id}
+            style={style}
+            onStyleChange={handleStyleChange}
+            onStyleLiveChange={handleStyleLiveChange}
             suggestions={suggestions}
             hasAnalyzedSuggestions={hasAnalyzedSuggestions}
             analyzingSuggestions={analyzingSuggestions}

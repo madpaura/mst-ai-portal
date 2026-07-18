@@ -31,6 +31,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import settings
 from worker.gpu_detect import get_encode_args, get_hwaccel_args, get_gpu_info
 from video.schemas import EXPORT_QUALITY_HEIGHTS
+from worker.style_filters import (
+    build_style_filter_chunk,
+    compute_canvas_width,
+    resolve_background_image_path,
+    style_is_active,
+)
 
 # ── Graceful shutdown state ───────────────────────────────────────────────────
 _shutdown = threading.Event()
@@ -498,14 +504,34 @@ def normalize_edl(edits: list[dict], duration: float) -> list[tuple[float, float
     return segments
 
 
+def target_height_for_quality(quality: str, source_height: int) -> int:
+    """Never upscale beyond the selected target; force even height (matches
+    what `scale=-2:h` would also produce) — needed both for real downscales
+    and to repair an odd source height some encoders reject outright."""
+    src_h_even = source_height - (source_height % 2)
+    requested_h = EXPORT_QUALITY_HEIGHTS.get(quality)  # None => 'source'
+    return src_h_even if requested_h is None else min(requested_h, src_h_even)
+
+
 def build_export_filter_complex(
     segments: list[tuple[float, float, float]], muted: bool,
-    quality: str, source_height: int,
+    quality: str, source_height: int, target_width: Optional[int] = None,
 ) -> tuple[str, str, Optional[str], int]:
     """Build the ffmpeg -filter_complex graph for an export render.
 
     Returns (filter_complex, video_out_label, audio_out_label_or_None,
     target_height) — target_height is echoed back purely for logging.
+
+    `target_width` is None for a plain (unstyled) export — the final scale
+    stage then uses ffmpeg's own `-2:h` auto-width, exactly as before this
+    param existed (issue #263's byte-identical-graph requirement for
+    unstyled renders). When the whole-video background styling stage
+    (worker/style_filters.py) is active, the caller passes an explicit,
+    pre-computed even width so the composited backdrop+video canvas it
+    builds afterwards is guaranteed to line up pixel-for-pixel with this
+    stage's output — auto-width's internal rounding isn't reproducible in
+    Python ahead of time, so this stage is made to match a caller-supplied
+    number instead whenever styling needs one.
     """
     parts: list[str] = []
     v_labels: list[str] = []
@@ -538,13 +564,16 @@ def build_export_filter_complex(
         parts.append(inputs + f"concat=n={n}:v=1:a=1[vcat][acat]")
         video_out, audio_out = "vcat", "acat"
 
-    # Never upscale beyond the selected target; force even height (scale=-2:h
-    # also rounds width to even) — needed both for real downscales and to
-    # repair an odd source height that some encoders reject outright.
-    src_h_even = source_height - (source_height % 2)
-    requested_h = EXPORT_QUALITY_HEIGHTS.get(quality)  # None => 'source'
-    target_h = src_h_even if requested_h is None else min(requested_h, src_h_even)
-    if target_h != source_height:
+    target_h = target_height_for_quality(quality, source_height)
+    if target_width is not None:
+        # Explicit width requested (styling active) — always scale so the
+        # output canvas is exactly target_width x target_h, even when that
+        # happens to equal the source dims already (a harmless no-op-ish
+        # scale, but it removes any ambiguity for the style stage that
+        # overlays on top of this).
+        parts.append(f"[{video_out}]scale={target_width}:{target_h}[vout]")
+        video_out = "vout"
+    elif target_h != source_height:
         parts.append(f"[{video_out}]scale=-2:{target_h}[vout]")
         video_out = "vout"
 
@@ -594,6 +623,7 @@ async def process_render_job(pool: asyncpg.Pool, job):
     edits = edl.get("edits", []) or []
     muted = bool(edl.get("muted", False))
     quality = edl.get("quality", "source")
+    style = edl.get("style") or {}
     mode = job["mode"]  # 'download' (issue #260) or 'apply' (issue #261)
 
     video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
@@ -611,7 +641,7 @@ async def process_render_job(pool: asyncpg.Pool, job):
     if not dims:
         await fail("Could not determine source dimensions")
         return
-    _source_width, source_height = dims
+    source_width, source_height = dims
 
     segments = normalize_edl(edits, float(duration))
     if not segments:
@@ -623,9 +653,38 @@ async def process_render_job(pool: asyncpg.Pool, job):
         await fail("Computed output duration is effectively zero")
         return
 
+    # Whole-video background styling (issue #263) — only touches the filter
+    # graph / ffmpeg inputs at all when active, so an unstyled render's
+    # command line is unchanged from before this feature existed.
+    styling_active = style_is_active(style)
+    canvas_width = None
+    if styling_active:
+        target_h_preview = target_height_for_quality(quality, source_height)
+        canvas_width = compute_canvas_width(source_width, source_height, target_h_preview)
+
     filter_complex, video_out, audio_out, target_h = build_export_filter_complex(
         segments, muted, quality, source_height,
+        target_width=canvas_width if styling_active else None,
     )
+
+    bg_image_input_args: list[str] = []
+    if styling_active:
+        bg_fs_path = resolve_background_image_path(video_dir, style)
+        bg_label = None
+        if bg_fs_path:
+            # `-loop 1` makes the image2 demuxer repeat the single frame
+            # indefinitely — without it ffmpeg only has *one* frame for
+            # this input, and the style stage's `overlay=...:shortest=1`
+            # would then truncate the whole render to that one frame
+            # instead of the video's real length (caught by the synthetic
+            # ffmpeg verification for this PR).
+            bg_image_input_args = ["-loop", "1", "-i", bg_fs_path]
+            bg_label = "1:v"
+        style_chunk, styled_video_out = build_style_filter_chunk(
+            video_out, canvas_width, target_h, source_height, style, bg_label,
+        )
+        filter_complex = f"{filter_complex};{style_chunk}"
+        video_out = styled_video_out
 
     ts = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
     if mode == "apply":
@@ -646,8 +705,11 @@ async def process_render_job(pool: asyncpg.Pool, job):
 
     gpu = get_gpu_info()
     encode_args = get_encode_args(crf=20)
-    cmd = [settings.FFMPEG_PATH, "-y", "-i", raw_path, "-filter_complex", filter_complex,
-           "-map", f"[{video_out}]"]
+    # bg_image_input_args (issue #263) adds "-i <editor_bg path>" as input
+    # index 1 when a custom background image is in use — referenced as
+    # "1:v" inside the style filter chunk built above.
+    cmd = [settings.FFMPEG_PATH, "-y", "-i", raw_path, *bg_image_input_args,
+           "-filter_complex", filter_complex, "-map", f"[{video_out}]"]
     if audio_out:
         cmd += ["-map", f"[{audio_out}]"]
     else:
@@ -658,9 +720,14 @@ async def process_render_job(pool: asyncpg.Pool, job):
     cmd += ["-movflags", "+faststart", "-progress", "pipe:1", "-nostats", tmp_output]
 
     backend = "GPU" if gpu["gpu_available"] else "CPU"
+    style_log = (
+        f" style={style.get('preset')} pad={style.get('pad_pct')}% radius={style.get('radius_px')}px"
+        f"{' image' if bg_image_input_args else ''}"
+        if styling_active else ""
+    )
     log.info(
         f"Render job #{job_id} | segments={len(segments)} quality={quality} "
-        f"target_h={target_h} muted={muted} expected_out={output_duration:.1f}s [{backend}]"
+        f"target_h={target_h} muted={muted} expected_out={output_duration:.1f}s [{backend}]{style_log}"
     )
 
     proc = await asyncio.create_subprocess_exec(
@@ -798,11 +865,14 @@ async def _finish_apply_render(
 
     # Clear the draft — applied edits are now baked into original.mp4, so the
     # next editor session should start from an empty, un-muted, unstyled EDL.
+    # (The custom background image file itself, if any, is left on disk —
+    # same treatment as export files — so re-picking it after a future apply
+    # doesn't require a re-upload; /cleanup is the explicit way to reclaim it.)
     await pool.execute(
         """
         UPDATE video_editor_drafts
            SET edits = '[]', muted = false,
-               style = '{"preset": "none", "pad_pct": 0, "radius_px": 0}',
+               style = '{"preset": "none", "pad_pct": 0, "radius_px": 0, "image": null}',
                suggestions = '[]', updated_at = now()
          WHERE video_id = $1
         """,

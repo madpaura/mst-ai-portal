@@ -56,6 +56,10 @@ export interface EditorStyle {
   preset: string;
   pad_pct: number;
   radius_px: number;
+  /** Served URL of an uploaded custom background image (issue #263), or
+   * null/undefined when none is set. Takes priority over `preset` at
+   * render time when present. */
+  image?: string | null;
 }
 
 export interface EditorDraft {
@@ -64,7 +68,7 @@ export interface EditorDraft {
   style: EditorStyle;
 }
 
-export const DEFAULT_STYLE: EditorStyle = { preset: 'none', pad_pct: 0, radius_px: 0 };
+export const DEFAULT_STYLE: EditorStyle = { preset: 'none', pad_pct: 0, radius_px: 0, image: null };
 
 export const DEFAULT_DRAFT: EditorDraft = { edits: [], muted: false, style: DEFAULT_STYLE };
 

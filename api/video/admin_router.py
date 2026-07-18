@@ -26,6 +26,7 @@ from video.schemas import (
     EditorExportStatusResponse, export_quality_options_for_aspect,
     EditorSuggestion, EditorSuggestAnalyzeRequest,
     EditorSuggestAnalyzeResponse, EditorSuggestionStateUpdate,
+    EditorBackgroundUploadResponse,
 )
 from pydantic import BaseModel
 from auth.dependencies import require_content as require_admin
@@ -365,10 +366,20 @@ async def admin_storage_info(video_id: str, admin: dict = Depends(require_admin)
             exports_size += size
             exports.append({"name": fname, "size": size})
 
+    # Editor custom background image (issue #263) — a user upload, but
+    # (per the issue's cleanup requirement) reclaimed like exports rather
+    # than kept indefinitely like thumb/filmstrip; re-uploadable on demand.
+    editor_bg_size = 0
+    editor_bg_name = None
+    for fpath in _editor_bg_glob(video_dir):
+        editor_bg_size += os.path.getsize(fpath)
+        editor_bg_name = os.path.basename(fpath)
+
     return {
         "files": files, "hls_size": hls_size, "thumb_size": thumb_size,
         "filmstrip_size": filmstrip_size,
         "exports": exports, "exports_size": exports_size,
+        "editor_bg_name": editor_bg_name, "editor_bg_size": editor_bg_size,
     }
 
 
@@ -384,7 +395,10 @@ async def admin_cleanup_video(video_id: str, admin: dict = Depends(require_admin
     they're the user-downloadable *product* of a render, not a cache or a
     backup, so cleanup deletes them too — reported separately as
     `exports_deleted` so it's obvious in the response that real downloadable
-    files, not just scratch copies, were removed.
+    files, not just scratch copies, were removed. The custom editor
+    background image (issue #263), if one is uploaded, is reclaimed the same
+    way — reported as `background_deleted` — since it's re-uploadable on
+    demand and the point of this endpoint is freeing real disk space.
     """
     db = await get_db()
     await _require_video_access(db, video_id, admin)
@@ -394,6 +408,7 @@ async def admin_cleanup_video(video_id: str, admin: dict = Depends(require_admin
 
     deleted = []
     exports_deleted = []
+    background_deleted = []
     freed_bytes = 0
 
     if os.path.isdir(raw_dir):
@@ -423,7 +438,30 @@ async def admin_cleanup_video(video_id: str, admin: dict = Depends(require_admin
             freed_bytes += size
             exports_deleted.append(fname)
 
-    return {"deleted": deleted, "exports_deleted": exports_deleted, "freed_bytes": freed_bytes}
+    for fpath in _editor_bg_glob(video_dir):
+        size = os.path.getsize(fpath)
+        try:
+            os.remove(fpath)
+        except OSError:
+            continue
+        freed_bytes += size
+        background_deleted.append(os.path.basename(fpath))
+
+    if background_deleted:
+        await db.execute(
+            """
+            UPDATE video_editor_drafts
+               SET style = jsonb_set(COALESCE(style, '{}'::jsonb), '{image}', 'null'::jsonb),
+                   updated_at = now()
+             WHERE video_id = $1
+            """,
+            video_id,
+        )
+
+    return {
+        "deleted": deleted, "exports_deleted": exports_deleted,
+        "background_deleted": background_deleted, "freed_bytes": freed_bytes,
+    }
 
 
 @router.post("/videos/{video_id}/transcode")
@@ -1026,7 +1064,7 @@ async def admin_editor_info(video_id: str, admin: dict = Depends(require_admin))
 
 # ── Editor EDL draft (issue #256) ──────────────────────────
 
-_DEFAULT_EDITOR_STYLE = {"preset": "none", "pad_pct": 0, "radius_px": 0}
+_DEFAULT_EDITOR_STYLE = {"preset": "none", "pad_pct": 0, "radius_px": 0, "image": None}
 
 
 def _draft_row_to_response(video_id: str, r) -> VideoEditorDraftResponse:
@@ -1079,6 +1117,122 @@ async def admin_upsert_editor_draft(
         video_id, edits_json, req.muted, style_json,
     )
     return _draft_row_to_response(video_id, row)
+
+
+# ── Editor background image (issue #263) ───────────────────
+#
+# A custom uploaded background lives at the video dir root as
+# `editor_bg.<ext>` (one per video, like `thumb.jpg`/`custom_thumb.jpg`) —
+# `_editor_bg_glob` finds it regardless of which extension was last
+# uploaded, and any previous file is removed before a new one is written so
+# stale extensions never pile up.
+
+ALLOWED_EDITOR_BG_EXT = {'.jpg', '.jpeg', '.png', '.webp'}
+ALLOWED_EDITOR_BG_MIME = {'image/jpeg', 'image/png', 'image/webp'}
+MAX_EDITOR_BG_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+def _editor_bg_glob(video_dir: str) -> list[str]:
+    """Return full paths of any existing editor_bg.* file(s) in video_dir."""
+    if not os.path.isdir(video_dir):
+        return []
+    return [
+        os.path.join(video_dir, fname)
+        for fname in os.listdir(video_dir)
+        if os.path.splitext(fname)[0] == "editor_bg" and os.path.isfile(os.path.join(video_dir, fname))
+    ]
+
+
+@router.post("/videos/{video_id}/editor-background", response_model=EditorBackgroundUploadResponse)
+async def admin_upload_editor_background(
+    video_id: str, file: UploadFile = File(...), admin: dict = Depends(verify_video_access)
+):
+    """Upload a custom background image for the Style panel's whole-video
+    styling (issue #263). Validated by extension + declared content-type and
+    a 10 MB size cap; stored as `editor_bg.<ext>` alongside the video's other
+    assets (thumb.jpg, filmstrip.jpg, …), replacing any previous upload.
+    Does not touch the draft row — the frontend writes the returned path
+    into `style.image` and saves the draft itself, so this participates in
+    undo/autosave the same way the rest of the Style panel does.
+    """
+    db = await get_db()
+    await _require_video_access(db, video_id, admin)
+
+    original_name = file.filename or "background"
+    _, ext = os.path.splitext(original_name)
+    ext = ext.lower()
+    if ext not in ALLOWED_EDITOR_BG_EXT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File type '{ext}' is not allowed — use jpg, png or webp",
+        )
+    if file.content_type and file.content_type not in ALLOWED_EDITOR_BG_MIME:
+        raise HTTPException(status_code=400, detail=f"Content type '{file.content_type}' is not allowed")
+
+    video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
+    os.makedirs(video_dir, exist_ok=True)
+
+    final_name = f"editor_bg{ext}"
+    final_path = os.path.join(video_dir, final_name)
+    tmp_path = final_path + ".tmp"
+
+    size = 0
+    try:
+        with open(tmp_path, "wb") as f:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_EDITOR_BG_BYTES:
+                    f.close()
+                    os.remove(tmp_path)
+                    raise HTTPException(status_code=413, detail="Image exceeds 10 MB limit")
+                f.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as e:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # Only one background image per video — clear any previous upload
+    # (possibly a different extension) before publishing the new one.
+    for stale in _editor_bg_glob(video_dir):
+        try:
+            os.remove(stale)
+        except OSError:
+            pass
+    os.replace(tmp_path, final_path)
+
+    return EditorBackgroundUploadResponse(path=f"/streams/{video_id}/{final_name}")
+
+
+@router.delete("/videos/{video_id}/editor-background")
+async def admin_delete_editor_background(video_id: str, admin: dict = Depends(verify_video_access)):
+    """Remove the custom background image and clear it from the saved draft
+    (issue #263) — the frontend also clears its local `style.image` state,
+    but the draft is cleared here too so a stale reference can't survive a
+    failed autosave."""
+    db = await get_db()
+    await _require_video_access(db, video_id, admin)
+    video_dir = os.path.join(settings.VIDEO_STORAGE_PATH, video_id)
+
+    removed = []
+    for path in _editor_bg_glob(video_dir):
+        try:
+            os.remove(path)
+            removed.append(os.path.basename(path))
+        except OSError:
+            pass
+
+    await db.execute(
+        """
+        UPDATE video_editor_drafts
+           SET style = jsonb_set(COALESCE(style, '{}'::jsonb), '{image}', 'null'::jsonb),
+               updated_at = now()
+         WHERE video_id = $1
+        """,
+        video_id,
+    )
+    return {"message": "Background image removed", "removed": removed}
 
 
 # ── Editor export/render (issue #260) ──────────────────────

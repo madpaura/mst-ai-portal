@@ -1,9 +1,10 @@
 import React from 'react';
-import type { EditOp, EditorSuggestion } from './types';
+import type { EditOp, EditorStyle, EditorSuggestion } from './types';
 import { fmtClock, opLabel } from './types';
 import { SuggestionsPanel } from './SuggestionsPanel';
+import { StylePanel } from './StylePanel';
 
-export type InspectorTab = 'edits' | 'suggestions';
+export type InspectorTab = 'edits' | 'style' | 'suggestions';
 
 interface EditsPanelProps {
   edits: EditOp[];
@@ -11,9 +12,15 @@ interface EditsPanelProps {
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
 
-  // Tabs (issue #259 adds the Suggestions tab alongside Edits)
+  // Tabs (issue #259 adds the Suggestions tab, issue #263 adds Style)
   activeTab: InspectorTab;
   onTabChange: (tab: InspectorTab) => void;
+
+  // Style tab (issue #263)
+  videoId: string;
+  style: EditorStyle;
+  onStyleChange: (next: EditorStyle) => void;
+  onStyleLiveChange: (next: EditorStyle) => void;
 
   // Suggestions tab (issue #259)
   suggestions: EditorSuggestion[];
@@ -47,6 +54,10 @@ export const EditsPanel: React.FC<EditsPanelProps> = ({
   onDelete,
   activeTab,
   onTabChange,
+  videoId,
+  style,
+  onStyleChange,
+  onStyleLiveChange,
   suggestions,
   hasAnalyzedSuggestions,
   analyzingSuggestions,
@@ -70,6 +81,7 @@ export const EditsPanel: React.FC<EditsPanelProps> = ({
         {(
           [
             ['edits', 'Edits'],
+            ['style', 'Style'],
             ['suggestions', `Suggestions${openSuggestionCount ? ` (${openSuggestionCount})` : ''}`],
           ] as const
         ).map(([key, label]) => (
@@ -132,6 +144,13 @@ export const EditsPanel: React.FC<EditsPanelProps> = ({
               );
             })
           )
+        ) : activeTab === 'style' ? (
+          <StylePanel
+            videoId={videoId}
+            style={style}
+            onChange={onStyleChange}
+            onLiveChange={onStyleLiveChange}
+          />
         ) : (
           <SuggestionsPanel
             suggestions={suggestions}
