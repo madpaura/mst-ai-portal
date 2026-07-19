@@ -47,6 +47,20 @@ interface VideoEditorDraft {
 interface AutoStatusResponse {
   transcript_status: string | null;
   transcript_error: string | null;
+  jobs?: Record<string, { status: string; error: string | null }>;
+}
+
+// issue #277: videos.transcript_status can be NULL (never processed) or a
+// stale 'pending' with no live auto-job behind it. Both must read as "not
+// started" — otherwise the Suggestions tab shows a perpetual "Generating
+// transcript…" spinner for work nobody asked for, and hides the explicit
+// Generate button. Only a genuinely queued/running transcript job (or
+// 'processing'/'ready'/'error' on the video row) passes through.
+function effectiveTranscriptStatus(data: AutoStatusResponse): string {
+  const status = data.transcript_status ?? 'none';
+  if (status !== 'pending') return status;
+  const job = data.jobs?.transcript?.status;
+  return job === 'pending' || job === 'processing' ? 'pending' : 'none';
 }
 
 interface AnalyzeSuggestionsResponse {
@@ -263,12 +277,12 @@ export const AdminVideoEditor: React.FC = () => {
       .get<AutoStatusResponse>(`/admin/videos/${id}/auto-status`)
       .then((data) => {
         if (cancelled) return;
-        setTranscriptStatus(data.transcript_status ?? 'pending');
+        setTranscriptStatus(effectiveTranscriptStatus(data));
         setTranscriptError(data.transcript_error ?? null);
       })
       .catch(() => {
         if (cancelled) return;
-        setTranscriptStatus('pending');
+        setTranscriptStatus('none');
       });
     return () => {
       cancelled = true;
@@ -474,7 +488,7 @@ export const AdminVideoEditor: React.FC = () => {
         try {
           const data = await api.get<AutoStatusResponse>(`/admin/videos/${videoId}/auto-status`);
           if (transcriptPollVideoIdRef.current !== videoId) return; // check again after await
-          const status = data.transcript_status ?? 'pending';
+          const status = effectiveTranscriptStatus(data);
           setTranscriptStatus(status);
           setTranscriptError(data.transcript_error ?? null);
           if (status === 'pending' || status === 'processing') {
