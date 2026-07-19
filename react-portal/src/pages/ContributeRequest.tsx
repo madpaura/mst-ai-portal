@@ -74,7 +74,7 @@ export const ContributeRequest: React.FC = () => {
         {/* Back link */}
         <Link to="/ignite" className="flex items-center gap-2 text-sm text-slate-500 hover:text-primary transition-colors mb-8">
           <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-          Back to Learn
+          Back to Videos
         </Link>
 
         <div className="flex items-center gap-3 mb-8">
@@ -134,7 +134,7 @@ export const ContributeRequest: React.FC = () => {
             <p className="font-bold text-slate-900 dark:text-white mb-1">
               You already have {userRole === 'admin' ? 'admin' : 'content creator'} access!
             </p>
-            <Link to="/ignite" className="text-primary text-sm hover:underline">Return to Learn</Link>
+            <Link to="/ignite" className="text-primary text-sm hover:underline">Return to Videos</Link>
           </div>
         )}
 

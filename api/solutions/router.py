@@ -178,7 +178,11 @@ async def get_home_stats():
             "news_today": news["today"],
             "marketplace": marketplace,
         }
-    return await cache.get_or_set(cache.NS_SOLUTIONS, "home", "stats", None, settings.REDIS_DEFAULT_TTL, _fetch)
+    # Versioned cache key (issue #281): the response shape has grown over
+    # time (courses/articles/marketplace keys), and a cached pre-expansion
+    # payload made the new tiles render "—" until the TTL expired. Bump the
+    # suffix whenever the shape changes.
+    return await cache.get_or_set(cache.NS_SOLUTIONS, "home", "stats-v2", None, settings.REDIS_DEFAULT_TTL, _fetch)
 
 
 @router.post("/contact")
