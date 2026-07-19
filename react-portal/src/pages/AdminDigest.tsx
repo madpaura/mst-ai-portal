@@ -76,11 +76,14 @@ export const AdminDigest: React.FC = () => {
   const [pickerItems, setPickerItems] = useState<Record<PickerType, PickerItem[]> | null>(null);
   const [loadingPicker, setLoadingPicker] = useState(false);
   const [pickerSearch, setPickerSearch] = useState('');
+  const [expandedSections, setExpandedSections] = useState<Set<PickerType>>(new Set());
   const [selectedContent, setSelectedContent] = useState<Record<PickerType, string[]>>({
     videos: [], articles: [], components: [], solutions: [],
   });
   const [preview, setPreview] = useState<DigestPreview | null>(null);
   const [editedSubject, setEditedSubject] = useState('');
+  const [editedHtml, setEditedHtml] = useState('');
+  const previewRef = useRef<HTMLDivElement>(null);
   const [recipientEmails, setRecipientEmails] = useState('');
   const [generating, setGenerating] = useState(false);
   const [generatingStep, setGeneratingStep] = useState('');
@@ -114,6 +117,32 @@ export const AdminDigest: React.FC = () => {
     setPreview(data);
     setEditedSubject(data.subject);
   };
+
+  // Drive the editable preview DOM imperatively (ref), not via React children —
+  // any unrelated re-render (e.g. typing a recipient email) must not wipe an
+  // in-progress edit or reset the cursor position inside the contentEditable div.
+  // Runs once per *new* preview (generate/load/regenerate), keyed on html_content.
+  React.useEffect(() => {
+    if (previewRef.current) {
+      previewRef.current.innerHTML = DOMPurify.sanitize(preview?.html_content || '');
+    }
+    setEditedHtml(preview?.html_content || '');
+  }, [preview?.html_content]);
+
+  const resetPreviewEdits = () => {
+    if (!preview) return;
+    if (previewRef.current) {
+      previewRef.current.innerHTML = DOMPurify.sanitize(preview.html_content);
+    }
+    setEditedHtml(preview.html_content);
+  };
+
+  const isPreviewEdited = !!preview && editedHtml !== preview.html_content;
+
+  // Final HTML to act on (save/send/view/pdf/email-client) — prefers in-place
+  // edits made in the contentEditable preview, sanitized since it may now
+  // contain live browser-DOM edits/pastes rather than only server-generated markup.
+  const getFinalHtml = () => DOMPurify.sanitize(editedHtml || preview?.html_content || '');
 
   // ── Saved email helpers ──────────────────────────────
   const addEmailsToSaved = (emails: string[]) => {
@@ -244,6 +273,14 @@ export const AdminDigest: React.FC = () => {
     }
   };
 
+  const toggleSection = (type: PickerType) => {
+    setExpandedSections(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type); else next.add(type);
+      return next;
+    });
+  };
+
   const toggleSelected = (type: PickerType, key: string) => {
     setSelectedContent(prev => ({
       ...prev,
@@ -343,7 +380,7 @@ export const AdminDigest: React.FC = () => {
     try {
       await api.post('/admin/save-digest', {
         subject: editedSubject || preview.subject,
-        html_content: preview.html_content,
+        html_content: getFinalHtml(),
         plain_text: preview.plain_text,
         summary: preview.summary,
         days_covered: digestDays,
@@ -363,14 +400,14 @@ export const AdminDigest: React.FC = () => {
   const handleViewInNewTab = () => {
     if (!preview) return;
     const win = window.open('', '_blank');
-    if (win) { win.document.write(DOMPurify.sanitize(preview.html_content)); win.document.close(); }
+    if (win) { win.document.write(getFinalHtml()); win.document.close(); }
   };
 
   const handleDownloadPdf = () => {
     if (!preview) return;
     const win = window.open('', '_blank');
     if (win) {
-      win.document.write(`<html><head><title>${editedSubject || preview.subject}</title><style>@media print{body{margin:0}}</style></head><body onload="setTimeout(()=>{window.print();},500)">${DOMPurify.sanitize(preview.html_content)}</body></html>`);
+      win.document.write(`<html><head><title>${editedSubject || preview.subject}</title><style>@media print{body{margin:0}}</style></head><body onload="setTimeout(()=>{window.print();},500)">${getFinalHtml()}</body></html>`);
       win.document.close();
     }
   };
@@ -383,7 +420,7 @@ export const AdminDigest: React.FC = () => {
       const res = await fetch(`${apiBase}/admin/generate-eml`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ subject: editedSubject || preview.subject, html_content: preview.html_content, plain_text: preview.plain_text }),
+        body: JSON.stringify({ subject: editedSubject || preview.subject, html_content: getFinalHtml(), plain_text: preview.plain_text }),
       });
       if (!res.ok) throw new Error('Failed to generate .eml');
       const blob = await res.blob();
@@ -421,7 +458,7 @@ export const AdminDigest: React.FC = () => {
         {
           recipient_emails: emails,
           subject: editedSubject || preview.subject,
-          html_content: preview.html_content,
+          html_content: getFinalHtml(),
           plain_text: preview.plain_text,
           summary: preview.summary,
           days_covered: digestDays,
@@ -577,41 +614,60 @@ export const AdminDigest: React.FC = () => {
                               </button>
                             )}
                           </div>
-                          <div className="max-h-72 overflow-y-auto space-y-3 pr-1">
+                          <div className="space-y-2">
                             {PICKER_SECTIONS.map(({ type, label, icon }) => {
                               const q = pickerSearch.trim().toLowerCase();
                               const items = (pickerItems[type] || []).filter(
                                 (it) => !q || it.title.toLowerCase().includes(q) || it.category.toLowerCase().includes(q),
                               );
+                              const isOpen = expandedSections.has(type) || (q.length > 0 && items.length > 0);
+                              const selCount = selectedContent[type].length;
                               return (
-                                <div key={type}>
-                                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                                    <span className="material-symbols-outlined text-[13px]">{icon}</span>
-                                    {label}
-                                    <span className="text-slate-400 normal-case tracking-normal">
-                                      ({selectedContent[type].length}/{(pickerItems[type] || []).length})
-                                    </span>
-                                  </div>
-                                  {items.length === 0 ? (
-                                    <p className="text-[11px] text-slate-500 pl-1">No matches</p>
-                                  ) : (
-                                    items.map((it) => (
-                                      <label
-                                        key={it.key}
-                                        className="flex items-start gap-2 px-1.5 py-1 rounded hover:bg-slate-100 dark:hover:bg-white/5 cursor-pointer select-none"
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={selectedContent[type].includes(it.key)}
-                                          onChange={() => toggleSelected(type, it.key)}
-                                          className="w-3.5 h-3.5 mt-0.5 accent-primary rounded shrink-0"
-                                        />
-                                        <span className="min-w-0">
-                                          <span className="block text-xs text-slate-900 dark:text-slate-200 truncate">{it.title}</span>
-                                          <span className="block text-[10px] text-slate-500">{it.category}</span>
+                                <div key={type} className="border border-slate-200 dark:border-white/10 rounded-lg overflow-hidden">
+                                  <button
+                                    onClick={() => toggleSection(type)}
+                                    className="w-full flex items-center justify-between px-2.5 py-2 text-left hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+                                  >
+                                    <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                      <span className="material-symbols-outlined text-[13px] text-primary">{icon}</span>
+                                      {label}
+                                      <span className="text-slate-400 normal-case tracking-normal">
+                                        ({(pickerItems[type] || []).length})
+                                      </span>
+                                      {selCount > 0 && (
+                                        <span className="px-1.5 py-0.5 rounded-full bg-primary/15 text-primary normal-case tracking-normal">
+                                          {selCount} picked
                                         </span>
-                                      </label>
-                                    ))
+                                      )}
+                                    </span>
+                                    <span className="material-symbols-outlined text-sm text-slate-400">
+                                      {isOpen ? 'expand_less' : 'expand_more'}
+                                    </span>
+                                  </button>
+                                  {isOpen && (
+                                    <div className="border-t border-slate-200 dark:border-white/10 p-2 max-h-56 overflow-y-auto space-y-0.5">
+                                      {items.length === 0 ? (
+                                        <p className="text-[11px] text-slate-500 pl-1 py-1">No matches</p>
+                                      ) : (
+                                        items.map((it) => (
+                                          <label
+                                            key={it.key}
+                                            className="flex items-start gap-2 px-1.5 py-1 rounded hover:bg-slate-100 dark:hover:bg-white/5 cursor-pointer select-none"
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={selectedContent[type].includes(it.key)}
+                                              onChange={() => toggleSelected(type, it.key)}
+                                              className="w-3.5 h-3.5 mt-0.5 accent-primary rounded shrink-0"
+                                            />
+                                            <span className="min-w-0">
+                                              <span className="block text-xs text-slate-900 dark:text-slate-200 truncate">{it.title}</span>
+                                              <span className="block text-[10px] text-slate-500">{it.category}</span>
+                                            </span>
+                                          </label>
+                                        ))
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               );
@@ -733,10 +789,26 @@ export const AdminDigest: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Email Preview</label>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs font-bold text-text-muted uppercase tracking-wider">Email Preview</label>
+                        <div className="flex items-center gap-2">
+                          {isPreviewEdited && (
+                            <>
+                              <span className="px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 text-[10px] font-bold uppercase tracking-wider">Edited</span>
+                              <button onClick={resetPreviewEdits} className="text-[11px] font-bold text-slate-400 hover:text-red-400 transition-colors">
+                                Reset
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mb-2">Click any text below to edit it in place before saving or sending.</p>
                       <div
-                        className="bg-white rounded-lg p-4 text-slate-900 text-sm max-h-96 overflow-y-auto border border-slate-200 dark:border-white/10"
-                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(preview.html_content) }}
+                        ref={previewRef}
+                        contentEditable
+                        suppressContentEditableWarning
+                        onInput={() => setEditedHtml(previewRef.current?.innerHTML || '')}
+                        className="bg-white rounded-lg p-4 text-slate-900 text-sm max-h-96 overflow-y-auto border border-slate-200 dark:border-white/10 outline-none focus:ring-2 focus:ring-primary/40"
                       />
                     </div>
                   </div>

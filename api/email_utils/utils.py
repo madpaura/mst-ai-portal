@@ -7,7 +7,7 @@ from typing import Optional
 from loguru import logger as log
 from config import settings
 from database import get_db
-from email_utils.template import generate_editorial_email
+from email_utils.template import generate_portal_spotlight_email
 
 # SMTP errors that indicate a transient failure worth retrying.
 # SMTPException inherits from OSError in Python 3, so we list specific
@@ -235,7 +235,7 @@ def generate_item_email_html(
         "tag": item.get("tag", "Featured"),
         "link": item.get("link", settings.PORTAL_URL),
     }
-    return generate_editorial_email(
+    return generate_portal_spotlight_email(
         issue_title=issue_title,
         issue_number=1,
         featured_item=featured,
@@ -304,9 +304,9 @@ def generate_email_html(video_data: dict, featured_items: list = None, stats: di
             "hours of content": "4h",
         }
 
-    # Generate editorial email
-    return generate_editorial_email(
-        issue_title="Your AI<br><em>Learning</em><br>Digest",
+    # Generate portal-themed spotlight email
+    return generate_portal_spotlight_email(
+        issue_title="New Video Published",
         issue_number=1,
         featured_item=featured,
         featured_items=featured_items,

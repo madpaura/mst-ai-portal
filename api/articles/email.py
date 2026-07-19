@@ -82,7 +82,7 @@ Return ONLY the summary text, nothing else."""
         item=item,
         related_items=[],
         stats=stats,
-        issue_title="Knowledge<br><em>Update</em>",
+        issue_title="Knowledge Update",
         cta_text="Read the full article",
         cta_link=link,
         issue_label=f"Knowledge Update · {article['title']}",
