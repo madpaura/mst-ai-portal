@@ -22,7 +22,7 @@ export const IgniteHeader: React.FC<IgniteHeaderProps> = ({
         <Link to="/ignite" className="flex items-center gap-3">
           <PortalLogo size={38} />
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white leading-none">MST AI — Learn</h1>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white leading-none">MST AI — Videos</h1>
             <span className="text-[10px] text-text-muted font-mono uppercase tracking-wider">Internal Training Series</span>
           </div>
         </Link>

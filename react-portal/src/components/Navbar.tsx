@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../api/auth';
 import { useTheme } from '../context/theme';
@@ -16,8 +16,6 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
   const navigate = useNavigate();
   const { user, isAdmin } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const [discoverOpen, setDiscoverOpen] = useState(false);
-  const discoverRef = useRef<HTMLDivElement>(null);
   const [logoAnim, setLogoAnim] = useState(false);
   const [showVmg, setShowVmg] = useState(false);
 
@@ -35,22 +33,11 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
   const handleAdmin = () => navigate('/admin/videos');
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
-  const isDiscoverActive = location.pathname.startsWith('/memes') || location.pathname.startsWith('/news');
   // The catalog (Agents / Skills / MCP) shares one page, filtered by ?type=.
   // Sections under construction are dropped from the nav.
   const catalogTypes = useVisibleCatalogTypes();
   const catalogType = new URLSearchParams(location.search).get('type') || '';
   const isCatalog = (type: string) => location.pathname.startsWith('/marketplace') && catalogType === type;
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (discoverRef.current && !discoverRef.current.contains(e.target as Node)) {
-        setDiscoverOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
 
   return (
     <>
@@ -93,7 +80,7 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
               className={`text-sm font-medium transition-colors ${isActive('/ignite') ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
               to="/ignite"
             >
-              Learn
+              Videos
             </Link>
             <Link
               className={`text-sm font-medium transition-colors ${isActive('/courses') ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
@@ -116,25 +103,12 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
             >
               Articles
             </Link>
-            <div className="relative" ref={discoverRef}>
-              <button
-                onClick={() => setDiscoverOpen((o) => !o)}
-                className={`flex items-center gap-1 text-sm font-medium transition-colors ${isDiscoverActive ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
-              >
-                Discover
-                <span className="material-symbols-outlined text-[16px]">{discoverOpen ? 'expand_less' : 'expand_more'}</span>
-              </button>
-              {discoverOpen && (
-                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-40 bg-white dark:bg-slate-900 border border-border-base rounded-xl shadow-lg py-1 z-50">
-                  <Link to="/memes" onClick={() => setDiscoverOpen(false)} className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:text-primary hover:bg-surface-muted transition-colors">
-                    <span className="material-symbols-outlined text-[16px]">collections</span>Memes
-                  </Link>
-                  <Link to="/news" onClick={() => setDiscoverOpen(false)} className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:text-primary hover:bg-surface-muted transition-colors">
-                    <span className="material-symbols-outlined text-[16px]">newspaper</span>News
-                  </Link>
-                </div>
-              )}
-            </div>
+            <Link
+              className={`text-sm font-medium transition-colors ${isActive('/memes') ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
+              to="/memes"
+            >
+              Memes
+            </Link>
             <Link
               className={`text-sm font-medium transition-colors ${isActive('/contact') ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
               to="/contact"
