@@ -15,19 +15,24 @@ Nginx (port 80/443)
 
 FastAPI backend
   ├── auth/          JWT (httpOnly cookie), LDAP, SAML 2.0; contributor request actions
-  ├── video/         Ignite video + course CRUD, notes, progress; per-creator isolation
+  ├── video/         Ignite video + Series CRUD, notes, progress, non-destructive editor
+  │                  (EDL drafts, suggestions, render/export/apply); per-creator isolation;
+  │                  Courses curriculum (modules/items, enrollment, progress, feedback, email)
   ├── solutions/     Solution cards + news feed
   ├── articles/      Knowledge articles
   ├── marketplace/   Agent/skill/MCP registry (forge_components)
-  ├── forge/         Digest scheduler, RSS ingest
+  ├── forge/         Digest scheduler, RSS ingest, hand-pick content picker
   ├── assistant/     AI chat: SSE streaming, 21 role-gated tools, multi-provider LLM
   ├── publish/       Submit-for-review workflow; approve/decline via email action tokens
   ├── search/        Full-text + fuzzy trigram search (pg_trgm) across all content types
-  ├── analytics/     Page-view tracking; meme click totals and per-meme breakdown
+  ├── analytics/     Page-view tracking; meme click totals; cross-course overview + per-course
+  │                  drill-down (roster, drop-off funnel, feedback)
   └── settings/      Admin SMTP, portal config, assistant enable/disable, system prompt
 
 Workers (separate containers)
-  ├── transcoder      — Polls transcode_jobs, runs FFmpeg HLS pipeline; sends ready-to-publish email after encode if LLM jobs already finished
+  ├── transcoder      — Polls transcode_jobs, runs FFmpeg HLS pipeline; sends ready-to-publish email after encode if LLM jobs already finished;
+  │                     also polls edit_render_jobs for the video editor (export/apply) — builds an ffmpeg filter-complex from the EDL
+  │                     (cuts/trims, atempo speed changes, background/style) and either produces a downloadable mp4 or swaps it into raw/original.mp4
   └── auto-processor  — Transcript → metadata/chapters/howto via Ollama; sends ready-to-publish email after LLM jobs if transcode already finished
 
 Transcript service (separate container)
@@ -63,6 +68,21 @@ Redis      — cache + rate limiting
    - requires transcode done (status=ready) AND LLM jobs done AND auto_ready_notified=false
 4. A single "ready to publish" email is sent to the creator, then auto_ready_notified is set to true
    (atomic claim in DB — exactly one email per video regardless of race)
+```
+
+## Data flow: video editor (non-destructive EDL editing)
+
+```
+1. Admin opens /admin/videos/{id}/editor (standalone tab, not nested under AdminLayout)
+2. Cuts/trims/speed edits + mute toggle + background style autosave to video_editor_drafts (EDL JSON)
+3. Timeline surfaces filmstrip thumbnails, silence-gap suggestions, and LLM skippable-span
+   suggestions (accept/ignore) generated on demand
+4. Export (download mp4) or Apply (in-place) queues an edit_render_jobs row (409 if one is already
+   active for the video)
+5. Transcoder worker claims the job, builds an ffmpeg filter-complex from the EDL, and renders:
+   - mode=download → mp4 available for download
+   - mode=apply     → swaps result into raw/original.mp4; sets videos.editor_applied_at and
+                       pipeline_stale=true, prompting the admin to regenerate transcript/chapters
 ```
 
 ## Data flow: publish authority
@@ -108,11 +128,17 @@ Redis      — cache + rate limiting
 
 ## Database schema highlights
 
-- `videos` — core video metadata, status, hls_path, thumbnail; `created_by` (owner UUID), `auto_ready_notified`
-- `courses` + `video_chapters` — course structure, chapter timestamps; `courses.is_featured` (single-featured toggle for IgniteBrowse hero)
+- `videos` — core video metadata, status, hls_path, thumbnail; `created_by` (owner UUID), `auto_ready_notified`, `series_id` (FK to `video_series`), `editor_applied_at` / `pipeline_stale` (set after an editor "apply")
+- `video_series` + `video_chapters` — Ignite's flat video buckets (formerly `courses`); `video_series.is_featured` (single-featured toggle for IgniteBrowse hero)
+- `courses` — now curriculum-only: structured weekly program (`level`, `tags`, `objectives`, `prerequisites`, `curriculum_published`)
+- `course_modules` + `course_items` — weekly modules and their ordered items (video / exercise / reading / link; `video_id` optionally links an Ignite video)
+- `user_item_progress` — per-user manual-tick completion per curriculum item (video items merge with `user_video_progress` at read time)
+- `course_feedback` — one 1–5 rating + comment per (user, course)
+- `video_editor_drafts` — one row per video: EDL (`edits` JSONB), `muted`, background `style` JSONB, autosaved suggestions
+- `edit_render_jobs` — video editor export/apply render queue (`mode` download/apply, `status`, `progress_pct`, `output_path`)
 - `transcode_jobs` — worker queue with SKIP LOCKED
 - `auto_jobs` — auto-processor queue (transcript/metadata/chapters/howto)
-- `user_video_progress` — per-user watch position and completion
+- `user_video_progress` — per-user watch position and completion; also powers the Continue Watching row (`GET /video/continue-watching`)
 - `user_notes` — timestamped video notes
 - `video_bookmarks` — per-user saved/bookmarked videos
 - `playlists` + `playlist_videos` — user-created custom playlists with ordered video membership

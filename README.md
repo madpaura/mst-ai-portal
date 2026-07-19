@@ -6,7 +6,8 @@ Corporate AI learning and tools portal — video courses, solutions showcase, co
 
 ## Features at a glance
 
-- **Ignite** — HLS video library with courses, chapters, AI-generated transcripts, closed captions, auto-metadata pipeline, and per-creator content isolation; **browse/discovery UI** with featured hero, discover modes (Trending, Top Rated, Recently Added), custom playlists, bookmarks, and in-page fuzzy search
+- **Ignite** — HLS video library organised into Series (flat buckets), with chapters, AI-generated transcripts, closed captions, auto-metadata pipeline, and per-creator content isolation; **browse/discovery UI** with featured hero, discover modes (Trending, Top Rated, Recently Added), Continue Watching, custom playlists, bookmarks, and in-page fuzzy search; **non-destructive video editor** — cut/trim/speed edits, mute, silence-gap and LLM skippable-span suggestions, background styling, export or in-place apply
+- **Courses** — structured, weekly curriculum built on top of Ignite videos: modules/items, enrollment, per-item progress, ratings/feedback, and a per-course newsletter-style email; admin curriculum builder plus a dedicated Analytics drill-down (roster, drop-off funnel, feedback)
 - **Solutions** — filterable solution card showcase (SW / HW / Other)
 - **Marketplace** — **three navbar-driven catalog sections** (Agents, Skills, MCP) with per-type construction-status toggles; GitHub sync, type-aware install guides, zip download, contributor submission workflow with **NVIDIA SkillSpector security scanning**, version history, and lifecycle management (MANIFEST.json, artifact deletion)
 - **Discover** — Articles (with likes, trending sort, PDF mode, rich-text paste), Memes (with click analytics), News feed with RSS/ingest support
@@ -83,7 +84,8 @@ mst-ai-portal/
 │   ├── database.py         # asyncpg pool helpers
 │   ├── alembic/versions/   # Incremental DB migrations (run on startup)
 │   ├── auth/               # JWT + SAML + LDAP
-│   ├── video/              # Ignite video CRUD, auto-mode pipeline, creator isolation
+│   ├── video/              # Ignite video CRUD, auto-mode pipeline, creator isolation,
+│   │                       # non-destructive editor, Courses curriculum (modules/items/progress)
 │   ├── worker/             # transcoder.py, auto_processor.py
 │   ├── solutions/          # Solution card CRUD
 │   ├── articles/           # Knowledge articles
