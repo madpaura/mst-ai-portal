@@ -21,7 +21,21 @@ Return ONLY the summary text, nothing else."""
         return ""
 
 
-async def generate_learning_digest(days: int = 7, custom_content: Optional[str] = None, issue_number: int = None, skip_announcements: bool = False) -> dict:
+def _selection_active(selection: Optional[dict]) -> bool:
+    """A hand-picked selection is in effect when any content list is
+    non-empty (issue #280). All-empty/None means automatic mode."""
+    if not selection:
+        return False
+    return any(selection.get(k) for k in ("videos", "articles", "components", "solutions"))
+
+
+async def generate_learning_digest(
+    days: int = 7,
+    custom_content: Optional[str] = None,
+    issue_number: int = None,
+    skip_announcements: bool = False,
+    selection: Optional[dict] = None,
+) -> dict:
     """
     Generate a comprehensive multi-page learning digest email covering:
     - Page 1: Learning (recently published videos)
@@ -33,58 +47,104 @@ async def generate_learning_digest(days: int = 7, custom_content: Optional[str] 
     Args:
         days: Number of days to look back (default 7 for weekly digest)
         custom_content: Optional additional content to include
+        selection: Optional hand-picked content override (issue #280):
+            {"videos": [ids], "articles": [ids], "components": [slugs],
+             "solutions": [ids]}. When any list is non-empty the digest is
+            composed from exactly the picked items (a type with an empty
+            list contributes nothing); when None/all-empty the automatic
+            recent-content window below applies unchanged.
     """
     db = await get_db()
 
     cutoff_date = datetime.utcnow() - timedelta(days=days)
+    picked = _selection_active(selection)
 
-    # Fetch recent videos
-    recent_videos = await db.fetch(
-        """
-        SELECT id, title, slug, category, description, created_at
-        FROM videos
-        WHERE is_published = true AND is_active = true AND created_at > $1
-        ORDER BY created_at DESC
-        LIMIT 10
-        """,
-        cutoff_date,
-    )
+    if picked:
+        sel = selection or {}
+        recent_videos = await db.fetch(
+            """
+            SELECT id, title, slug, category, description, created_at
+            FROM videos
+            WHERE is_published = true AND is_active = true AND id = ANY($1::uuid[])
+            ORDER BY created_at DESC
+            """,
+            sel.get("videos") or [],
+        )
+        recent_articles = await db.fetch(
+            """
+            SELECT id, title, slug, category, summary, published_at
+            FROM articles
+            WHERE is_published = true AND is_active = true AND id = ANY($1::uuid[])
+            ORDER BY published_at DESC
+            """,
+            sel.get("articles") or [],
+        )
+        forge_components = await db.fetch(
+            """
+            SELECT slug, name, component_type, description, badge, downloads, created_at
+            FROM forge_components
+            WHERE is_active = true AND slug = ANY($1::text[])
+            ORDER BY created_at DESC
+            """,
+            sel.get("components") or [],
+        )
+        solutions = await db.fetch(
+            """
+            SELECT id, title, subtitle, description, icon, created_at
+            FROM solution_cards
+            WHERE is_active = true AND id = ANY($1::uuid[])
+            ORDER BY created_at DESC
+            """,
+            sel.get("solutions") or [],
+        )
+    else:
+        # Fetch recent videos
+        recent_videos = await db.fetch(
+            """
+            SELECT id, title, slug, category, description, created_at
+            FROM videos
+            WHERE is_published = true AND is_active = true AND created_at > $1
+            ORDER BY created_at DESC
+            LIMIT 10
+            """,
+            cutoff_date,
+        )
 
-    # Fetch recent articles
-    recent_articles = await db.fetch(
-        """
-        SELECT id, title, slug, category, summary, published_at
-        FROM articles
-        WHERE is_published = true AND is_active = true AND published_at > $1
-        ORDER BY published_at DESC
-        LIMIT 10
-        """,
-        cutoff_date,
-    )
+        # Fetch recent articles
+        recent_articles = await db.fetch(
+            """
+            SELECT id, title, slug, category, summary, published_at
+            FROM articles
+            WHERE is_published = true AND is_active = true AND published_at > $1
+            ORDER BY published_at DESC
+            LIMIT 10
+            """,
+            cutoff_date,
+        )
 
-    # Fetch recently added forge components (marketplace) — only NEW additions within window
-    forge_components = await db.fetch(
-        """
-        SELECT slug, name, component_type, description, badge, downloads, created_at
-        FROM forge_components
-        WHERE is_active = true AND created_at > $1
-        ORDER BY created_at DESC
-        LIMIT 10
-        """,
-        cutoff_date,
-    )
+        # Fetch recently added forge components (marketplace) — only NEW additions within window
+        forge_components = await db.fetch(
+            """
+            SELECT slug, name, component_type, description, badge, downloads, created_at
+            FROM forge_components
+            WHERE is_active = true AND created_at > $1
+            ORDER BY created_at DESC
+            LIMIT 10
+            """,
+            cutoff_date,
+        )
 
-    # Fetch new solutions (only within the time window)
-    solutions = await db.fetch(
-        """
-        SELECT id, title, subtitle, description, icon, created_at
-        FROM solution_cards
-        WHERE is_active = true AND created_at > $1
-        ORDER BY created_at DESC
-        LIMIT 6
-        """,
-        cutoff_date,
-    )
+        # Fetch new solutions (only within the time window)
+        solutions = await db.fetch(
+            """
+            SELECT id, title, subtitle, description, icon, created_at
+            FROM solution_cards
+            WHERE is_active = true AND created_at > $1
+            ORDER BY created_at DESC
+            LIMIT 6
+            """,
+            cutoff_date,
+        )
 
     # Fetch active announcements (skip if requested)
     announcements = [] if skip_announcements else await db.fetch(
@@ -123,9 +183,10 @@ async def generate_learning_digest(days: int = 7, custom_content: Optional[str] 
 
     # ── Build page data ─────────────────────────────────────────
 
-    # Page 1: Learning (Videos)
+    # Page 1: Learning (Videos). Hand-picked mode includes every pick;
+    # automatic mode keeps the historical per-section caps.
     learning_items = []
-    for v in recent_videos[:6]:
+    for v in (recent_videos if picked else recent_videos[:6]):
         learning_items.append({
             "title": v['title'][:50],
             "category": v['category'],
@@ -141,7 +202,7 @@ async def generate_learning_digest(days: int = 7, custom_content: Optional[str] 
     type_labels = {'agent': 'Agent', 'skill': 'Skill', 'mcp_server': 'MCP Server'}
     for comp_type in type_order:
         typed = [fc for fc in forge_components if fc['component_type'] == comp_type]
-        for fc in typed[:3]:  # max 3 per type
+        for fc in (typed if picked else typed[:3]):  # max 3 per type in automatic mode
             marketplace_items.append({
                 "title": fc['name'][:50],
                 "category": type_labels.get(comp_type, comp_type.replace('_', ' ').title()),
@@ -150,7 +211,7 @@ async def generate_learning_digest(days: int = 7, custom_content: Optional[str] 
                 "link": f"{settings.PORTAL_URL}/marketplace/{fc['slug']}/howto",
             })
     # Add new solutions (only if added within the window)
-    for s in solutions[:3]:
+    for s in (solutions if picked else solutions[:3]):
         marketplace_items.append({
             "title": s['title'][:50],
             "category": "Solution",
@@ -161,7 +222,7 @@ async def generate_learning_digest(days: int = 7, custom_content: Optional[str] 
 
     # Page 3: Articles
     article_items = []
-    for a in recent_articles[:6]:
+    for a in (recent_articles if picked else recent_articles[:6]):
         article_items.append({
             "title": a['title'][:50],
             "category": a['category'],

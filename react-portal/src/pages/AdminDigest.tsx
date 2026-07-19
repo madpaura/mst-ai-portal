@@ -2,6 +2,21 @@ import React, { useState, useRef, useCallback } from 'react';
 import DOMPurify from 'dompurify';
 import { api, toApiError } from '../api/client';
 
+// Content picker (issue #280)
+interface PickerItem {
+  key: string;
+  title: string;
+  category: string;
+  created_at: string | null;
+}
+type PickerType = 'videos' | 'articles' | 'components' | 'solutions';
+const PICKER_SECTIONS: Array<{ type: PickerType; label: string; icon: string }> = [
+  { type: 'videos', label: 'Videos', icon: 'play_circle' },
+  { type: 'articles', label: 'Articles', icon: 'article' },
+  { type: 'components', label: 'Components', icon: 'extension' },
+  { type: 'solutions', label: 'Solutions', icon: 'grid_view' },
+];
+
 interface Announcement {
   id: string;
   title: string;
@@ -54,6 +69,16 @@ export const AdminDigest: React.FC = () => {
   const [digestDays, setDigestDays] = useState(7);
   const [customContent, setCustomContent] = useState('');
   const [skipAnnouncements, setSkipAnnouncements] = useState(false);
+
+  // Hand-picked content (issue #280) — when any list is non-empty the digest
+  // is composed from exactly the picked items; otherwise automatic mode.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerItems, setPickerItems] = useState<Record<PickerType, PickerItem[]> | null>(null);
+  const [loadingPicker, setLoadingPicker] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [selectedContent, setSelectedContent] = useState<Record<PickerType, string[]>>({
+    videos: [], articles: [], components: [], solutions: [],
+  });
   const [preview, setPreview] = useState<DigestPreview | null>(null);
   const [editedSubject, setEditedSubject] = useState('');
   const [recipientEmails, setRecipientEmails] = useState('');
@@ -200,6 +225,35 @@ export const AdminDigest: React.FC = () => {
     }
   };
 
+  // ── Content picker (issue #280) ──────────────────────
+  const selectionCount = Object.values(selectedContent).reduce((n, l) => n + l.length, 0);
+
+  const togglePicker = async () => {
+    const next = !pickerOpen;
+    setPickerOpen(next);
+    if (next && !pickerItems) {
+      setLoadingPicker(true);
+      try {
+        setPickerItems(await api.get<Record<PickerType, PickerItem[]>>('/admin/digest-content?days=180'));
+      } catch (err: unknown) {
+        showMsg('error', toApiError(err));
+        setPickerOpen(false);
+      } finally {
+        setLoadingPicker(false);
+      }
+    }
+  };
+
+  const toggleSelected = (type: PickerType, key: string) => {
+    setSelectedContent(prev => ({
+      ...prev,
+      [type]: prev[type].includes(key) ? prev[type].filter(k => k !== key) : [...prev[type], key],
+    }));
+  };
+
+  const clearSelection = () =>
+    setSelectedContent({ videos: [], articles: [], components: [], solutions: [] });
+
   // ── Handlers ─────────────────────────────────────────
   const handleGeneratePreview = async () => {
     setGenerating(true);
@@ -211,6 +265,7 @@ export const AdminDigest: React.FC = () => {
         days: digestDays,
         custom_content: customContent,
         skip_announcements: skipAnnouncements,
+        selected: selectionCount > 0 ? selectedContent : undefined,
       });
       setPreviewWithSubject(data);
       showMsg('success', 'Digest preview generated!');
@@ -474,6 +529,100 @@ export const AdminDigest: React.FC = () => {
                   />
                   <span className="text-xs text-slate-300">Skip announcements in digest</span>
                 </label>
+
+                {/* Hand-picked content (issue #280) */}
+                <div className="border border-slate-300 dark:border-white/10 rounded-lg overflow-hidden">
+                  <button
+                    onClick={togglePicker}
+                    className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+                  >
+                    <span className="flex items-center gap-2 text-xs font-bold text-text-muted uppercase tracking-wider">
+                      <span className="material-symbols-outlined text-sm text-primary">checklist</span>
+                      Hand-pick content
+                      {selectionCount > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-primary/15 text-primary normal-case tracking-normal">
+                          {selectionCount} selected
+                        </span>
+                      )}
+                    </span>
+                    <span className="material-symbols-outlined text-sm text-slate-400">
+                      {pickerOpen ? 'expand_less' : 'expand_more'}
+                    </span>
+                  </button>
+                  {pickerOpen && (
+                    <div className="border-t border-slate-200 dark:border-white/10 p-3 space-y-3">
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Pick specific videos, articles, components and solutions — the digest is then
+                        composed from exactly these items. Leave everything unchecked for the automatic
+                        recent-content mode.
+                      </p>
+                      {loadingPicker ? (
+                        <p className="text-xs text-slate-400 py-2">Loading content…</p>
+                      ) : pickerItems && (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={pickerSearch}
+                              onChange={(e) => setPickerSearch(e.target.value)}
+                              placeholder="Search…"
+                              className="flex-1 px-2.5 py-1.5 rounded-lg bg-input-light dark:bg-input-dark border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white text-xs focus:border-primary outline-none"
+                            />
+                            {selectionCount > 0 && (
+                              <button
+                                onClick={clearSelection}
+                                className="text-[11px] font-bold text-slate-400 hover:text-red-400 transition-colors shrink-0"
+                              >
+                                Clear
+                              </button>
+                            )}
+                          </div>
+                          <div className="max-h-72 overflow-y-auto space-y-3 pr-1">
+                            {PICKER_SECTIONS.map(({ type, label, icon }) => {
+                              const q = pickerSearch.trim().toLowerCase();
+                              const items = (pickerItems[type] || []).filter(
+                                (it) => !q || it.title.toLowerCase().includes(q) || it.category.toLowerCase().includes(q),
+                              );
+                              return (
+                                <div key={type}>
+                                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                                    <span className="material-symbols-outlined text-[13px]">{icon}</span>
+                                    {label}
+                                    <span className="text-slate-400 normal-case tracking-normal">
+                                      ({selectedContent[type].length}/{(pickerItems[type] || []).length})
+                                    </span>
+                                  </div>
+                                  {items.length === 0 ? (
+                                    <p className="text-[11px] text-slate-500 pl-1">No matches</p>
+                                  ) : (
+                                    items.map((it) => (
+                                      <label
+                                        key={it.key}
+                                        className="flex items-start gap-2 px-1.5 py-1 rounded hover:bg-slate-100 dark:hover:bg-white/5 cursor-pointer select-none"
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={selectedContent[type].includes(it.key)}
+                                          onChange={() => toggleSelected(type, it.key)}
+                                          className="w-3.5 h-3.5 mt-0.5 accent-primary rounded shrink-0"
+                                        />
+                                        <span className="min-w-0">
+                                          <span className="block text-xs text-slate-900 dark:text-slate-200 truncate">{it.title}</span>
+                                          <span className="block text-[10px] text-slate-500">{it.category}</span>
+                                        </span>
+                                      </label>
+                                    ))
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <button
                   onClick={handleGeneratePreview}
                   disabled={generating}
