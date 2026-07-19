@@ -140,3 +140,85 @@ export const EditPopover: React.FC<EditPopoverProps> = ({
     </div>
   );
 };
+
+interface SpeedFactorPopoverProps {
+  /** Viewport coordinates of the click on the speed region. */
+  clientX: number;
+  clientY: number;
+  rangeStart: number;
+  rangeEnd: number;
+  currentFactor: number;
+  onPick: (factor: number) => void;
+  onClose: () => void;
+}
+
+/**
+ * Compact factor picker opened by clicking an existing speed region (issue
+ * #276) — changing speed no longer requires delete + re-add. Same preset
+ * chips as the create flow, with the region's current factor highlighted.
+ */
+export const SpeedFactorPopover: React.FC<SpeedFactorPopoverProps> = ({
+  clientX,
+  clientY,
+  rangeStart,
+  rangeEnd,
+  currentFactor,
+  onPick,
+  onClose,
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    el.style.left = `${Math.min(Math.max(8, clientX - w / 2), window.innerWidth - w - 8)}px`;
+    el.style.top = `${Math.min(clientY + 10, window.innerHeight - h - 8)}px`;
+  }, [clientX, clientY]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    const onDocMouseDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    // Defer so the click that opened the popover doesn't immediately close it.
+    const t = window.setTimeout(() => document.addEventListener('mousedown', onDocMouseDown), 0);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onDocMouseDown);
+      window.clearTimeout(t);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      className="fixed z-20 bg-[#141B28] border border-[#243043] rounded-xl p-2 shadow-2xl"
+      style={{ left: clientX, top: clientY + 10 }}
+    >
+      <div className="px-2 pt-1 pb-2 text-[11px] font-mono text-[#5C6880] tabular-nums flex items-center gap-1.5">
+        <span className="material-symbols-outlined text-[13px] text-[#A78BFA]">speed</span>
+        {fmtClock(rangeStart)} – {fmtClock(rangeEnd)}
+      </div>
+      <div className="flex flex-wrap gap-1 max-w-[240px]">
+        {SPEED_FACTOR_PRESETS.map((f) => (
+          <button
+            key={f}
+            onClick={() => onPick(f)}
+            className={`px-2.5 py-1 rounded-full border font-mono text-[11px] transition-colors ${
+              f === currentFactor
+                ? 'border-[#A78BFA] text-[#A78BFA] bg-[#A78BFA]/15'
+                : 'border-[#243043] text-[#96A2B8] hover:border-[#A78BFA] hover:text-[#A78BFA] hover:bg-[#A78BFA]/10'
+            }`}
+          >
+            {f}×
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};

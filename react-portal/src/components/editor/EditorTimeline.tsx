@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { VideoTrackRow } from './VideoTrackRow';
-import { EditPopover } from './EditPopover';
+import { EditPopover, SpeedFactorPopover } from './EditPopover';
 import type { EditOp, EditorSuggestion } from './types';
 import { MIN_DRAG_SECONDS, fmtClock } from './types';
 
@@ -29,6 +29,8 @@ interface EditorTimelineProps {
   onCreateCut: (start: number, end: number) => void;
   onCreateTrim: (start: number, end: number) => void;
   onCreateSpeed: (start: number, end: number, factor: number) => void;
+  /** Change the factor of an existing speed region in place (issue #276). */
+  onUpdateSpeed: (id: string, factor: number) => void;
   /** Open suggestions (issue #259) rendered on a dashed amber lane below Speed. */
   suggestions: EditorSuggestion[];
   onSelectSuggestion: (id: string) => void;
@@ -61,6 +63,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   onCreateCut,
   onCreateTrim,
   onCreateSpeed,
+  onUpdateSpeed,
   suggestions,
   onSelectSuggestion,
 }) => {
@@ -69,11 +72,14 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   const [zoom, setZoom] = useState(1);
   const [dragPreview, setDragPreview] = useState<DragRange | null>(null);
   const [pending, setPending] = useState<PendingSelection | null>(null);
+  // Factor picker for an existing speed region (issue #276).
+  const [speedEdit, setSpeedEdit] = useState<{ id: string; clientX: number; clientY: number } | null>(null);
 
   const trim = useMemo(() => edits.find((e) => e.type === 'trim'), [edits]);
   const cuts = useMemo(() => edits.filter((e) => e.type === 'cut'), [edits]);
   const speeds = useMemo(() => edits.filter((e) => e.type === 'speed'), [edits]);
   const openSuggestions = useMemo(() => suggestions.filter((s) => s.state === 'open'), [suggestions]);
+  const speedEditOp = speedEdit ? speeds.find((op) => op.id === speedEdit.id) ?? null : null;
 
   const pctOf = (t: number) => (duration > 0 ? `${Math.min(100, Math.max(0, (t / duration) * 100))}%` : '0%');
   const widthPct = (s: number, e: number) =>
@@ -103,6 +109,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
   const handleDragAreaMouseDown = (e: React.MouseEvent) => {
     if (duration <= 0 || e.button !== 0) return;
     setPending(null);
+    setSpeedEdit(null);
     const startT = timeAtClientX(e.clientX);
     draggingRef.current = { startT };
     setDragPreview({ start: startT, end: startT });
@@ -273,7 +280,8 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
               </div>
             ))}
 
-            {/* Speed regions */}
+            {/* Speed regions — clicking selects AND opens the factor picker
+                (issue #276) so speed is editable without delete + re-add. */}
             {speeds.map((op) => (
               <div
                 key={op.id}
@@ -282,6 +290,7 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectEdit(op.id);
+                  setSpeedEdit({ id: op.id, clientX: e.clientX, clientY: e.clientY });
                 }}
                 title={`${fmtClock(op.start_s)} – ${fmtClock(op.end_s)} · ${op.factor ?? 1}×`}
                 className={`absolute rounded-md border flex items-center justify-center text-[10.5px] font-semibold cursor-pointer overflow-hidden whitespace-nowrap bg-[#A78BFA]/20 border-[#A78BFA] text-[#A78BFA] ${
@@ -329,15 +338,17 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
               </div>
             ))}
 
-            {/* Drag preview */}
-            {dragPreview && (
+            {/* Selection overlay — live drag preview, or the pending range
+                held while the action popover is open (issue #276: the
+                selection must not vanish before an action is chosen). */}
+            {(dragPreview ?? pending) && (
               <div
                 className="absolute pointer-events-none bg-primary/15 border-l-2 border-r-2 border-primary"
                 style={{
                   top: RULER_H,
                   height: LANES_H,
-                  left: pctOf(dragPreview.start),
-                  width: widthPct(dragPreview.start, dragPreview.end),
+                  left: pctOf((dragPreview ?? pending)!.start),
+                  width: widthPct((dragPreview ?? pending)!.start, (dragPreview ?? pending)!.end),
                 }}
               />
             )}
@@ -370,6 +381,21 @@ export const EditorTimeline: React.FC<EditorTimelineProps> = ({
             setPending(null);
           }}
           onClose={() => setPending(null)}
+        />
+      )}
+
+      {speedEdit && speedEditOp && (
+        <SpeedFactorPopover
+          clientX={speedEdit.clientX}
+          clientY={speedEdit.clientY}
+          rangeStart={speedEditOp.start_s}
+          rangeEnd={speedEditOp.end_s}
+          currentFactor={speedEditOp.factor ?? 1}
+          onPick={(factor) => {
+            onUpdateSpeed(speedEdit.id, factor);
+            setSpeedEdit(null);
+          }}
+          onClose={() => setSpeedEdit(null)}
         />
       )}
     </div>
