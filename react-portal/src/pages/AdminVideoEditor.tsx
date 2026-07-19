@@ -195,6 +195,8 @@ export const AdminVideoEditor: React.FC = () => {
   const [exportStarting, setExportStarting] = useState(false);
   const [exportStartError, setExportStartError] = useState<string | null>(null);
   const [exportStatus, setExportStatus] = useState<EditorExportStatus | null>(null);
+  const [exportCancelling, setExportCancelling] = useState(false);
+  const [exportCancelError, setExportCancelError] = useState<string | null>(null);
 
   // Regenerate transcript/chapters prompt (issue #261) — triggered from the
   // apply modal's success panel, and mirrored as a persistent banner (below)
@@ -672,6 +674,28 @@ export const AdminVideoEditor: React.FC = () => {
       if (activeExportIdRef.current === id) setExportStarting(false);
     }
   }, [id, renderMode, exportQuality, startExportPoll]);
+
+  const handleCancelExport = useCallback(async () => {
+    if (!id) return;
+    setExportCancelling(true);
+    setExportCancelError(null);
+    try {
+      const job = await api.post<{ id: number; status: string; mode?: string; progress_pct: number; error: string | null }>(
+        `/admin/videos/${id}/editor-export/cancel`,
+      );
+      if (activeExportIdRef.current !== id) return;
+      if (exportPollRef.current) {
+        window.clearInterval(exportPollRef.current);
+        exportPollRef.current = null;
+      }
+      setExportStatus((prev) => (prev ? { ...prev, status: job.status as EditorExportStatus['status'], progress_pct: job.progress_pct } : prev));
+    } catch (err) {
+      if (activeExportIdRef.current !== id) return;
+      setExportCancelError(toApiError(err));
+    } finally {
+      if (activeExportIdRef.current === id) setExportCancelling(false);
+    }
+  }, [id]);
 
   const handleRegenerateStale = useCallback(async () => {
     if (!id) return;
@@ -1186,6 +1210,9 @@ export const AdminVideoEditor: React.FC = () => {
         starting={exportStarting}
         startError={exportStartError}
         onStart={handleStartExport}
+        onCancel={handleCancelExport}
+        cancelling={exportCancelling}
+        cancelError={exportCancelError}
         downloadUrl={exportDownloadUrl}
         pipelineStale={!!info?.pipeline_stale}
         onRegenerateStale={handleRegenerateStale}

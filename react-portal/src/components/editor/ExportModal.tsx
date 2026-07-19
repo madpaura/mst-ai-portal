@@ -21,7 +21,7 @@ export interface EditorExportQualityOption {
 
 export interface EditorExportStatus {
   id: number | null;
-  status: 'none' | 'queued' | 'processing' | 'done' | 'error';
+  status: 'none' | 'queued' | 'processing' | 'done' | 'error' | 'cancelled';
   mode?: 'download' | 'apply';
   progress_pct: number;
   quality: string | null;
@@ -44,6 +44,13 @@ interface ExportModalProps {
   starting: boolean;
   startError: string | null;
   onStart: () => void;
+  // Cancels the in-flight render (export or apply) — the worker terminates
+  // ffmpeg within ~1s of the job being marked 'cancelled'. Distinct from
+  // onClose/"Hide", which just dismisses the modal and leaves the render
+  // running in the background.
+  onCancel?: () => void;
+  cancelling?: boolean;
+  cancelError?: string | null;
   downloadUrl: string | null;
   // Apply-only (issue #261): whether the freshly-reloaded video info still
   // shows pipeline_stale=true after the apply completed (there's nothing to
@@ -74,6 +81,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   starting,
   startError,
   onStart,
+  onCancel,
+  cancelling = false,
+  cancelError = null,
   downloadUrl,
   pipelineStale = false,
   onRegenerateStale,
@@ -88,8 +98,17 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const styleActive = style.preset !== 'none' || !!style.image || style.pad_pct > 0 || style.radius_px > 0;
 
   const isApply = mode === 'apply';
-  const isActive = status?.status === 'queued' || status?.status === 'processing';
-  const isDone = status?.status === 'done';
+  // status is "latest render job for this video, of either mode" (the two
+  // flows share one job table/status endpoint) — a completed download export
+  // must never be read as a completed apply, or vice versa. Only one render
+  // can be in flight at a time, so an active job always belongs to whichever
+  // mode is currently open, but a *finished* job can easily be stale for the
+  // mode showing right now (this was the bug: opening Apply right after a
+  // download export showed a fake "Applied" success with no apply ever run).
+  const statusMatchesMode = status?.mode === mode;
+  const isActive = statusMatchesMode && (status?.status === 'queued' || status?.status === 'processing');
+  const isDone = statusMatchesMode && status?.status === 'done';
+  const isCancelled = statusMatchesMode && status?.status === 'cancelled';
   const progressLabel =
     status?.status === 'queued'
       ? 'Queued — waiting for worker…'
@@ -191,15 +210,27 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </div>
         )}
 
-        {status?.status === 'error' && !isActive && (
+        {statusMatchesMode && status?.status === 'error' && !isActive && (
           <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-[13px] text-red-300">
             Render failed{status.error ? `: ${status.error}` : '.'}
+          </div>
+        )}
+
+        {isCancelled && (
+          <div className="mb-4 rounded-lg border border-[#243043] bg-[#0F1520] px-3.5 py-2.5 text-[13px] text-[#96A2B8]">
+            Render cancelled.
           </div>
         )}
 
         {startError && (
           <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-[13px] text-red-300">
             {startError}
+          </div>
+        )}
+
+        {cancelError && (
+          <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-[13px] text-red-300">
+            {cancelError}
           </div>
         )}
 
@@ -273,8 +304,17 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 onClick={onClose}
                 className="rounded-lg border border-[#243043] bg-[#0F1520] px-3.5 py-1.5 text-[13px] font-medium hover:border-[#5C6880]"
               >
-                {isActive ? 'Hide' : 'Cancel'}
+                {isActive ? 'Hide' : 'Close'}
               </button>
+              {isActive && onCancel && (
+                <button
+                  onClick={onCancel}
+                  disabled={cancelling}
+                  className="rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-1.5 text-[13px] font-medium text-red-300 hover:bg-red-500/20 disabled:opacity-50"
+                >
+                  {cancelling ? 'Cancelling…' : 'Cancel render'}
+                </button>
+              )}
               {!isActive && (
                 <button
                   onClick={onStart}

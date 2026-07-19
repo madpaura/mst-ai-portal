@@ -611,6 +611,25 @@ async def claim_render_job(pool: asyncpg.Pool):
     )
 
 
+async def _watch_render_cancel(pool: asyncpg.Pool, job_id: int, proc: "asyncio.subprocess.Process") -> None:
+    """Poll edit_render_jobs.status roughly once a second while `proc` runs,
+    terminating it as soon as the row is marked 'cancelled' (set by the
+    editor-export/cancel endpoint). Runs as a concurrent task alongside
+    process_render_job's progress-reading loop, since that loop only wakes up
+    when ffmpeg emits a progress line and a stalled encode should still be
+    killable."""
+    while proc.returncode is None:
+        await asyncio.sleep(1.0)
+        status = await pool.fetchval("SELECT status FROM edit_render_jobs WHERE id = $1", job_id)
+        if status == "cancelled" and proc.returncode is None:
+            log.info(f"Render job #{job_id} cancelled — terminating ffmpeg")
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                pass
+            return
+
+
 async def process_render_job(pool: asyncpg.Pool, job):
     """Render one editor-export job to {video_dir}/exports/edit_<ts>.mp4."""
     global _active_render_proc, _current_render_job_id
@@ -769,6 +788,13 @@ async def process_render_job(pool: asyncpg.Pool, job):
 
     stderr_task = asyncio.create_task(_drain_stderr())
 
+    # Cancel support: the API's cancel endpoint just flips the DB row to
+    # 'cancelled' — this watcher is what actually kills ffmpeg. Runs
+    # concurrently with the progress-reading loop below rather than being
+    # folded into it, since readline() only wakes up when ffmpeg emits a
+    # progress line and a stalled/hung encode should still be killable.
+    cancel_watch_task = asyncio.create_task(_watch_render_cancel(pool, job_id, proc))
+
     last_pct, last_update = -1, 0.0
     try:
         assert proc.stdout is not None
@@ -799,6 +825,25 @@ async def process_render_job(pool: asyncpg.Pool, job):
     finally:
         _active_render_proc = None
         _current_render_job_id = None
+        cancel_watch_task.cancel()
+        try:
+            await cancel_watch_task
+        except asyncio.CancelledError:
+            pass
+
+    # Check the job wasn't cancelled, reclaimed, or reset out from under us
+    # (e.g. a concurrent cleanup or a second export request racing this one)
+    # before publishing the file.
+    current_status = await pool.fetchval("SELECT status FROM edit_render_jobs WHERE id = $1", job_id)
+
+    if current_status == "cancelled":
+        log.info(f"Render job #{job_id} cancelled — discarding output")
+        if os.path.exists(tmp_output):
+            try:
+                os.remove(tmp_output)
+            except OSError:
+                pass
+        return
 
     if rc != 0 or not os.path.exists(tmp_output):
         if os.path.exists(tmp_output):
@@ -810,10 +855,6 @@ async def process_render_job(pool: asyncpg.Pool, job):
         await fail(f"FFmpeg exited with code {rc}: {err_tail}" if err_tail else f"FFmpeg exited with code {rc}")
         return
 
-    # Check the job wasn't reclaimed/reset out from under us (e.g. a
-    # concurrent cleanup or a second export request racing this one) before
-    # publishing the file.
-    current_status = await pool.fetchval("SELECT status FROM edit_render_jobs WHERE id = $1", job_id)
     if current_status != "processing":
         log.warning(f"Render job #{job_id} no longer 'processing' (now {current_status}) — discarding output")
         try:
