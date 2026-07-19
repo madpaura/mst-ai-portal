@@ -393,6 +393,18 @@ export const AdminVideoEditor: React.FC = () => {
     [applyEdits, edits],
   );
 
+  // Change an existing speed region's factor in place (issue #276). Goes
+  // through applyEdits so it is one undoable step and autosaves like any
+  // other edit change; picking the current factor again is a no-op.
+  const handleChangeSpeedFactor = useCallback(
+    (editId: string, factor: number) => {
+      const op = edits.find((e) => e.id === editId);
+      if (!op || op.type !== 'speed' || (op.factor ?? 1) === factor) return;
+      applyEdits(edits.map((e) => (e.id === editId ? { ...e, factor } : e)));
+    },
+    [applyEdits, edits],
+  );
+
   // ── Suggestions (issue #259) ────────────────────────────────────────────
 
   const runAnalyzeSuggestions = useCallback(async () => {
@@ -1103,6 +1115,7 @@ export const AdminVideoEditor: React.FC = () => {
             selectedEditId={selectedEditId}
             onSelect={setSelectedEditId}
             onDelete={handleDeleteEdit}
+            onChangeSpeedFactor={handleChangeSpeedFactor}
             activeTab={activeInspectorTab}
             onTabChange={setActiveInspectorTab}
             videoId={id}
@@ -1139,6 +1152,7 @@ export const AdminVideoEditor: React.FC = () => {
           onCreateCut={handleCreateCut}
           onCreateTrim={handleCreateTrim}
           onCreateSpeed={handleCreateSpeed}
+          onUpdateSpeed={handleChangeSpeedFactor}
           suggestions={suggestions}
           onSelectSuggestion={handleSelectSuggestion}
         />
