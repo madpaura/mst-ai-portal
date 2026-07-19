@@ -1369,6 +1369,35 @@ async def admin_start_editor_apply(
     )
 
 
+@router.post("/videos/{video_id}/editor-export/cancel", response_model=EditorExportJobResponse)
+async def admin_cancel_editor_render(video_id: str, admin: dict = Depends(verify_video_access)):
+    """Cancel the in-flight render job (export or apply) for this video.
+
+    Marks the job 'cancelled' immediately so the modal can reflect it right
+    away; the worker's cancel-watcher notices on its ~1s poll and terminates
+    the running ffmpeg process, discarding any partial output (see
+    process_render_job in worker/transcoder.py). 404s if nothing is
+    queued/processing — nothing to cancel.
+    """
+    db = await get_db()
+    row = await db.fetchrow(
+        """
+        UPDATE edit_render_jobs
+           SET status = 'cancelled', completed_at = now()
+         WHERE video_id = $1 AND status IN ('queued', 'processing')
+         RETURNING *
+        """,
+        video_id,
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="No active render job to cancel")
+    return EditorExportJobResponse(
+        id=row["id"], video_id=video_id, status=row["status"], mode=row["mode"],
+        progress_pct=row["progress_pct"], quality=None, error=row["error"],
+        created_at=row["created_at"],
+    )
+
+
 @router.get("/videos/{video_id}/editor-export/status", response_model=EditorExportStatusResponse)
 async def admin_editor_export_status(video_id: str, admin: dict = Depends(verify_video_access)):
     """Latest render job for this video, for the export modal's progress

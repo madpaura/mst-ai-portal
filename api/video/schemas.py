@@ -678,7 +678,7 @@ class EditorExportJobResponse(BaseModel):
     — the job snapshot. `mode` distinguishes the two (issue #261)."""
     id: int
     video_id: str
-    status: Literal['queued', 'processing', 'done', 'error']
+    status: Literal['queued', 'processing', 'done', 'error', 'cancelled']
     mode: Literal['download', 'apply'] = 'download'
     progress_pct: int = 0
     quality: Optional[str] = None
@@ -692,7 +692,7 @@ class EditorExportStatusResponse(BaseModel):
     `mode` (issue #261) tells the frontend which flow the latest job belongs
     to, since both modes share this single status endpoint."""
     id: Optional[int] = None
-    status: Literal['none', 'queued', 'processing', 'done', 'error'] = 'none'
+    status: Literal['none', 'queued', 'processing', 'done', 'error', 'cancelled'] = 'none'
     mode: Literal['download', 'apply'] = 'download'
     progress_pct: int = 0
     quality: Optional[str] = None

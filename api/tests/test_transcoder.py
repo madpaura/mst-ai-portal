@@ -1,9 +1,10 @@
 """Tests for transcoder timeout and shutdown handling (#48, #49)."""
+import asyncio
 import sys
 import os
 import subprocess
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -98,6 +99,71 @@ class TestFFmpegTimeout:
             result = transcoder.get_duration("/input.mp4")
 
         assert result is None
+
+
+class _FakeRenderProc:
+    """Minimal stand-in for asyncio.subprocess.Process — just enough surface
+    for _watch_render_cancel (a mutable .returncode and a .terminate())."""
+
+    def __init__(self):
+        self.returncode = None
+        self.terminate = MagicMock()
+
+
+class TestRenderCancelWatcher:
+    """Editor render jobs (export/apply, issue #260/#261) can now be
+    cancelled — _watch_render_cancel is the piece that actually kills the
+    in-flight ffmpeg process once the API's cancel endpoint flips the DB row."""
+
+    def test_terminates_proc_once_job_marked_cancelled(self):
+        import worker.transcoder as transcoder
+
+        proc = _FakeRenderProc()
+        mock_pool = MagicMock()
+        mock_pool.fetchval = AsyncMock(return_value="cancelled")
+
+        async def _no_op_sleep(_):
+            return None
+
+        with patch("worker.transcoder.asyncio.sleep", _no_op_sleep):
+            asyncio.run(transcoder._watch_render_cancel(mock_pool, 42, proc))
+
+        proc.terminate.assert_called_once()
+        mock_pool.fetchval.assert_awaited_once_with(
+            "SELECT status FROM edit_render_jobs WHERE id = $1", 42,
+        )
+
+    def test_does_not_terminate_while_still_processing(self):
+        """Once ffmpeg exits on its own (not cancelled), the watcher just
+        stops polling — it must never call terminate() on a finished process."""
+        import worker.transcoder as transcoder
+
+        proc = _FakeRenderProc()
+        mock_pool = MagicMock()
+        mock_pool.fetchval = AsyncMock(return_value="processing")
+
+        async def _sleep_then_exit(_):
+            proc.returncode = 0  # simulate ffmpeg finishing naturally
+
+        with patch("worker.transcoder.asyncio.sleep", _sleep_then_exit):
+            asyncio.run(transcoder._watch_render_cancel(mock_pool, 42, proc))
+
+        proc.terminate.assert_not_called()
+
+    def test_never_polls_a_process_that_already_exited(self):
+        """If the process has already finished before the watcher's first
+        loop iteration, it must return immediately without touching the DB."""
+        import worker.transcoder as transcoder
+
+        proc = _FakeRenderProc()
+        proc.returncode = 0
+        mock_pool = MagicMock()
+        mock_pool.fetchval = AsyncMock(return_value="cancelled")
+
+        asyncio.run(transcoder._watch_render_cancel(mock_pool, 42, proc))
+
+        proc.terminate.assert_not_called()
+        mock_pool.fetchval.assert_not_awaited()
 
 
 class TestGracefulShutdown:
