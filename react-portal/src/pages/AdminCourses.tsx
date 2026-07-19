@@ -235,7 +235,13 @@ export const AdminCourses: React.FC = () => {
                       </div>
                     )}
                     <div>
-                      <p className="text-sm font-medium text-slate-900 dark:text-white">{course.title}</p>
+                      <Link
+                        to={`/admin/courses/${course.id}/curriculum`}
+                        title="Open curriculum builder"
+                        className="text-sm font-medium text-slate-900 dark:text-white hover:text-primary dark:hover:text-primary transition-colors"
+                      >
+                        {course.title}
+                      </Link>
                       <p className="text-[10px] text-slate-500">/{course.slug}</p>
                     </div>
                   </div>
@@ -265,9 +271,10 @@ export const AdminCourses: React.FC = () => {
                     <Link
                       to={`/admin/courses/${course.id}/curriculum`}
                       title="Open curriculum builder"
-                      className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-primary transition-colors"
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 text-xs font-medium transition-colors"
                     >
                       <span className="material-symbols-outlined text-sm">menu_book</span>
+                      Curriculum
                     </Link>
                     <label
                       title="Upload cover image"
