@@ -339,7 +339,7 @@ export const AdminCourseCurriculum: React.FC = () => {
   if (!course || !curriculum) {
     return (
       <div className="p-10 text-center text-slate-400">
-        Course not found. <Link to="/admin/videos" className="text-primary hover:underline">Back to videos</Link>
+        Course not found. <Link to="/admin/courses" className="text-primary hover:underline">Back to courses</Link>
       </div>
     );
   }
@@ -448,7 +448,7 @@ export const AdminCourseCurriculum: React.FC = () => {
 
       {/* Header */}
       <div className="flex items-center gap-3 flex-wrap mb-5">
-        <Link to="/admin/videos" className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500" title="Back to videos">
+        <Link to="/admin/courses" className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500" title="Back to courses">
           <span className="material-symbols-outlined">arrow_back</span>
         </Link>
         <div className="min-w-0">
