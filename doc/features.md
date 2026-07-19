@@ -7,7 +7,7 @@ High-level summary of all major features.
 ## Ignite — Video Learning Platform
 
 - HLS adaptive-bitrate streaming (360p / 720p / 1080p quality ladder)
-- Course and chapter organisation — courses contain ordered video lists; each video can have named chapters with timestamps
+- **Series and chapter organisation** — Series (`video_series`, formerly called "courses") are flat, ordered video buckets for browsing; each video can have named chapters with timestamps. See **Courses** below for the separate, structured weekly-curriculum feature built on top of these videos
 - AI auto-mode pipeline: upload a raw video and the system automatically queues a transcode job (HLS) **and** generates a transcript, title/description, chapters, and a how-to guide via Whisper + Ollama LLM — the "ready to publish" email fires only after both the LLM jobs **and** the transcode have completed, so the link is always playable
 - Manual chapter editor — admin marks chapters directly on the video timeline
 - Closed captions — auto-generated WebVTT from Whisper transcript; styled with portal font
@@ -24,12 +24,12 @@ High-level summary of all major features.
 
 `/ignite` is now a full discovery landing page; the player opens at `/ignite/:videoSlug`.
 
-- **Featured-series hero** — admin-pinned featured course displayed prominently at the top
+- **Featured-series hero** — admin-pinned featured series displayed prominently at the top
 - **Dynamic category pills** — filter the video grid by category in one click
 - **Discover modes** — Trending (view count), Top Rated (likes), Recently Added, Watch History, Saved
-- **Continue Watching** — cards show playback progress bar; restores your last position from local cache
-- **Playlists & Series row** — browse courses and custom playlists directly on the landing page
-- **Left-panel Library** — Saved, Watch History, Subscribed courses, and custom Playlists; selecting any item scopes the grid exclusively
+- **Continue Watching** — a dedicated row (`GET /video/continue-watching`) driven by each user's `user_video_progress`, showing an in-progress resume card for up to 12 videos; replaces the old "My Courses" row
+- **Playlists & Series row** — browse series and custom playlists directly on the landing page
+- **Left-panel Library** — Saved, Watch History, Subscribed Series, and custom Playlists; selecting any item scopes the grid exclusively
 - **Fuzzy video search** — powered by Fuse.js; query persisted in the URL (`?q=`) so browser-back restores results; any sidebar selection clears search
 - **Per-card controls** — bookmark (save for later) and add-to-playlist actions on every card
 - **Uploader attribution** — creator name, view counts, and like counts shown on each card
@@ -38,7 +38,35 @@ High-level summary of all major features.
 
 - Create, rename, and delete personal playlists
 - Add / remove individual videos from any playlist
-- Subscribed-courses view shows all enrolled courses alongside playlists
+- Subscribed-series view shows all subscribed series alongside playlists
+
+---
+
+## Video Editor
+
+A non-destructive, single-video editor reachable from a video's row in Admin → Videos ("Open the non-destructive editor in a new tab" → `/admin/videos/{id}/editor`, opened as a standalone full-page tab, not nested in the admin layout).
+
+- **EDL-based editing** — cut/trim and per-region speed changes are stored as an edit-decision-list, not applied to the source file; full undo history and autosaved drafts (`video_editor_drafts`)
+- **Timeline** — filmstrip thumbnails, a silence-gap suggestion lane, and a mute/remove-audio toggle
+- **Suggestions panel** — silence-gap detection plus LLM-generated "skippable span" suggestions, each individually acceptable or ignorable
+- **Style panel** — background presets (gradients and 5 bundled wallpaper images — aurora/nebula/sunset/midnight/graphite — or a custom uploaded image), with inset padding and corner-radius controls; rendered server-side to match the live preview
+- **Export or Apply** — render to a downloadable mp4 (with a quality picker: 1440p/1080p/720p, source-aspect dependent) or apply in place to the video's `raw/original.mp4`; only one render job may be active per video at a time
+- **Stale-content prompt** — applying edits in place sets `videos.pipeline_stale`, prompting the admin to regenerate the transcript/chapters afterward
+- Rendering runs as a new job kind (`edit_render_jobs`) polled by the existing `transcoder` worker — no separate render worker
+
+---
+
+## Courses — Structured Curriculum
+
+A weekly, structured learning path distinct from Ignite's flat video Series (see above) — introduced when "courses" were split: Series are now the flat browsing buckets, while **Course** is curriculum-only.
+
+- **Curriculum structure** — a course has weekly `course_modules`, each containing ordered `course_items` (video / exercise / reading / link); video items optionally link an existing Ignite video and inherit its watch progress
+- **Admin Courses page** (`Admin → Courses`) — dedicated CRUD list for courses (level, tags, cover image, objectives, prerequisites, publish toggle)
+- **Curriculum builder** (`Admin → Courses → curriculum`) — drag/CRUD editor for modules and items, plus a publish gate (`curriculum_published`) before the course appears publicly
+- **Public Courses section** — course listing and detail pages with enrollment, a progress bar per module/item, and manual item-completion ticking (video items complete automatically from watch progress)
+- **Feedback** — enrolled users can leave a 1–5 rating and comment per course (`course_feedback`)
+- **Course email** — an "Email" button in the curriculum builder opens the shared `ContentEmailModal`; an LLM-written 3-line summary plus a week-by-week HTML newsletter (stats: weeks/items/duration/level, CTA to the public course page) can be previewed and sent to notify users
+- **Analytics drill-down** — Admin → Analytics → Courses tab adds a cross-course overview plus a per-course drill-down with roster (sortable, CSV-exportable), drop-off funnel, and feedback tabs
 
 ---
 
@@ -126,15 +154,16 @@ High-level summary of all major features.
 
 ## Admin Panel
 
-- **Videos** — upload, transcode, manage courses, chapters, transcripts, auto-mode jobs; user search/filter; single-featured course toggle
+- **Videos** — upload, transcode, manage series, chapters, transcripts, auto-mode jobs; user search/filter; single-featured series toggle; per-video link to the **non-destructive video editor**
+- **Courses** — dedicated page for curriculum CRUD (modules/items, publish gate) plus a per-course **Email button** to send a curriculum newsletter
 - **Solutions** — CRUD for solution cards
 - **Articles** — CRUD for knowledge articles; AI beautify button; **Email button** to send any article as a newsletter-style email via `ContentEmailModal`
 - **Memes** — upload and manage meme gallery
-- **News** — manage RSS feeds and individual news items
+- **News** — manage RSS feeds and individual news items (no longer linked from the top navbar; still managed here and reachable via Discover)
 - **Marketplace** — component registry management, GitHub sync jobs, contributing guide config; configure allowed artifact types per contributor; **per-section (Agents / Skills / MCP) construction-status toggles with custom messages**; **Email button** per component to send as a newsletter-style email
 - **Forge Settings** — configure GitHub repo URL, token, branch, and scan paths for sync
-- **Analytics** — page-view counts and trends; **Memes tab** with daily click totals and per-meme breakdown
-- **Digest** — schedule and send learning digest emails (curated content newsletter)
+- **Analytics** — page-view counts and trends; **Memes tab** with daily click totals and per-meme breakdown; **Courses tab** with a cross-course overview and per-course drill-down (roster, drop-off funnel, feedback)
+- **Digest** — schedule and send learning digest emails (curated content newsletter); **hand-pick content picker** — collapsible, searchable accordions per category (Videos/Articles/Components/Solutions) to select exact items instead of relying on automatic recent-content selection; preview panel supports click-to-edit-in-place with a Reset action
 - **Settings** — SMTP configuration (including subject prefix), portal theme, transcript service URL/key, marketplace under-construction toggle, SAML settings path, **AI assistant enable/disable**, **assistant system prompt**, **In-House LLM** (base URL, API key, model, context/output/temperature — takes priority over Ollama/Forge when enabled), **Announcement Poster sender** (`PosterSenderCard`) — preview and email the bundled HTML offerings poster directly to To/BCC recipients
 - **Publish Authority** — review submit-for-publish requests from content creators; one-click approve/decline via portal UI or email action links
 - **Artifact Hub** — manage contributor submissions; approve or reject with version tagging; view per-artifact version history; view SkillSpector security scan results per submission
@@ -172,7 +201,8 @@ High-level summary of all major features.
 - **Marketplace submission** — submitter notified when an admin approves or rejects their artifact
 - **Ready to publish** — creator notified once by email when auto-mode pipeline finishes all jobs **and** the HLS transcode completes; links directly to the review and preview pages (atomic claim via `auto_ready_notified` — sent exactly once per video)
 - **Publish Authority review** — Publish Authority admins notified when a creator submits a publish request (see above)
-- **Individual content emails** — admins and content creators can send any article or marketplace component as a newsletter-style email via the reusable `ContentEmailModal`: enter custom intro, generate LLM summary preview, review HTML, download as PDF or .eml, manage recipients (CSV import + saved quick-access), then send in batches (BCC)
+- **Individual content emails** — admins and content creators can send any article, marketplace component, or course curriculum as a newsletter-style email via the reusable `ContentEmailModal`: enter custom intro, generate LLM summary preview, review HTML, download as PDF or .eml, manage recipients (CSV import + saved quick-access), then send in batches (BCC)
+- **Unified portal email theme** — article, video, marketplace, and digest emails all render with the same navy/blue portal theme (`generate_portal_spotlight_email`, replacing the older red/black editorial template), with per-section accent hues (amber videos, violet marketplace, cyan articles)
 
 ---
 

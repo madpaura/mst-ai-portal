@@ -3,7 +3,8 @@
 ## Project overview
 
 Corporate AI learning and tools portal. Three main sections:
-- **Ignite** — HLS video library with courses, chapters, transcripts, CC, auto-mode LLM pipeline
+- **Ignite** — HLS video library with Series (flat video buckets), chapters, transcripts, CC, auto-mode LLM pipeline, non-destructive video editor (cut/trim/speed/export)
+- **Courses** — structured, weekly curriculum (modules → items) built on top of Ignite videos; enrollment, per-item progress, feedback, admin curriculum builder
 - **Solutions** — solution card showcase (SW/HW/Other categories, filterable)
 - **Forge** — scheduled content/digest automation, RSS ingestion, newsletter emails
 
@@ -21,7 +22,10 @@ mst-ai-portal/
 │   ├── database.py         # asyncpg pool helpers (get_db, init_db)
 │   ├── alembic/versions/   # Migrations — always add a new file, never edit old ones
 │   ├── auth/               # JWT + SAML + LDAP auth
-│   ├── video/              # Ignite video CRUD, auto-mode, course management; bookmarks, playlists, stats
+│   ├── video/              # Ignite video CRUD, auto-mode, series; bookmarks, playlists, stats;
+│   │                       # course_router.py/course_admin_router.py (curriculum CRUD, enrollment,
+│   │                       # progress, feedback), series_admin_router.py, progress_engine.py,
+│   │                       # course_email.py; non-destructive editor endpoints in admin_router.py
 │   ├── worker/             # transcoder.py, auto_processor.py (run as separate containers)
 │   ├── solutions/          # Solution cards + news feed CRUD
 │   ├── articles/           # Knowledge articles
@@ -118,7 +122,7 @@ Use `db = await get_db()` to get the asyncpg connection pool. All queries are ra
 ```python
 row  = await db.fetchrow("SELECT * FROM videos WHERE id = $1", video_id)
 rows = await db.fetch("SELECT * FROM videos ORDER BY sort_order")
-val  = await db.fetchval("SELECT COUNT(*) FROM videos WHERE course_id = $1", cid)
+val  = await db.fetchval("SELECT COUNT(*) FROM videos WHERE series_id = $1", sid)
 await db.execute("UPDATE videos SET title=$2 WHERE id=$1", video_id, new_title)
 ```
 
