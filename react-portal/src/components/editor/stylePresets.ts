@@ -8,10 +8,16 @@
 // `css` is used directly as a CSS `background` value for both the preset
 // swatch buttons in the Style panel and the live stage preview's backdrop.
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 export interface StylePresetDef {
   key: string;
   name: string;
   css: string;
+  /** True for wallpaper (bundled image) presets — issue #278. They render
+   * server-side via the image-backdrop path; the keys must exist in
+   * `STYLE_WALLPAPERS` in api/video/style_presets.py. */
+  wallpaper?: boolean;
 }
 
 export const STYLE_PRESETS: StylePresetDef[] = [
@@ -29,12 +35,24 @@ export const STYLE_PRESETS: StylePresetDef[] = [
   },
 ];
 
+const wallpaperCss = (key: string) => `#0b0f17 center/cover no-repeat url(${API_BASE}/static/wallpapers/${key}.jpg)`;
+
+export const WALLPAPER_PRESETS: StylePresetDef[] = [
+  { key: 'aurora', name: 'Aurora', css: wallpaperCss('aurora'), wallpaper: true },
+  { key: 'nebula', name: 'Nebula', css: wallpaperCss('nebula'), wallpaper: true },
+  { key: 'sunset', name: 'Sunset', css: wallpaperCss('sunset'), wallpaper: true },
+  { key: 'midnight', name: 'Midnight', css: wallpaperCss('midnight'), wallpaper: true },
+  { key: 'graphite', name: 'Graphite', css: wallpaperCss('graphite'), wallpaper: true },
+];
+
+const ALL_PRESETS: StylePresetDef[] = [...STYLE_PRESETS, ...WALLPAPER_PRESETS];
+
 export function stylePresetName(key: string): string {
-  return STYLE_PRESETS.find((p) => p.key === key)?.name ?? key;
+  return ALL_PRESETS.find((p) => p.key === key)?.name ?? key;
 }
 
 export function stylePresetCss(key: string): string {
-  return STYLE_PRESETS.find((p) => p.key === key)?.css ?? '#000';
+  return ALL_PRESETS.find((p) => p.key === key)?.css ?? '#000';
 }
 
 // Picking a non-none preset while padding is still 0 auto-sets a sensible

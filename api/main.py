@@ -306,6 +306,9 @@ app.mount("/streams", StaticFiles(directory=settings.VIDEO_STORAGE_PATH), name="
 os.makedirs(settings.MEDIA_STORAGE_PATH, exist_ok=True)
 app.mount("/media", StaticFiles(directory=settings.MEDIA_STORAGE_PATH), name="media")
 
+# Bundled static assets shipped with the codebase (editor wallpapers, …)
+app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
+
 
 @app.get("/health")
 async def health():
