@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api, toApiError } from '../api/client';
+import { ContentEmailModal } from '../components/ContentEmailModal';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -90,6 +91,7 @@ export const AdminCourseCurriculum: React.FC = () => {
   const [videos, setVideos] = useState<AdminVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   // Course metadata form
   const [metaOpen, setMetaOpen] = useState(false);
@@ -466,6 +468,14 @@ export const AdminCourseCurriculum: React.FC = () => {
         </span>
         <div className="flex-1" />
         <button
+          onClick={() => setEmailOpen(true)}
+          title="Email this course"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+        >
+          <span className="material-symbols-outlined text-sm">mail</span>
+          Email
+        </button>
+        <button
           onClick={togglePublish}
           className={`px-4 py-2 rounded-lg text-sm font-semibold ${
             course.curriculum_published
@@ -698,6 +708,14 @@ export const AdminCourseCurriculum: React.FC = () => {
           + Add week
         </button>
       )}
+
+      <ContentEmailModal
+        open={emailOpen}
+        title={course.title}
+        previewPath={`/admin/courses/${courseId}/email-preview`}
+        sendPath={`/admin/courses/${courseId}/send-email`}
+        onClose={() => setEmailOpen(false)}
+      />
     </div>
   );
 };

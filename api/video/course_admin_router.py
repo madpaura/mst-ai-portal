@@ -3,6 +3,7 @@ import math
 import os
 
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from pydantic import BaseModel
 from typing import Optional
 
 from video.schemas import (
@@ -15,6 +16,8 @@ from video.schemas import (
 from auth.dependencies import require_content as require_admin
 from config import settings
 from database import get_db
+from video.course_email import generate_email_preview
+from email_utils.utils import send_email_multi
 import cache
 
 router = APIRouter()
@@ -508,3 +511,60 @@ async def admin_publish_curriculum(
     row = await db.fetchrow("SELECT * FROM courses WHERE id = $1", course_id)
     await cache.bump_version(cache.NS_VIDEO)
     return _course_resp(row)
+
+
+# ── Email (send a course's full curriculum as a newsletter-style email) ─────
+
+class EmailPreviewRequest(BaseModel):
+    custom_content: str = ""
+
+
+class EmailPreviewResponse(BaseModel):
+    subject: str
+    html_content: str
+    plain_text: str
+
+
+class SendEmailRequest(BaseModel):
+    recipient_emails: list[str]
+    subject: str
+    html_content: str
+    plain_text: str = ""
+
+
+class SendEmailResponse(BaseModel):
+    success: bool
+    message: str
+    sent_count: int = 0
+
+
+@router.post("/courses/{course_id}/email-preview", response_model=EmailPreviewResponse)
+async def admin_course_email_preview(
+    course_id: str, req: EmailPreviewRequest, admin: dict = Depends(require_admin)
+):
+    try:
+        preview = await generate_email_preview(course_id, req.custom_content or None)
+        return EmailPreviewResponse(**preview)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate preview: {str(e)}")
+
+
+@router.post("/courses/{course_id}/send-email", response_model=SendEmailResponse)
+async def admin_course_send_email(
+    course_id: str, req: SendEmailRequest, admin: dict = Depends(require_admin)
+):
+    try:
+        total = len(req.recipient_emails)
+        success = await send_email_multi(
+            subject=req.subject,
+            html_content=req.html_content,
+            plain_text=req.plain_text or None,
+            bcc_emails=req.recipient_emails,
+        )
+        if success:
+            return SendEmailResponse(success=True, message=f"Email sent to {total} recipient(s)", sent_count=total)
+        return SendEmailResponse(success=False, message="Failed to send email — check SMTP settings", sent_count=0)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Email send error: {str(e)}")
