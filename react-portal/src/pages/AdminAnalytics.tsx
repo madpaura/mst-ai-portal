@@ -457,10 +457,10 @@ export const AdminAnalytics: React.FC = () => {
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <button onClick={exportToHtml} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-muted-light dark:bg-muted-dark text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white border border-slate-300 dark:border-white/10 flex items-center gap-1.5 transition-colors">
+            <button onClick={exportToHtml} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-muted-light dark:bg-muted-dark text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-300 dark:border-white/10 flex items-center gap-1.5 transition-colors">
               <span className="material-symbols-outlined text-sm">html</span> Export HTML
             </button>
-            <button onClick={exportToPdf} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-muted-light dark:bg-muted-dark text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white border border-slate-300 dark:border-white/10 flex items-center gap-1.5 transition-colors">
+            <button onClick={exportToPdf} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-muted-light dark:bg-muted-dark text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-300 dark:border-white/10 flex items-center gap-1.5 transition-colors">
               <span className="material-symbols-outlined text-sm">picture_as_pdf</span> Export PDF
             </button>
           </div>
@@ -473,7 +473,7 @@ export const AdminAnalytics: React.FC = () => {
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                   days === opt.value
                     ? 'bg-primary text-white'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/50'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/50'
                 }`}
               >
                 {opt.label}
@@ -492,7 +492,7 @@ export const AdminAnalytics: React.FC = () => {
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-all ${
               activeSection === s.key
                 ? 'text-primary border-primary bg-primary/5'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-900 dark:hover:text-white border-transparent'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border-transparent'
             }`}
           >
             <span className="material-symbols-outlined text-base">{s.icon}</span>
@@ -628,7 +628,7 @@ export const AdminAnalytics: React.FC = () => {
                       <div key={p.path} className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-100/30 dark:bg-slate-800/30 border border-slate-100 dark:border-white/5">
                         <span className="text-xs font-bold text-slate-500 w-5 text-right">{i + 1}</span>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm text-white truncate font-mono">{p.path}</p>
+                          <p className="text-sm text-slate-900 dark:text-white truncate font-mono">{p.path}</p>
                           <p className="text-[10px] text-slate-500">{p.unique_visitors} unique visitors</p>
                         </div>
                         <span className="text-sm font-bold text-primary">{fmtNum(p.views)}</span>
@@ -646,7 +646,7 @@ export const AdminAnalytics: React.FC = () => {
                         <span className="text-xs font-bold text-slate-500 w-5 text-right">{i + 1}</span>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <p className="text-sm text-white font-mono">{v.ip_address || 'Unknown'}</p>
+                            <p className="text-sm text-slate-900 dark:text-white font-mono">{v.ip_address || 'Unknown'}</p>
                             {v.user_name && (
                               <span className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded">{v.user_name}</span>
                             )}
@@ -727,7 +727,7 @@ export const AdminAnalytics: React.FC = () => {
                     <tbody>
                       {videoMetrics.videos.map(v => (
                         <tr key={v.id} className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                          <td className="py-2.5 px-3 text-white font-medium">{v.title}</td>
+                          <td className="py-2.5 px-3 text-slate-900 dark:text-white font-medium">{v.title}</td>
                           <td className="py-2.5 px-3">
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium uppercase">{v.category}</span>
                           </td>
@@ -837,7 +837,7 @@ export const AdminAnalytics: React.FC = () => {
                             className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer"
                             title="View roster, funnel, and feedback"
                           >
-                            <td className="py-2.5 px-3 text-white font-medium">{c.title}</td>
+                            <td className="py-2.5 px-3 text-slate-900 dark:text-white font-medium">{c.title}</td>
                             <td className="py-2.5 px-3">
                               <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium uppercase ${
                                 c.curriculum_published
@@ -907,7 +907,7 @@ export const AdminAnalytics: React.FC = () => {
                     <tbody>
                       {marketplaceMetrics.components.map(c => (
                         <tr key={c.slug} className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                          <td className="py-2.5 px-3 text-white font-medium">{c.name}</td>
+                          <td className="py-2.5 px-3 text-slate-900 dark:text-white font-medium">{c.name}</td>
                           <td className="py-2.5 px-3">
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-medium uppercase">{c.component_type}</span>
                           </td>
@@ -1045,7 +1045,7 @@ export const AdminAnalytics: React.FC = () => {
                     <tbody>
                       {newsMetrics.articles.map(a => (
                         <tr key={a.id} className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                          <td className="py-2.5 px-3 text-white font-medium max-w-[300px] truncate">{a.title}</td>
+                          <td className="py-2.5 px-3 text-slate-900 dark:text-white font-medium max-w-[300px] truncate">{a.title}</td>
                           <td className="py-2.5 px-3">
                             {a.badge && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 font-medium">{a.badge}</span>}
                           </td>
@@ -1207,7 +1207,7 @@ const CourseDrilldown: React.FC<{
                   <tbody>
                     {roster.map(r => (
                       <tr key={r.user_id} className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                        <td className="py-2.5 px-3 text-white font-medium">{r.display_name}</td>
+                        <td className="py-2.5 px-3 text-slate-900 dark:text-white font-medium">{r.display_name}</td>
                         <td className="py-2.5 px-3 text-slate-400 text-xs">{r.email || '—'}</td>
                         <td className="py-2.5 px-3">
                           <div className="flex items-center gap-2 justify-end">
