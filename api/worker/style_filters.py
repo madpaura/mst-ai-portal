@@ -46,6 +46,7 @@ from video.style_presets import (
     STYLE_GRADIENT_TYPE_CODES,
     STYLE_PRESET_GRADIENTS,
     normalize_preset,
+    resolve_wallpaper_path,
 )
 
 # Long enough to outlast any realistic source video; overlay's `shortest=1`
@@ -85,20 +86,24 @@ def style_is_active(style: Optional[dict]) -> bool:
 
 
 def resolve_background_image_path(video_dir: str, style: Optional[dict]) -> Optional[str]:
-    """Return the on-disk path for style['image'] if it's set *and* the file
-    still exists (it may have been removed by /cleanup — issue #263 says
-    cleanup reclaims it), else None so the caller falls back to the preset
-    gradient/solid instead of failing the render."""
+    """Return the on-disk path of the backdrop image to use, or None to fall
+    back to the preset gradient/solid.
+
+    Priority mirrors the editor preview: an uploaded custom image wins (if
+    its file still exists — it may have been removed by /cleanup, issue
+    #263), then a bundled wallpaper preset (issue #278). A missing file in
+    either case degrades gracefully rather than failing the render."""
     if not style:
         return None
     image = style.get("image")
-    if not image:
-        return None
-    # style.image is stored as the served URL (e.g. "/streams/{id}/editor_bg.png");
-    # the file always lives at the video dir root, so basename + video_dir is
-    # all that's needed regardless of the exact URL prefix.
-    path = os.path.join(video_dir, os.path.basename(image))
-    return path if os.path.isfile(path) else None
+    if image:
+        # style.image is stored as the served URL (e.g. "/streams/{id}/editor_bg.png");
+        # the file always lives at the video dir root, so basename + video_dir is
+        # all that's needed regardless of the exact URL prefix.
+        path = os.path.join(video_dir, os.path.basename(image))
+        if os.path.isfile(path):
+            return path
+    return resolve_wallpaper_path(normalize_preset(style.get("preset")))
 
 
 def _backdrop_filter_chunk(label_out: str, width: int, height: int, preset: str) -> str:

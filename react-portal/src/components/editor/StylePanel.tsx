@@ -11,6 +11,7 @@ import {
   STYLE_PRESETS,
   STYLE_RADIUS_MAX,
   STYLE_RADIUS_MIN,
+  WALLPAPER_PRESETS,
 } from './stylePresets';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -98,6 +99,32 @@ export const StylePanel: React.FC<StylePanelProps> = ({ videoId, style, onChange
         </span>
         <div className="grid grid-cols-3 gap-2">
           {STYLE_PRESETS.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => handlePickPreset(p.key)}
+              title={p.name}
+              className={`relative rounded-[7px] border-2 cursor-pointer aspect-[16/10] ${
+                style.preset === p.key ? 'border-primary' : 'border-[#243043]'
+              }`}
+              style={{ background: p.css }}
+            >
+              <span
+                className="absolute bottom-[3px] left-1.5 text-[9.5px] font-semibold text-white/85"
+                style={{ textShadow: '0 1px 3px rgba(0,0,0,.7)' }}
+              >
+                {p.name}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-5">
+        <span className="block mb-2.5 text-[11px] font-semibold tracking-[0.08em] uppercase text-[#5C6880]">
+          Wallpapers
+        </span>
+        <div className="grid grid-cols-3 gap-2">
+          {WALLPAPER_PRESETS.map((p) => (
             <button
               key={p.key}
               onClick={() => handlePickPreset(p.key)}

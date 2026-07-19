@@ -17,10 +17,40 @@ ffmpeg's more limited gradient primitives is the right level of fidelity for
 that role.
 """
 
+import os
+
 # 'none' is always valid and means "no background styling" (flat black
 # backdrop if padding is used with 'none' — matches the mockup, which always
 # renders *some* backdrop colour, defaulting to black).
-STYLE_PRESET_KEYS: frozenset[str] = frozenset({"none", "slate", "ocean", "dusk", "forest", "mesh"})
+STYLE_PRESET_KEYS: frozenset[str] = frozenset(
+    {"none", "slate", "ocean", "dusk", "forest", "mesh",
+     "aurora", "nebula", "sunset", "midnight", "graphite"}
+)
+
+# Wallpaper presets (issue #278): bundled image backdrops that ride the same
+# uploaded-image render path as a custom background. The files live in
+# api/static/wallpapers/ (served to the browser at /static/wallpapers/) and
+# are read straight off disk by the worker at render time. key -> filename.
+STYLE_WALLPAPERS: dict[str, str] = {
+    "aurora": "aurora.jpg",
+    "nebula": "nebula.jpg",
+    "sunset": "sunset.jpg",
+    "midnight": "midnight.jpg",
+    "graphite": "graphite.jpg",
+}
+
+_WALLPAPER_DIR = os.path.join(os.path.dirname(__file__), "..", "static", "wallpapers")
+
+
+def resolve_wallpaper_path(preset: str | None) -> str | None:
+    """Absolute on-disk path of a wallpaper preset's image, or None when the
+    preset isn't a wallpaper or its file is missing (defensive: a missing
+    asset degrades to the flat-black backdrop rather than failing a render)."""
+    filename = STYLE_WALLPAPERS.get(preset or "")
+    if not filename:
+        return None
+    path = os.path.abspath(os.path.join(_WALLPAPER_DIR, filename))
+    return path if os.path.isfile(path) else None
 
 # key -> { type: ffmpeg `gradients` filter type name, colors: [c0, c1, ...] }
 # Mirrors the `css` values of PRESETS in stylePresets.ts as closely as
