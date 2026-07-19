@@ -22,10 +22,21 @@ from articles.llm import INHOUSE_LLM_HEADERS
 router = APIRouter()
 
 
+class DigestSelection(BaseModel):
+    """Hand-picked digest content (issue #280) — ids for videos/articles/
+    solutions, slugs for marketplace components. Any non-empty list switches
+    the digest to picked mode; all-empty means automatic recent-content."""
+    videos: List[str] = []
+    articles: List[str] = []
+    components: List[str] = []
+    solutions: List[str] = []
+
+
 class DigestPreviewRequest(BaseModel):
     days: int = 7
     custom_content: str = ""
     skip_announcements: bool = False
+    selected: Optional[DigestSelection] = None
 
 
 class DigestPreviewResponse(BaseModel):
@@ -178,7 +189,13 @@ async def digest_preview(req: DigestPreviewRequest, admin: dict = Depends(requir
         issue_number = await get_next_issue_number()
         
         # Generate digest content (pass issue_number so it appears in email header)
-        preview = await generate_learning_digest(req.days, req.custom_content or None, issue_number=issue_number, skip_announcements=req.skip_announcements)
+        preview = await generate_learning_digest(
+            req.days,
+            req.custom_content or None,
+            issue_number=issue_number,
+            skip_announcements=req.skip_announcements,
+            selection=req.selected.model_dump() if req.selected else None,
+        )
 
         # Update subject and title with issue number
         title = f"AI Ignite Digest · {req.days}-Day Update - #{issue_number}"
@@ -189,6 +206,58 @@ async def digest_preview(req: DigestPreviewRequest, admin: dict = Depends(requir
         return DigestPreviewResponse(**preview)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate digest: {str(e)}")
+
+
+@router.get("/digest-content")
+async def digest_content_candidates(days: int = 90, admin: dict = Depends(require_admin)):
+    """Candidate lists for the digest content picker (issue #280) — recent
+    published videos, articles, marketplace components and solutions the
+    admin can hand-pick from. Filtering/search happens client-side."""
+    from datetime import timedelta
+    db = await get_db()
+    cutoff = datetime.utcnow() - timedelta(days=max(1, min(days, 365)))
+    videos = await db.fetch(
+        """SELECT id, title, category, created_at FROM videos
+           WHERE is_published = true AND is_active = true AND created_at > $1
+           ORDER BY created_at DESC LIMIT 100""",
+        cutoff,
+    )
+    articles = await db.fetch(
+        """SELECT id, title, category, published_at AS created_at FROM articles
+           WHERE is_published = true AND is_active = true AND published_at > $1
+           ORDER BY published_at DESC LIMIT 100""",
+        cutoff,
+    )
+    components = await db.fetch(
+        """SELECT slug, name AS title, component_type AS category, created_at FROM forge_components
+           WHERE is_active = true AND created_at > $1
+           ORDER BY created_at DESC LIMIT 100""",
+        cutoff,
+    )
+    solutions = await db.fetch(
+        """SELECT id, title, category, created_at FROM solution_cards
+           WHERE is_active = true AND created_at > $1
+           ORDER BY created_at DESC LIMIT 100""",
+        cutoff,
+    )
+
+    def _rows(rows, key_field):
+        return [
+            {
+                "key": str(r[key_field]),
+                "title": r["title"],
+                "category": r.get("category") or "",
+                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+            }
+            for r in rows
+        ]
+
+    return {
+        "videos": _rows(videos, "id"),
+        "articles": _rows(articles, "id"),
+        "components": _rows(components, "slug"),
+        "solutions": _rows(solutions, "id"),
+    }
 
 
 class SaveDigestRequest(BaseModel):

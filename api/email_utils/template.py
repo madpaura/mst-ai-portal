@@ -337,67 +337,77 @@ def generate_digest_email(
 ) -> str:
     today = datetime.utcnow().strftime("%b %d, %Y")
 
+    # Portal design guide (issue #280): primary blue #258CF4, navy surfaces
+    # (#0D1F35 — matches the logo block), slate neutrals, rounded cards.
+    # Table layout + inline styles only, for mail-client compatibility.
+    PRIMARY = "#258CF4"
+    NAVY = "#0D1F35"
+    ACCENT_VIDEOS = "#f59e0b"      # amber — matches the landing Videos tile
+    ACCENT_MARKET = "#8b5cf6"      # violet — Marketplace tile
+    ACCENT_ARTICLES = "#06b6d4"    # cyan — Articles tile
+
     CARD_STYLE = (
-        "background:#faf8f5;border:1px solid #d8d4ce;"
-        "border-radius:2px;overflow:hidden;margin-bottom:28px;"
+        "background:#ffffff;border:1px solid #e2e8f0;"
+        "border-radius:14px;overflow:hidden;margin-bottom:24px;"
     )
-    STRIPE_RED = "height:5px;background:linear-gradient(90deg,#e84830 0%,#e84830 33%,#1a1614 33%,#1a1614 66%,#f5a800 66%,#f5a800 100%);"
-    STRIPE_BLUE = "height:5px;background:linear-gradient(90deg,#4080ff 0%,#4080ff 33%,#1a1614 33%,#1a1614 66%,#a040ff 66%,#a040ff 100%);"
-    STRIPE_GREEN = "height:5px;background:linear-gradient(90deg,#40c060 0%,#40c060 33%,#1a1614 33%,#1a1614 66%,#f5a800 66%,#f5a800 100%);"
+
+    def _stripe(accent: str) -> str:
+        return f'height:4px;background:linear-gradient(90deg,{accent} 0%,{PRIMARY} 100%);'
 
     def _item_cards(items: list, accent: str, icon: str) -> str:
         if not items:
-            return f'<p style="{_SANS}color:#999;font-size:15px;padding:16px 0;">No new items this period.</p>'
+            return f'<p style="{_SANS}color:#94a3b8;font-size:14px;padding:14px 0;">No new items this period.</p>'
         cards = ""
         for item in items:
             cards += f"""
-        <div style="{_SANS}background:#fff;border:1px solid #e0ddd8;border-radius:2px;padding:20px 22px;margin-bottom:12px;">
+        <div style="{_SANS}background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:18px 20px;margin-bottom:12px;">
           <a href="{item.get('link','#')}" style="text-decoration:none;color:inherit;display:block;">
-            <table cellpadding="0" cellspacing="0" border="0" style="width:100%;margin-bottom:10px;">
+            <table cellpadding="0" cellspacing="0" border="0" style="width:100%;margin-bottom:9px;">
               <tr>
-                <td><span style="{_MONO}font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:#fff;background:{accent};padding:4px 9px;border-radius:2px;">{item.get('tag','New')}</span></td>
-                <td style="text-align:right;"><span style="{_MONO}font-size:10px;color:#bbb;letter-spacing:0.1em;">{item.get('category','')}</span></td>
+                <td><span style="{_SANS}font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:{accent};background:{accent}1a;padding:4px 9px;border-radius:999px;">{item.get('tag','New')}</span></td>
+                <td style="text-align:right;"><span style="{_SANS}font-size:11px;color:#94a3b8;">{item.get('category','')}</span></td>
               </tr>
             </table>
-            <div style="{_SERIF}font-size:18px;color:#1a1614;margin-bottom:8px;line-height:1.3;">{item.get('title','')}</div>
-            <p style="font-size:14px;color:#777;line-height:1.6;margin:0 0 12px 0;">{item.get('description','')}</p>
-            <a href="{item.get('link','#')}" style="{_MONO}font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:{accent};text-decoration:none;">View {icon} &#8599;</a>
+            <div style="{_SANS}font-size:16px;font-weight:700;color:#0f172a;margin-bottom:7px;line-height:1.35;letter-spacing:-0.01em;">{item.get('title','')}</div>
+            <p style="{_SANS}font-size:13.5px;color:#64748b;line-height:1.6;margin:0 0 11px 0;">{item.get('description','')}</p>
+            <a href="{item.get('link','#')}" style="{_SANS}font-size:12px;font-weight:700;color:{PRIMARY};text-decoration:none;">View {icon} &#8599;</a>
           </a>
         </div>"""
         return cards
 
     def _page_nav(current: int) -> str:
-        pages = [(1, "Learning"), (2, "Marketplace"), (3, "Articles")]
+        pages = [(1, "Videos"), (2, "Marketplace"), (3, "Articles")]
         cells = ""
         for num, label in pages:
             is_active = num == current
-            bg = "#e84830" if is_active else "#e0ddd8"
-            color = "#fff" if is_active else "#999"
-            weight = "700" if is_active else "400"
+            bg = PRIMARY if is_active else "#f1f5f9"
+            color = "#fff" if is_active else "#94a3b8"
+            weight = "700" if is_active else "500"
             cells += (
-                f'<td style="padding:0 3px;"><span style="{_MONO}display:inline-block;'
-                f'padding:6px 14px;background:{bg};color:{color};font-size:11px;'
-                f'font-weight:{weight};letter-spacing:0.1em;border-radius:2px;">{label}</span></td>'
+                f'<td style="padding:0 3px;"><span style="{_SANS}display:inline-block;'
+                f'padding:6px 15px;background:{bg};color:{color};font-size:11.5px;'
+                f'font-weight:{weight};border-radius:999px;">{label}</span></td>'
             )
         return (
-            f'<table cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 16px;">'
+            f'<table cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 18px;">'
             f'<tr>{cells}</tr></table>'
         )
 
-    # Stats bar (table-based, no flex)
+    # Stats bar (table-based, no flex) — light tiles on the navy header
+    stat_accents = [ACCENT_VIDEOS, ACCENT_MARKET, PRIMARY, ACCENT_ARTICLES]
     stats_cells = ""
     for i, (label, value) in enumerate(list(stats.items())[:4]):
-        sep = "border-left:1px solid #e0ddd8;" if i > 0 else ""
+        sep = "border-left:1px solid rgba(255,255,255,0.08);" if i > 0 else ""
+        accent = stat_accents[i % len(stat_accents)]
         stats_cells += (
-            f'<td style="width:25%;padding:18px 10px;text-align:center;'
-            f'background:#fff;vertical-align:top;{sep}">'
-            f'<div style="{_SERIF}font-size:30px;color:#1a1614;line-height:1;margin-bottom:5px;">{value}</div>'
-            f'<div style="{_MONO}font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:#bbb;margin-top:4px;">{label}</div>'
+            f'<td style="width:25%;padding:16px 10px;text-align:center;vertical-align:top;{sep}">'
+            f'<div style="{_SANS}font-size:28px;font-weight:800;color:{accent};line-height:1;margin-bottom:6px;">{value}</div>'
+            f'<div style="{_SANS}font-size:9.5px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#7d93b2;">{label}</div>'
             f'</td>'
         )
     stats_bar = (
         f'<table cellpadding="0" cellspacing="0" border="0" '
-        f'style="width:100%;border:1px solid #e0ddd8;border-radius:2px;overflow:hidden;">'
+        f'style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;overflow:hidden;">'
         f'<tr>{stats_cells}</tr></table>'
     )
 
@@ -408,20 +418,20 @@ def generate_digest_email(
         for ann in announcements[:3]:
             badge = ann.get("badge", "")
             badge_html = (
-                f'<span style="{_MONO}font-size:9px;background:#1a1614;color:#faf8f5;'
-                f'padding:2px 7px;border-radius:2px;margin-right:8px;">{badge}</span>'
+                f'<span style="{_SANS}font-size:9.5px;font-weight:700;background:{PRIMARY};color:#fff;'
+                f'padding:2px 8px;border-radius:999px;margin-right:8px;">{badge}</span>'
                 if badge else ""
             )
             ann_items += (
-                f'<div style="{_SANS}padding:12px 0;border-bottom:1px solid #f0ede8;'
-                f'font-size:14px;color:#555;">'
-                f'{badge_html}<strong style="color:#1a1614;">{ann.get("title","")}</strong>'
+                f'<div style="{_SANS}padding:11px 0;border-bottom:1px solid rgba(255,255,255,0.08);'
+                f'font-size:13.5px;color:#a8bad1;">'
+                f'{badge_html}<strong style="color:#e8eef6;">{ann.get("title","")}</strong>'
                 f' &mdash; {ann.get("content","")}</div>'
             )
         ann_html = (
-            f'<div style="margin:24px 0 0 0;">'
-            f'<div style="{_MONO}font-size:10px;letter-spacing:0.2em;text-transform:uppercase;'
-            f'color:#e84830;margin-bottom:12px;">Announcements</div>'
+            f'<div style="margin:20px 0 0 0;">'
+            f'<div style="{_SANS}font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;'
+            f'color:{PRIMARY};margin-bottom:8px;">Announcements</div>'
             f'{ann_items}</div>'
         )
 
@@ -429,126 +439,129 @@ def generate_digest_email(
     custom_html = ""
     if custom_content:
         custom_html = (
-            f'<div style="margin:20px 0;padding:18px 22px;background:rgba(232,72,48,0.04);'
-            f'border-left:3px solid #e84830;border-radius:2px;">'
-            f'<div style="{_MONO}font-size:10px;letter-spacing:0.15em;text-transform:uppercase;'
-            f'color:#e84830;margin-bottom:8px;">Message from the team</div>'
-            f'<p style="{_SANS}font-size:14px;color:#555;line-height:1.65;margin:0;">{custom_content}</p>'
+            f'<div style="margin:20px 0 0 0;padding:16px 20px;background:rgba(37,140,244,0.08);'
+            f'border-left:3px solid {PRIMARY};border-radius:10px;">'
+            f'<div style="{_SANS}font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
+            f'color:{PRIMARY};margin-bottom:7px;">Message from the team</div>'
+            f'<p style="{_SANS}font-size:13.5px;color:#c3d2e4;line-height:1.65;margin:0;">{custom_content}</p>'
             f'</div>'
         )
 
-    section_hdr = lambda title, count: (
+    section_hdr = lambda title, count, accent: (
         f'<table cellpadding="0" cellspacing="0" border="0" style="width:100%;margin-bottom:10px;">'
         f'<tr>'
-        f'<td><span style="{_MONO}font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#999;">{title}</span></td>'
-        f'<td style="text-align:right;"><span style="{_MONO}font-size:11px;color:#ccc;">{count}</span></td>'
+        f'<td><span style="{_SANS}font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:{accent};">{title}</span></td>'
+        f'<td style="text-align:right;"><span style="{_SANS}font-size:11px;color:#94a3b8;">{count}</span></td>'
         f'</tr></table>'
-        f'<div style="height:1px;background:#e0ddd8;margin-bottom:16px;"></div>'
+        f'<div style="height:1px;background:#e2e8f0;margin-bottom:16px;"></div>'
     )
+
+    # Light-on-navy variant of the logo block for the header card
+    logo_dark_bg = _LOGO_HTML.replace('color:#1a1614;', 'color:#ffffff;').replace('color:#999;', 'color:#7d93b2;')
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>AI Ignite &mdash; Learning Digest</title>
+<title>MST AI Portal &mdash; Learning Digest</title>
 </head>
-<body style="margin:0;padding:40px 20px;background:#f0ede8;{_SANS}color:#1a1614;">
+<body style="margin:0;padding:36px 16px;background:#eef2f7;{_SANS}color:#0f172a;">
 
 <div style="max-width:680px;margin:0 auto;">
 
-  <!-- ══ HEADER CARD ══ -->
-  <div style="{CARD_STYLE}">
-    <div style="{STRIPE_RED}"></div>
-    <div style="padding:44px 52px 36px;">
-      {_LOGO_HTML}
+  <!-- ══ HEADER CARD (portal navy) ══ -->
+  <div style="background:{NAVY};border:1px solid #1b3a5f;border-radius:14px;overflow:hidden;margin-bottom:24px;">
+    <div style="{_stripe(PRIMARY)}"></div>
+    <div style="padding:38px 44px 30px;">
+      {logo_dark_bg}
       <table cellpadding="0" cellspacing="0" border="0" style="width:100%;">
         <tr>
           <td style="vertical-align:top;">
-            <div style="{_MONO}font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#e84830;margin-bottom:12px;">
-              AI Ignite Digest &middot; {days}-Day Update{f" &mdash; Issue #{issue_number}" if issue_number else ""}
+            <div style="{_SANS}font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:{PRIMARY};margin-bottom:10px;">
+              Learning Digest &middot; {days}-Day Update{f" &mdash; Issue #{issue_number}" if issue_number else ""}
             </div>
-            <h1 style="{_SERIF}font-size:44px;line-height:1.05;color:#1a1614;letter-spacing:-0.02em;margin:0;font-weight:700;">
-              Learning<br><em style="color:#e84830;">Digest</em>
+            <h1 style="{_SANS}font-size:34px;line-height:1.12;color:#ffffff;letter-spacing:-0.02em;margin:0;font-weight:800;">
+              What&rsquo;s new on the<br><span style="color:{PRIMARY};">MST AI Portal</span>
             </h1>
           </td>
           <td style="text-align:right;vertical-align:top;padding-left:16px;white-space:nowrap;">
-            <div style="{_MONO}font-size:11px;color:#999;letter-spacing:0.12em;">{today}</div>
+            <div style="{_SANS}font-size:11px;color:#7d93b2;">{today}</div>
           </td>
         </tr>
       </table>
-      <p style="{_SANS}margin-top:18px;font-size:15px;color:#777;font-weight:300;line-height:1.65;max-width:460px;padding-top:16px;border-top:1px solid #e0ddd8;">
-        Your curated update covering new learning sessions, marketplace additions, and articles from the AI Ignite Portal.
+      <p style="{_SANS}margin:16px 0 0 0;font-size:14px;color:#a8bad1;line-height:1.65;max-width:460px;">
+        Your curated update covering new videos, marketplace additions, and articles from the portal.
       </p>
       {custom_html}
     </div>
-    <div style="margin:0 52px 36px;">
+    <div style="margin:0 44px 30px;">
       {stats_bar}
     </div>
-    {f'<div style="padding:0 52px 36px;">{ann_html}</div>' if ann_html else ''}
+    {f'<div style="padding:0 44px 30px;">{ann_html}</div>' if ann_html else ''}
   </div>
 
-  <!-- ══ PAGE 1: LEARNING ══ -->
+  <!-- ══ PAGE 1: VIDEOS ══ -->
   <div style="{CARD_STYLE}">
-    <div style="{STRIPE_RED}"></div>
-    <div style="padding:36px 52px;">
+    <div style="{_stripe(ACCENT_VIDEOS)}"></div>
+    <div style="padding:30px 44px;">
       {_page_nav(1)}
-      {section_hdr("Learning &mdash; Videos", f"{stats.get('videos','0')} new")}
-      {f'<p style="{_SANS}font-size:14px;color:#666;line-height:1.65;margin-bottom:18px;font-style:italic;">{learning_summary}</p>' if learning_summary else ''}
-      {_item_cards(learning_items, '#e84830', 'Video')}
+      {section_hdr("Videos", f"{stats.get('videos','0')} new", ACCENT_VIDEOS)}
+      {f'<p style="{_SANS}font-size:13.5px;color:#64748b;line-height:1.65;margin-bottom:16px;">{learning_summary}</p>' if learning_summary else ''}
+      {_item_cards(learning_items, ACCENT_VIDEOS, 'Video')}
     </div>
   </div>
 
   <!-- ══ PAGE 2: MARKETPLACE ══ -->
   <div style="{CARD_STYLE}">
-    <div style="{STRIPE_BLUE}"></div>
-    <div style="padding:36px 52px;">
+    <div style="{_stripe(ACCENT_MARKET)}"></div>
+    <div style="padding:30px 44px;">
       {_page_nav(2)}
-      {section_hdr("Marketplace &mdash; Components &amp; Solutions", f"{int(stats.get('marketplace','0'))+int(stats.get('solutions','0'))} items")}
-      {f'<p style="{_SANS}font-size:14px;color:#666;line-height:1.65;margin-bottom:18px;font-style:italic;">{marketplace_summary}</p>' if marketplace_summary else ''}
-      {_item_cards(marketplace_items, '#4080ff', 'Component')}
+      {section_hdr("Marketplace &mdash; Components &amp; Solutions", f"{int(stats.get('marketplace','0'))+int(stats.get('solutions','0'))} items", ACCENT_MARKET)}
+      {f'<p style="{_SANS}font-size:13.5px;color:#64748b;line-height:1.65;margin-bottom:16px;">{marketplace_summary}</p>' if marketplace_summary else ''}
+      {_item_cards(marketplace_items, ACCENT_MARKET, 'Component')}
     </div>
   </div>
 
   <!-- ══ PAGE 3: ARTICLES ══ -->
   <div style="{CARD_STYLE}">
-    <div style="{STRIPE_GREEN}"></div>
-    <div style="padding:36px 52px;">
+    <div style="{_stripe(ACCENT_ARTICLES)}"></div>
+    <div style="padding:30px 44px;">
       {_page_nav(3)}
-      {section_hdr("Articles &amp; Insights", f"{stats.get('articles','0')} new")}
-      {f'<p style="{_SANS}font-size:14px;color:#666;line-height:1.65;margin-bottom:18px;font-style:italic;">{articles_summary}</p>' if articles_summary else ''}
-      {_item_cards(article_items, '#40c060', 'Article')}
+      {section_hdr("Articles &amp; Insights", f"{stats.get('articles','0')} new", ACCENT_ARTICLES)}
+      {f'<p style="{_SANS}font-size:13.5px;color:#64748b;line-height:1.65;margin-bottom:16px;">{articles_summary}</p>' if articles_summary else ''}
+      {_item_cards(article_items, ACCENT_ARTICLES, 'Article')}
     </div>
   </div>
 
   <!-- ══ CTA + FOOTER ══ -->
   <div style="{CARD_STYLE}">
-    <div style="background:#1a1614;padding:30px 52px;">
+    <div style="background:{NAVY};padding:26px 44px;">
       <table cellpadding="0" cellspacing="0" border="0" style="width:100%;">
         <tr>
           <td style="vertical-align:middle;">
-            <div style="{_SERIF}font-size:22px;color:#faf8f5;margin-bottom:5px;">Explore the full portal</div>
-            <div style="{_SANS}font-size:13px;color:#777;">Stream, download &amp; share with your team</div>
+            <div style="{_SANS}font-size:19px;font-weight:800;color:#ffffff;margin-bottom:4px;">Explore the full portal</div>
+            <div style="{_SANS}font-size:13px;color:#7d93b2;">Stream, download &amp; share with your team</div>
           </td>
           <td style="text-align:right;vertical-align:middle;padding-left:16px;white-space:nowrap;">
             <a href="{portal_url}"
-               style="display:inline-block;background:#e84830;color:#fff;{_MONO}font-size:11px;letter-spacing:0.15em;text-transform:uppercase;text-decoration:none;padding:13px 22px;border-radius:2px;">Open Portal &#8599;</a>
+               style="display:inline-block;background:{PRIMARY};color:#fff;{_SANS}font-size:12.5px;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:10px;">Open Portal &#8599;</a>
           </td>
         </tr>
       </table>
     </div>
-    <div style="padding:22px 52px;border-top:1px solid #e0ddd8;">
+    <div style="padding:20px 44px;border-top:1px solid #e2e8f0;">
       <table cellpadding="0" cellspacing="0" border="0" style="width:100%;">
         <tr>
           <td style="vertical-align:top;">
-            <div style="{_MONO}font-size:11px;color:#bbb;line-height:1.8;">
-              <strong style="color:#777;display:block;">AI Ignite &middot; Internal Portal</strong>
+            <div style="{_SANS}font-size:11.5px;color:#94a3b8;line-height:1.8;">
+              <strong style="color:#64748b;display:block;">MST AI &middot; Internal Portal</strong>
               {days}-day digest &middot; {today}
             </div>
           </td>
           <td style="text-align:right;vertical-align:top;">
-            <a href="{portal_url}" style="{_MONO}font-size:11px;color:#bbb;text-decoration:underline;margin-left:16px;">Portal</a>
-            <a href="{portal_url}" style="{_MONO}font-size:11px;color:#bbb;text-decoration:underline;margin-left:16px;">Unsubscribe</a>
+            <a href="{portal_url}" style="{_SANS}font-size:11.5px;color:#94a3b8;text-decoration:underline;margin-left:16px;">Portal</a>
+            <a href="{portal_url}" style="{_SANS}font-size:11.5px;color:#94a3b8;text-decoration:underline;margin-left:16px;">Unsubscribe</a>
           </td>
         </tr>
       </table>
