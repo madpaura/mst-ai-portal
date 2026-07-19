@@ -87,7 +87,7 @@ Return ONLY the summary text, nothing else."""
         item=item,
         related_items=[],
         stats=stats,
-        issue_title="Marketplace<br><em>Spotlight</em>",
+        issue_title="Marketplace Spotlight",
         cta_text=f"Get this {type_label}",
         cta_link=link,
         issue_label=f"Marketplace · {comp['name']}",
