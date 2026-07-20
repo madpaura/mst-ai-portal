@@ -83,6 +83,8 @@ Redis      — cache + rate limiting
    - mode=download → mp4 available for download
    - mode=apply     → swaps result into raw/original.mp4; sets videos.editor_applied_at and
                        pipeline_stale=true, prompting the admin to regenerate transcript/chapters
+   - a concurrent watcher polls edit_render_jobs.status ~1x/sec and terminates ffmpeg within ~1s
+     of the row being marked 'cancelled' (POST editor-export/cancel), discarding partial output
 ```
 
 ## Data flow: publish authority
@@ -135,7 +137,7 @@ Redis      — cache + rate limiting
 - `user_item_progress` — per-user manual-tick completion per curriculum item (video items merge with `user_video_progress` at read time)
 - `course_feedback` — one 1–5 rating + comment per (user, course)
 - `video_editor_drafts` — one row per video: EDL (`edits` JSONB), `muted`, background `style` JSONB, autosaved suggestions
-- `edit_render_jobs` — video editor export/apply render queue (`mode` download/apply, `status`, `progress_pct`, `output_path`)
+- `edit_render_jobs` — video editor export/apply render queue (`mode` download/apply, `status` incl. `cancelled`, `progress_pct`, `output_path`)
 - `transcode_jobs` — worker queue with SKIP LOCKED
 - `auto_jobs` — auto-processor queue (transcript/metadata/chapters/howto)
 - `user_video_progress` — per-user watch position and completion; also powers the Continue Watching row (`GET /video/continue-watching`)
