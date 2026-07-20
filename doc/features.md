@@ -50,7 +50,8 @@ A non-destructive, single-video editor reachable from a video's row in Admin →
 - **Timeline** — filmstrip thumbnails, a silence-gap suggestion lane, and a mute/remove-audio toggle
 - **Suggestions panel** — silence-gap detection plus LLM-generated "skippable span" suggestions, each individually acceptable or ignorable
 - **Style panel** — background presets (gradients and 5 bundled wallpaper images — aurora/nebula/sunset/midnight/graphite — or a custom uploaded image), with inset padding and corner-radius controls; rendered server-side to match the live preview
-- **Export or Apply** — render to a downloadable mp4 (with a quality picker: 1440p/1080p/720p, source-aspect dependent) or apply in place to the video's `raw/original.mp4`; only one render job may be active per video at a time
+- **Export or Apply** — render to a downloadable mp4 (with a quality picker: 1440p/1080p/720p, source-aspect dependent) or apply in place to the video's `raw/original.mp4`; only one render job may be active per video at a time; the export modal tracks the latest job's `mode` so a finished Export never gets misread as a finished Apply (or vice versa)
+- **Cancel render** — a running export or apply job can be cancelled from the modal; the worker polls job status roughly once a second while ffmpeg runs and terminates it within ~1s of being marked `cancelled`, discarding any partial output
 - **Stale-content prompt** — applying edits in place sets `videos.pipeline_stale`, prompting the admin to regenerate the transcript/chapters afterward
 - Rendering runs as a new job kind (`edit_render_jobs`) polled by the existing `transcoder` worker — no separate render worker
 
