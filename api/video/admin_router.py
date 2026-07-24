@@ -1783,6 +1783,11 @@ _FILMSTRIP_MIN_INTERVAL_S = 2.0
 _FILMSTRIP_MAX_INTERVAL_S = 8.0
 _FILMSTRIP_TARGET_TILES = 100
 _FILMSTRIP_MAX_TILES = 240
+# Bumped whenever the sprite/meta layout or the tile math changes shape, so
+# stale on-disk filmstrips regenerate instead of being served as "ready"
+# forever (mtime-based cache_valid alone can't tell "same shape, wrong math"
+# apart from "still current").
+_FILMSTRIP_META_VERSION = 2
 
 
 def _filmstrip_paths(video_id: str) -> tuple[str, str, str]:
@@ -1822,6 +1827,12 @@ async def _generate_filmstrip(video_id: str, raw_path: str, video_dir: str) -> N
             max(_FILMSTRIP_MIN_INTERVAL_S, (duration or 60) / _FILMSTRIP_TARGET_TILES),
         )
         tile_count = max(4, min(_FILMSTRIP_MAX_TILES, math.ceil((duration or interval) / interval)))
+        # For videos long enough that _FILMSTRIP_MAX_TILES caps tile_count
+        # below duration/interval, widen the interval so tile_count*interval
+        # still covers the full duration — otherwise the sprite stops short
+        # and the timeline shows a blank gap after the last thumbnail.
+        if duration and tile_count * interval < duration:
+            interval = duration / tile_count
         cols = max(1, math.ceil(math.sqrt(tile_count)))
         rows = max(1, math.ceil(tile_count / cols))
 
@@ -1847,6 +1858,7 @@ async def _generate_filmstrip(video_id: str, raw_path: str, video_dir: str) -> N
             return
 
         meta = {
+            "version": _FILMSTRIP_META_VERSION,
             "tile_count": tile_count,
             "cols": cols,
             "rows": rows,
@@ -1894,6 +1906,8 @@ async def admin_get_filmstrip(video_id: str, admin: dict = Depends(verify_video_
     if _filmstrip_cache_valid(raw_path, sprite_path, meta_path):
         try:
             meta = json.loads(open(meta_path).read())
+            if meta.get("version") != _FILMSTRIP_META_VERSION:
+                raise ValueError("stale filmstrip version")
             return VideoFilmstripResponse(
                 status="ready",
                 sprite_url=f"/streams/{video_id}/filmstrip.jpg",

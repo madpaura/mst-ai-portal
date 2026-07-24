@@ -22,6 +22,9 @@ interface QualityLevel {
   bitrate: number;
 }
 
+// Browsers commonly reject/clamp HTMLMediaElement.playbackRate above 16.
+const SPEED_OPTIONS = [1, 2, 4, 8, 16];
+
 export interface HlsPlayerHandle {
   getCurrentTime: () => number;
   seekTo: (time: number) => void;
@@ -72,6 +75,12 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
   const [blobCaptionsUrl, setBlobCaptionsUrl] = useState<string | null>(null);
   const ccEnabledRef = useRef(ccEnabled);
   ccEnabledRef.current = ccEnabled;
+
+  // Playback speed
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const playbackRateRef = useRef(playbackRate);
+  playbackRateRef.current = playbackRate;
 
   // Fetch VTT cross-origin and serve as a blob URL so <track> sees it as same-origin
   useEffect(() => {
@@ -156,6 +165,7 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
     const handlePause = () => setIsPlaying(false);
     const handleLoadedMetadata = () => {
       setDuration(video.duration || 0);
+      video.playbackRate = playbackRateRef.current;
     };
 
     video.addEventListener('timeupdate', handleTimeUpdate);
@@ -187,6 +197,7 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
     setBuffered(0);
     setQualityLevels([]);
     setCurrentQuality(-1);
+    setPlaybackRate(1);
 
     let cleanupListeners: (() => void) | null = null;
 
@@ -320,6 +331,13 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
 
   const toggleCC = () => setCcEnabled(prev => !prev);
 
+  const setSpeed = (rate: number) => {
+    const video = videoRef.current;
+    if (video) video.playbackRate = rate;
+    setPlaybackRate(rate);
+    setShowSpeedMenu(false);
+  };
+
   const handlePrevChapter = useCallback(() => {
     if (chapters.length === 0 || !videoRef.current) return;
     const sorted = [...chapters].sort((a, b) => a.start_time - b.start_time);
@@ -360,11 +378,14 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
       ref={containerRef}
       className={`relative w-full aspect-video bg-black rounded-2xl overflow-hidden ${className}`}
       onMouseMove={resetControlsTimer}
-      onMouseLeave={() => { if (isPlaying) setShowControls(false); setShowQualityMenu(false); }}
+      onMouseLeave={() => { if (isPlaying) setShowControls(false); setShowQualityMenu(false); setShowSpeedMenu(false); }}
       onClick={(e) => {
-        // Close quality menu when clicking outside
+        // Close quality/speed menus when clicking outside
         if (showQualityMenu && !(e.target as HTMLElement).closest('[data-quality-menu]')) {
           setShowQualityMenu(false);
+        }
+        if (showSpeedMenu && !(e.target as HTMLElement).closest('[data-speed-menu]')) {
+          setShowSpeedMenu(false);
         }
       }}
     >
@@ -502,6 +523,34 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(({
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Playback speed selector */}
+            <div className="relative" data-speed-menu>
+              <button
+                onClick={() => setShowSpeedMenu(!showSpeedMenu)}
+                className={`text-xs font-bold transition-colors w-8 text-center ${playbackRate !== 1 ? 'text-primary' : 'text-white/80 hover:text-white'}`}
+                title="Playback speed"
+              >
+                {playbackRate}x
+              </button>
+              {showSpeedMenu && (
+                <div className="absolute bottom-full right-0 mb-2 bg-slate-900/95 border border-white/20 rounded-lg shadow-xl py-1 min-w-[110px] z-50">
+                  <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-white/10">
+                    Speed
+                  </div>
+                  {SPEED_OPTIONS.map((rate) => (
+                    <button
+                      key={rate}
+                      onClick={() => setSpeed(rate)}
+                      className={`w-full px-3 py-1.5 text-sm text-left hover:bg-white/10 transition-colors flex items-center justify-between ${playbackRate === rate ? 'text-primary font-bold' : 'text-white'}`}
+                    >
+                      {rate === 1 ? 'Normal' : `${rate}x`}
+                      {playbackRate === rate && <span className="material-symbols-outlined text-sm">check</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Quality selector */}
             {qualityLevels.length > 1 && (
               <div className="relative" data-quality-menu>
