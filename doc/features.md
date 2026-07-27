@@ -14,6 +14,7 @@ High-level summary of all major features.
 - Transcript viewer — full searchable transcript panel alongside the player
 - GPU-accelerated transcoding with NVENC when an NVIDIA GPU is present; falls back to CPU libx264
 - Video trim and cut tool — near-instant re-segment without full re-encode
+- **Playback speed control** — 1x/2x/4x/8x/16x selector on the HLS player (`HlsPlayer`), used across Ignite playback, the video editor preview, and Solutions demo videos
 - **200 MB client-side upload guard** — oversized video files are rejected immediately on selection with a clear error message showing actual vs. allowed size
 - Course progress tracking per user
 - Related videos sidebar
@@ -47,7 +48,7 @@ High-level summary of all major features.
 A non-destructive, single-video editor reachable from a video's row in Admin → Videos ("Open the non-destructive editor in a new tab" → `/admin/videos/{id}/editor`, opened as a standalone full-page tab, not nested in the admin layout).
 
 - **EDL-based editing** — cut/trim and per-region speed changes are stored as an edit-decision-list, not applied to the source file; full undo history and autosaved drafts (`video_editor_drafts`)
-- **Timeline** — filmstrip thumbnails, a silence-gap suggestion lane, and a mute/remove-audio toggle
+- **Timeline** — filmstrip thumbnails (interval widens automatically on videos long enough to hit the 240-tile cap, so the strip always covers the full duration instead of leaving a blank gap at the end), a silence-gap suggestion lane, and a mute/remove-audio toggle
 - **Suggestions panel** — silence-gap detection plus LLM-generated "skippable span" suggestions, each individually acceptable or ignorable
 - **Style panel** — background presets (gradients and 5 bundled wallpaper images — aurora/nebula/sunset/midnight/graphite — or a custom uploaded image), with inset padding and corner-radius controls; rendered server-side to match the live preview
 - **Export or Apply** — render to a downloadable mp4 (with a quality picker: 1440p/1080p/720p, source-aspect dependent) or apply in place to the video's `raw/original.mp4`; only one render job may be active per video at a time; the export modal tracks the latest job's `mode` so a finished Export never gets misread as a finished Apply (or vice versa)
