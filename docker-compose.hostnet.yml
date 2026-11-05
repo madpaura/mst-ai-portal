@@ -94,6 +94,16 @@ services:
       timeout: 5s
       retries: 3
 
+  mmrag-worker:
+    network_mode: host
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-portal}:${POSTGRES_PASSWORD:-portal123}@127.0.0.1:5432/${POSTGRES_DB:-mst_portal}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-portal} -d ${POSTGRES_DB:-mst_portal} || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   frontend:
     network_mode: host
     environment:

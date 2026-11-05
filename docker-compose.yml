@@ -94,10 +94,19 @@ services:
       UVICORN_WORKERS: ${UVICORN_WORKERS:-4}
       # Flush stdout immediately so per-worker logs appear in `docker logs`.
       PYTHONUNBUFFERED: "1"
+      # MMRAG spaces: the backend only uses SSH for status checks and key reveal.
+      MMRAG_SSH_HOST: ${MMRAG_SSH_HOST:-}
+      MMRAG_SSH_PORT: ${MMRAG_SSH_PORT:-22}
+      MMRAG_SSH_USER: ${MMRAG_SSH_USER:-}
+      MMRAG_SSH_KEY_PATH: /run/mmrag-ssh/id_ed25519
+      MMRAG_SSH_KNOWN_HOSTS: /run/mmrag-ssh/known_hosts
+      MMRAG_REMOTE_PATH: ${MMRAG_REMOTE_PATH:-}
+      MMRAG_EXPECTED_SERVICES: ${MMRAG_EXPECTED_SERVICES:-postgres,neo4j,rag-app,portal}
     volumes:
       - "${VIDEO_DATA_VOLUME}:/data/videos"
       - "${MEDIA_DATA_VOLUME}:/data/media"
       - ./remotion-banner:/remotion-banner
+      - "${MMRAG_SSH_DIR:-./secrets/mmrag-ssh}:/secrets/mmrag-ssh:ro"
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     healthcheck:
@@ -220,6 +229,53 @@ services:
     healthcheck:
       # pg_isready is not installed in the api image — probe db reachability
       # with the Python stdlib instead.
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('db', 5432), 3)\" || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── MMRAG Space Worker ──────────────────────────────────
+  # Runs setup.sh on the mmrag host over SSH. Keep a single replica: setup.sh
+  # picks ports without a lock, so deploys must not overlap.
+  mmrag-worker:
+    image: mst-portal-worker:latest
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-portal}:${POSTGRES_PASSWORD:-portal123}@db:5432/${POSTGRES_DB:-mst_portal}
+      PORTAL_URL: ${PORTAL_URL:-http://localhost:9810}
+      PORTAL_BASE_URL: ${PORTAL_BASE_URL:-${PORTAL_URL:-http://localhost:9810}}
+      SMTP_SERVER: ${SMTP_SERVER:-localhost}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@mst-ai-portal.local}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-MST AI Portal}
+      EMAIL_SUBJECT_PREFIX: ${EMAIL_SUBJECT_PREFIX:-MSTAI-TF}
+      MMRAG_SSH_HOST: ${MMRAG_SSH_HOST:-}
+      MMRAG_SSH_PORT: ${MMRAG_SSH_PORT:-22}
+      MMRAG_SSH_USER: ${MMRAG_SSH_USER:-}
+      MMRAG_SSH_KEY_PATH: /run/mmrag-ssh/id_ed25519
+      MMRAG_SSH_KNOWN_HOSTS: /run/mmrag-ssh/known_hosts
+      MMRAG_REMOTE_PATH: ${MMRAG_REMOTE_PATH:-}
+      MMRAG_JOB_TIMEOUT: ${MMRAG_JOB_TIMEOUT:-1800}
+      MMRAG_EXPECTED_SERVICES: ${MMRAG_EXPECTED_SERVICES:-postgres,neo4j,rag-app,portal}
+      PYTHONUNBUFFERED: "1"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - "${MMRAG_SSH_DIR:-./secrets/mmrag-ssh}:/secrets/mmrag-ssh:ro"
+    command: ["python", "worker/mmrag_worker.py"]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256m
+    healthcheck:
       test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('db', 5432), 3)\" || exit 1"]
       interval: 30s
       timeout: 5s

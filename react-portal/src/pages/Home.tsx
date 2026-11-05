@@ -122,6 +122,13 @@ const TILE_ART: Record<string, React.ReactNode> = {
       <path d="M20 44 c5 8 27 8 32 0" stroke="currentColor" strokeWidth="5" strokeLinecap="round" fill="none" />
     </>
   ),
+  mmrag: (
+    <>
+      <ellipse cx="36" cy="16" rx="26" ry="10" fill="currentColor" opacity="0.85" />
+      <path d="M10 16 v20 c0 5.5 11.6 10 26 10 s26 -4.5 26 -10 V16 c0 5.5 -11.6 10 -26 10 s-26 -4.5 -26 -10 Z" fill="currentColor" opacity="0.4" />
+      <path d="M10 40 v16 c0 5.5 11.6 10 26 10 s26 -4.5 26 -10 V40 c0 5.5 -11.6 10 -26 10 s-26 -4.5 -26 -10 Z" fill="currentColor" opacity="0.25" />
+    </>
+  ),
   solutions: (
     <>
       <circle cx="36" cy="36" r="14" fill="currentColor" opacity="0.85" />
@@ -273,10 +280,26 @@ export const Home: React.FC = () => {
               </div>
             </Link>
 
-            {/* Memes — full row (News tile removed, issue #281) */}
+            {/* MMRAG spaces */}
+            <Link
+              to="/rag-spaces"
+              className={`${tileBase} ${HUES.rose.border} sm:col-span-2 lg:flex-row lg:items-center lg:gap-5`}
+            >
+              <TileArt hue="rose" kind="mmrag" />
+              <TileIcon hue="rose" icon="hub" />
+              <div className="flex-1 min-w-0 mt-3 lg:mt-0">
+                <h3 className="mb-0.5 text-[17px] font-bold tracking-tight text-text-strong">MMRAG</h3>
+                <p className="text-[13px] text-text-muted">Request a RAG space for your project, or open your spaces.</p>
+              </div>
+              <span className="hidden lg:block">
+                <TileArrow hue="rose" />
+              </span>
+            </Link>
+
+            {/* Memes (News tile removed, issue #281) */}
             <Link
               to="/memes"
-              className={`${tileBase} ${HUES.yellow.border} sm:col-span-2 lg:col-span-4 lg:flex-row lg:items-center lg:gap-5`}
+              className={`${tileBase} ${HUES.yellow.border} sm:col-span-2 lg:flex-row lg:items-center lg:gap-5`}
             >
               <TileArt hue="yellow" kind="memes" />
               <TileIcon hue="yellow" icon="mood" />

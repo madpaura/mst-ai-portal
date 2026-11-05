@@ -11,6 +11,7 @@ venv/
 
 # Environment
 .env
+secrets/
 
 # Storage (uploaded/generated files)
 api/storage/

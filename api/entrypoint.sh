@@ -9,6 +9,17 @@ for dir in /data/videos /data/media /remotion-banner; do
     fi
 done
 
+# The mmrag SSH key is mounted read-only and is normally owned by the host user
+# with mode 600, so appuser gets its own private copy.
+if [ -d /secrets/mmrag-ssh ]; then
+    install -d -m 700 -o appuser -g appgroup /run/mmrag-ssh
+    for file in id_ed25519 known_hosts; do
+        if [ -f "/secrets/mmrag-ssh/$file" ]; then
+            install -m 600 -o appuser -g appgroup "/secrets/mmrag-ssh/$file" "/run/mmrag-ssh/$file"
+        fi
+    done
+fi
+
 # Run database migrations before the backend starts.
 # Only run from the backend (uvicorn) container — workers share this entrypoint
 # but should not race to migrate.
