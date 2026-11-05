@@ -210,6 +210,18 @@ start_frontend() {
     fi
 }
 
+# Start MMRAG space worker (only useful once MMRAG_SSH_HOST is configured)
+start_mmrag_worker() {
+    cd "$API_DIR"
+    source venv/bin/activate
+    if pgrep -f "worker/mmrag_worker.py" > /dev/null; then
+        print_status "MMRAG worker is already running"
+        return
+    fi
+    print_status "Starting MMRAG worker..."
+    nohup python worker/mmrag_worker.py > mmrag_worker.log 2>&1 &
+}
+
 # Start transcoder worker
 start_worker() {
     print_header "Starting Transcoder Worker"
@@ -255,6 +267,7 @@ start_all() {
     start_backend
     start_frontend
     start_worker
+    start_mmrag_worker
     
     print_header "Services Status"
     print_status "PostgreSQL: $(check_postgres && echo 'Running' || echo 'Stopped')"
@@ -314,6 +327,7 @@ stop_services() {
     
     # Kill any remaining worker processes
     pkill -f "worker/transcoder.py" 2>/dev/null || true
+    pkill -f "worker/mmrag_worker.py" 2>/dev/null || true
     
     print_status "All services stopped"
 }

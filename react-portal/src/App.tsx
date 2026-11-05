@@ -42,6 +42,8 @@ const AdminAuditLog    = React.lazy(() => import('./pages/AdminAuditLog').then(m
 const Contact          = React.lazy(() => import('./pages/Contact').then(m => ({ default: m.Contact })));
 const AdminContacts    = React.lazy(() => import('./pages/AdminContacts').then(m => ({ default: m.AdminContacts })));
 const AdminHtmlMailer  = React.lazy(() => import('./pages/AdminHtmlMailer').then(m => ({ default: m.AdminHtmlMailer })));
+const RagSpaces        = React.lazy(() => import('./pages/RagSpaces').then(m => ({ default: m.RagSpaces })));
+const AdminRagSpaces   = React.lazy(() => import('./pages/AdminRagSpaces').then(m => ({ default: m.AdminRagSpaces })));
 const Search           = React.lazy(() => import('./pages/Search').then(m => ({ default: m.Search })));
 
 function SamlGuard({ children }: { children: React.ReactNode }) {
@@ -100,6 +102,7 @@ function App() {
           <Route path="/contribute" element={<ContributeRequest />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/search" element={<Search />} />
+          <Route path="/rag-spaces" element={<RagSpaces />} />
 
           {/* Standalone video editor — full-page dark chrome, opened in a new
               tab from AdminVideos.tsx. Deliberately NOT nested under
@@ -124,6 +127,7 @@ function App() {
             <Route path="memes" element={<AdminMemes />} />
             <Route path="artifacts" element={<ArtifactsRedirect />} />
             <Route path="html-mailer" element={<AdminHtmlMailer />} />
+            <Route path="rag-spaces" element={<AdminRagSpaces />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

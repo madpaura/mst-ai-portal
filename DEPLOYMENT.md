@@ -130,3 +130,29 @@ See the full guide: [doc/Backup_Restore_Migration.md](doc/Backup_Restore_Migrati
 ## Environment variables reference
 
 See `.env.example` for the full list with inline documentation.
+
+## MMRAG spaces
+
+The portal runs `setup.sh` on the mmrag machine over SSH. mmrag needs no changes.
+
+**On the mmrag host**
+
+1. Finish the one-time setup in mmrag's `DEPLOY.md`, including `BASE_URL` in `config/global.env`: the portal links to the URLs `setup.sh list` reports.
+2. Create a dedicated user that owns the mmrag directory and is in the `docker` group.
+3. Let that user write to `NGINX_CONF_DIR` and run `nginx` without a password. Add passwordless `sudo` for `nginx`, `mkdir`, `install` and `rm` if it can't write there directly. Over SSH there is no terminal, so a password prompt fails the job.
+
+**On the portal host**
+
+```bash
+mkdir -p secrets/mmrag-ssh
+ssh-keygen -t ed25519 -N '' -f secrets/mmrag-ssh/id_ed25519
+ssh-copy-id -i secrets/mmrag-ssh/id_ed25519.pub <user>@<mmrag-host>
+ssh-keyscan -p 22 <mmrag-host> > secrets/mmrag-ssh/known_hosts   # compare the fingerprint with the host's
+```
+
+Set `MMRAG_SSH_HOST`, `MMRAG_SSH_USER` and `MMRAG_REMOTE_PATH` in `.env`, then run `docker compose up -d`. In **Admin → MMRAG**, **Test connection** runs `setup.sh check`.
+
+Connections are refused if the host key doesn't match `known_hosts`, so regenerate that file after reinstalling the mmrag host.
+
+Projects created outside the portal stay untouched: a request using one of their names fails its deploy with a name-collision error.
+

@@ -30,6 +30,7 @@ export const AdminLayout: React.FC = () => {
     { path: '/admin/articles', label: 'Articles', icon: 'article' },
     { path: '/admin/memes', label: 'Memes', icon: 'collections' },
     ...(isAdmin ? [
+      { path: '/admin/rag-spaces', label: 'MMRAG', icon: 'hub' },
       { path: '/admin/digest', label: 'Digest', icon: 'mail' },
       { path: '/admin/solutions', label: 'Solutions', icon: 'dashboard' },
       { path: '/admin/analytics', label: 'Analytics', icon: 'analytics' },
@@ -43,9 +44,9 @@ export const AdminLayout: React.FC = () => {
   return (
     <div className={`${theme === 'dark' ? 'dark' : ''} min-h-screen bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 flex flex-col`}>
       {/* Admin Header */}
-      <header className="h-16 bg-sidebar-light dark:bg-sidebar-dark border-b border-slate-200 dark:border-white/10 flex items-center justify-between px-6 shrink-0 z-50">
-        <div className="flex items-center gap-6">
-          <Link to="/" className="flex items-center gap-2 group">
+      <header className="h-16 bg-sidebar-light dark:bg-sidebar-dark border-b border-slate-200 dark:border-white/10 flex items-center justify-between gap-4 px-6 shrink-0 z-50">
+        <div className="flex items-center gap-6 min-w-0">
+          <Link to="/" className="flex items-center gap-2 group shrink-0 whitespace-nowrap">
             <div className="w-8 h-8 rounded-lg bg-primary/20 border border-primary/30 flex items-center justify-center">
               <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
             </div>
@@ -56,12 +57,12 @@ export const AdminLayout: React.FC = () => {
 
           <span className="text-xs font-bold uppercase tracking-widest text-primary/70">{isContent ? 'Creator' : 'Admin'}</span>
 
-          <nav className="flex items-center gap-1 ml-4">
+          <nav className="flex items-center gap-1 ml-4 min-w-0 overflow-x-auto">
             {navItems.map((item) => (
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${location.pathname.startsWith(item.path)
+                className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap border transition-colors ${location.pathname.startsWith(item.path)
                   ? 'bg-primary/10 text-primary dark:text-white border-primary/20'
                   : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/50'
                   }`}
@@ -73,7 +74,7 @@ export const AdminLayout: React.FC = () => {
           </nav>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 shrink-0 whitespace-nowrap">
           <button
             onClick={toggleTheme}
             className="flex items-center gap-1.5 text-xs text-text-muted hover:text-slate-900 dark:hover:text-white transition-colors"

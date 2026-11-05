@@ -120,6 +120,17 @@ class Settings(BaseSettings):
     REDIS_ENABLED: bool = True
     REDIS_DEFAULT_TTL: int = 300  # seconds — 5 minutes
 
+    # MMRAG spaces: setup.sh is run on the mmrag host over SSH. Leave MMRAG_SSH_HOST
+    # empty to keep requests working while approvals that deploy are refused.
+    MMRAG_SSH_HOST: str = ""
+    MMRAG_SSH_PORT: int = 22
+    MMRAG_SSH_USER: str = ""
+    MMRAG_SSH_KEY_PATH: str = ""
+    MMRAG_SSH_KNOWN_HOSTS: str = ""  # empty = ~/.ssh/known_hosts of the container user
+    MMRAG_REMOTE_PATH: str = ""      # directory holding setup.sh on the mmrag host
+    MMRAG_JOB_TIMEOUT: int = 1800    # seconds for one deploy/backup/destroy step
+    MMRAG_EXPECTED_SERVICES: str = "postgres,neo4j,rag-app,portal"
+
     # Seed default admin (open mode only). Set to "false" in production.
     SEED_DEFAULT_ADMIN: bool = True
 

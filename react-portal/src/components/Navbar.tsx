@@ -98,6 +98,12 @@ export const Navbar: React.FC<NavbarProps> = ({ variant = 'solutions' }) => {
               </Link>
             ))}
             <Link
+              className={`text-sm font-medium transition-colors ${isActive('/rag-spaces') ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
+              to="/rag-spaces"
+            >
+              MMRAG
+            </Link>
+            <Link
               className={`text-sm font-medium transition-colors ${isActive('/articles') ? 'text-primary' : 'text-text-muted hover:text-primary'}`}
               to="/articles"
             >

@@ -70,6 +70,8 @@ from artifacts.admin_router import router as artifacts_admin_router
 from publish.router import router as publish_router
 from assistant.router import router as assistant_router
 from assistant.admin_router import router as assistant_admin_router
+from mmrag.router import router as mmrag_router
+from mmrag.admin_router import router as mmrag_admin_router
 
 
 @asynccontextmanager
@@ -211,6 +213,8 @@ app.include_router(artifacts_admin_router, prefix="/admin", tags=["admin-artifac
 app.include_router(publish_router, prefix="/admin", tags=["admin-publish"])
 app.include_router(assistant_router, prefix="/assistant", tags=["assistant"])
 app.include_router(assistant_admin_router, prefix="/admin", tags=["admin-assistant"])
+app.include_router(mmrag_router, prefix="/api/rag-spaces", tags=["mmrag-spaces"])
+app.include_router(mmrag_admin_router, prefix="/admin/rag-spaces", tags=["admin-mmrag-spaces"])
 
 
 class RequestIDMiddleware:

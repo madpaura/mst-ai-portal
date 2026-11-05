@@ -33,7 +33,8 @@ Workers (separate containers)
   ├── transcoder      — Polls transcode_jobs, runs FFmpeg HLS pipeline; sends ready-to-publish email after encode if LLM jobs already finished;
   │                     also polls edit_render_jobs for the video editor (export/apply) — builds an ffmpeg filter-complex from the EDL
   │                     (cuts/trims, atempo speed changes, background/style) and either produces a downloadable mp4 or swaps it into raw/original.mp4
-  └── auto-processor  — Transcript → metadata/chapters/howto via Ollama; sends ready-to-publish email after LLM jobs if transcode already finished
+  ├── auto-processor  — Transcript → metadata/chapters/howto via Ollama; sends ready-to-publish email after LLM jobs if transcode already finished
+  └── mmrag-worker    — Runs setup.sh on the mmrag host over SSH for approved MMRAG spaces, one job at a time
 
 Transcript service (separate container)
   └── Whisper inference over SSE, job queue
@@ -140,6 +141,7 @@ Redis      — cache + rate limiting
 - `edit_render_jobs` — video editor export/apply render queue (`mode` download/apply, `status` incl. `cancelled`, `progress_pct`, `output_path`)
 - `transcode_jobs` — worker queue with SKIP LOCKED
 - `auto_jobs` — auto-processor queue (transcript/metadata/chapters/howto)
+- `mmrag_spaces`, `mmrag_jobs`, `mmrag_space_events` — MMRAG space requests, setup.sh jobs with logs, and the history shown to owners
 - `user_video_progress` — per-user watch position and completion; also powers the Continue Watching row (`GET /video/continue-watching`)
 - `user_notes` — timestamped video notes
 - `video_bookmarks` — per-user saved/bookmarked videos

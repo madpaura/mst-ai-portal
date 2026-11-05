@@ -27,6 +27,7 @@ mst-ai-portal/
 │   │                       # progress, feedback), series_admin_router.py, progress_engine.py,
 │   │                       # course_email.py; non-destructive editor endpoints in admin_router.py
 │   ├── worker/             # transcoder.py, auto_processor.py (run as separate containers)
+│   ├── mmrag/              # MMRAG space requests, approval state machine, SSH bridge to setup.sh
 │   ├── solutions/          # Solution cards + news feed CRUD
 │   ├── articles/           # Knowledge articles
 │   ├── artifacts/          # Artifact Hub: submission, review, publish, version history, GitHub integration
@@ -198,9 +199,23 @@ Tailwind CSS. Dark mode via `dark:` prefix. Primary colour = `text-primary` / `b
 |---|---|---|
 | `worker` | `python worker/transcoder.py` | Polls `jobs` table, runs ffmpeg transcode/trim/cut |
 | `auto-processor` | `python worker/auto_processor.py` | Transcript → metadata/chapters/howto LLM pipeline |
+| `mmrag-worker` | `python worker/mmrag_worker.py` | Runs `setup.sh` on the mmrag host over SSH. Single replica only |
 | `transcript-service` | uvicorn in its own container | Whisper inference, SSE streaming, job queue |
 
 Workers communicate with the DB directly (asyncpg). The auto-processor communicates with transcript-service over HTTP (`TRANSCRIPT_SERVICE_URL` env or derived from `TRANSCRIPT_PORT`).
+
+---
+
+## MMRAG spaces
+
+Users request a space at `/rag-spaces`; admins review, verify and operate spaces at `/admin/rag-spaces`.
+
+mmrag runs on a different machine and stays loosely coupled: `api/mmrag/remote.py` is the only code that knows about it, and the contract is `setup.sh <command>` over SSH plus the URLs `setup.sh list` prints. Do not share code or databases with mmrag or manage its nginx from the portal. The header of `remote.py` lists the `setup.sh` behaviour the portal depends on.
+
+- Don't use `/mmrag` as a portal path: host nginx may route that prefix to mmrag. The SPA uses `/rag-spaces`, the API `/api/rag-spaces` and `/admin/rag-spaces`.
+- Status changes go through `transition()` in `api/mmrag/service.py`, which guards against double clicks and concurrent admins.
+- Access keys are never stored, emailed or logged. Output from `setup.sh` is redacted before it is stored, because `rotate-key` prints the new key.
+- SSH secrets stay in the mounted `MMRAG_SSH_DIR`, not `app_settings`: `GET /settings/{key}` needs no login.
 
 ---
 
