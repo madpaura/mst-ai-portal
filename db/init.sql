@@ -60,9 +60,12 @@ CREATE TABLE video_series (
     created_at  TIMESTAMPTZ DEFAULT now()
 );
 
+-- Migrations run on top of this file from 0001, and 0027 indexes course_id.
+-- 0030 drops the column, so it does not exist once a fresh install is migrated.
 CREATE TABLE videos (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     series_id       UUID REFERENCES video_series(id) ON DELETE SET NULL,
+    course_id       UUID REFERENCES courses(id) ON DELETE SET NULL,
     title           TEXT NOT NULL,
     slug            TEXT UNIQUE NOT NULL,
     description     TEXT,

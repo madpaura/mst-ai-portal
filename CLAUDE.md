@@ -133,6 +133,8 @@ Create `api/alembic/versions/NNNN_description.py`. Use the highest existing numb
 op.execute("ALTER TABLE foo ADD COLUMN IF NOT EXISTS bar TEXT DEFAULT 'x'")
 ```
 
+Fresh installs load `db/init.sql` and then run every migration from 0001, so a migration has to work on that schema as well as on an existing database. Keep anything in `init.sql` that an older migration still needs, even if a later migration drops it.
+
 ### Routers
 All admin endpoints live under `/admin` prefix. Public endpoints mount without prefix. Authentication:
 - `require_admin` — role=admin only

@@ -13,9 +13,12 @@ def _sync_url() -> str:
             url = settings.DATABASE_URL
         except Exception:
             pass
+    # Name the driver: the bare scheme means psycopg (v3) from SQLAlchemy 2.1,
+    # and only psycopg2 is installed.
     return (
         url.replace("postgresql+asyncpg://", "postgresql://")
            .replace("asyncpg://", "postgresql://")
+           .replace("postgresql://", "postgresql+psycopg2://")
     )
 
 
