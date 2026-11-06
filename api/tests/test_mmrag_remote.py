@@ -11,11 +11,27 @@ from mmrag import remote
 from mmrag.schemas import SpaceFields
 from mmrag.service import slugify
 
-STATUS_OUTPUT = """NAME                     IMAGE            COMMAND                  SERVICE    CREATED       STATUS                 PORTS
-mmrag-demo-neo4j-1       neo4j:5          "tini -g -- /startup"    neo4j      2 hours ago   Up 2 hours (healthy)   7474/tcp
-mmrag-demo-portal-1      mmrag-portal     "uvicorn app.main:ap"    portal     2 hours ago   Up 2 hours (healthy)   127.0.0.1:19601->8080/tcp
-mmrag-demo-postgres-1    pgvector:pg16    "docker-entrypoint.s"    postgres   2 hours ago   Up 2 hours (healthy)   5432/tcp
-mmrag-demo-rag-app-1     lightrag:v1.5.2  "python /run.py"         rag-app    2 hours ago   Up 2 hours (healthy)   127.0.0.1:19600->9621/tcp
+# Captured from kubectl 1.31 running `kubectl get pods,sts,deploy,svc,pvc`.
+STATUS_OUTPUT = """NAME                           READY   STATUS    RESTARTS   AGE
+pod/neo4j-0                    1/1     Running   0          16s
+pod/portal-74754cff94-qtq2q    1/1     Running   0          16s
+pod/postgres-0                 1/1     Running   0          16s
+pod/rag-app-6b4dbb9c96-hcvvj   1/1     Running   0          16s
+
+NAME                        READY   AGE
+statefulset.apps/neo4j      1/1     20s
+statefulset.apps/postgres   1/1     20s
+
+NAME                      READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/portal    1/1     1            1           20s
+deployment.apps/rag-app   1/1     1            1           20s
+
+NAME               TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+service/portal     NodePort    10.43.160.194   <none>        8080:30087/TCP   20s
+service/postgres   ClusterIP   10.43.201.99    <none>        5432/TCP         20s
+
+NAME                            STATUS    VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+persistentvolumeclaim/demo-pg   Pending                                      dgx-storage    <unset>                 20s
 """
 
 
@@ -23,30 +39,90 @@ def _states(health):
     return {s["service"]: s["state"] for s in health["services"]}
 
 
+def _with_pod(line):
+    return STATUS_OUTPUT.replace("pod/postgres-0  ", f"{line}\npod/postgres-0  ", 1)
+
+
 def test_health_all_services_healthy():
-    health = remote.health_from_status("demo", STATUS_OUTPUT)
+    health = remote.health_from_status(STATUS_OUTPUT)
     assert health["healthy"] is True
     assert set(_states(health)) == {"neo4j", "portal", "postgres", "rag-app"}
 
 
-def test_health_crashed_container_is_absent_from_output_but_still_fails():
+def test_health_counts_a_container_that_restarted_and_recovered():
+    output = STATUS_OUTPUT.replace(
+        "pod/postgres-0                 1/1     Running   0          16s",
+        "pod/postgres-0                 1/1     Running   1 (6s ago)   87s",
+    )
+    assert remote.health_from_status(output)["healthy"] is True
+
+
+@pytest.mark.parametrize("pod, expected", [
+    ("pod/rag-app-7d49fb658f-cb9zn   0/1     CrashLoopBackOff   1 (4s ago)   5s", "unhealthy"),
+    ("pod/rag-app-7d49fb658f-cb9zn   0/1     ErrImagePull       0            6s", "unhealthy"),
+    ("pod/rag-app-7d49fb658f-cb9zn   0/1     ImagePullBackOff   0            6s", "unhealthy"),
+    ("pod/rag-app-7d49fb658f-cb9zn   0/1     Init:Error         0            6s", "unhealthy"),
+    ("pod/rag-app-7d49fb658f-cb9zn   0/1     ContainerCreating  0            1s", "starting"),
+    ("pod/rag-app-7d49fb658f-cb9zn   0/1     Pending            0            1s", "starting"),
+    ("pod/rag-app-7d49fb658f-cb9zn   0/1     Init:0/1           0            1s", "starting"),
+    ("pod/rag-app-7d49fb658f-cb9zn   0/1     Running            0            8s", "starting"),
+])
+def test_health_sees_a_bad_pod_behind_a_deployment_that_reads_1_of_1(pod, expected):
+    health = remote.health_from_status(_with_pod(pod))
+    assert health["healthy"] is False
+    assert _states(health)["rag-app"] == expected
+
+
+@pytest.mark.parametrize("pod", [
+    "pod/rag-app-6b4dbb9c96-oldpd   1/1     Terminating   0   74s",
+    "pod/rag-app-6b4dbb9c96-oldpd   0/1     Completed     0   74s",
+    "pod/rag-app-6b4dbb9c96-oldpd   0/1     Evicted       0   74s",
+])
+def test_health_ignores_a_pod_on_its_way_out(pod):
+    assert remote.health_from_status(_with_pod(pod))["healthy"] is True
+
+
+def test_health_statefulset_with_its_only_pod_crashing():
+    output = STATUS_OUTPUT.replace(
+        "pod/neo4j-0                    1/1     Running   0          16s",
+        "pod/neo4j-0                    0/1     CrashLoopBackOff   1 (3s ago)   5s",
+    ).replace("statefulset.apps/neo4j      1/1", "statefulset.apps/neo4j      0/1")
+    health = remote.health_from_status(output)
+    assert health["healthy"] is False
+    assert _states(health)["neo4j"] == "unhealthy"
+
+
+def test_health_workload_short_of_replicas_with_no_pod_listed():
+    output = "\n".join(l for l in STATUS_OUTPUT.splitlines() if not l.startswith("pod/portal"))
+    output = output.replace("deployment.apps/portal    1/1", "deployment.apps/portal    0/1")
+    assert _states(remote.health_from_status(output))["portal"] == "starting"
+
+
+def test_health_scaled_to_zero_is_stopped():
+    output = (
+        "NAME                        READY   AGE\n"
+        "statefulset.apps/neo4j      0/0     99s\n"
+        "statefulset.apps/postgres   0/0     99s\n\n"
+        "NAME                      READY   UP-TO-DATE   AVAILABLE   AGE\n"
+        "deployment.apps/portal    0/0     0            0           99s\n"
+        "deployment.apps/rag-app   0/0     0            0           99s\n"
+    )
+    health = remote.health_from_status(output)
+    assert health["healthy"] is False
+    assert set(_states(health).values()) == {"stopped"}
+
+
+def test_health_workload_absent_from_the_output_is_missing():
     output = "\n".join(l for l in STATUS_OUTPUT.splitlines() if "portal" not in l)
-    health = remote.health_from_status("demo", output)
+    health = remote.health_from_status(output)
     assert health["healthy"] is False
     assert _states(health)["portal"] == "missing"
 
 
-@pytest.mark.parametrize("state, expected", [
-    ("Up 2 hours (unhealthy)", "unhealthy"),
-    ("Up 3 seconds (health: starting)", "starting"),
-    ("Restarting (1) 4 seconds ago", "unhealthy"),
-    ("Exited (1) 4 seconds ago", "unhealthy"),
-])
-def test_health_bad_states(state, expected):
-    output = STATUS_OUTPUT.replace("Up 2 hours (healthy)   127.0.0.1:19600", f"{state}   127.0.0.1:19600")
-    health = remote.health_from_status("demo", output)
+def test_health_project_that_does_not_exist():
+    health = remote.health_from_status("No resources found in mmrag-demo namespace.\n")
     assert health["healthy"] is False
-    assert _states(health)["rag-app"] == expected
+    assert set(_states(health).values()) == {"missing"}
 
 
 def test_parse_list():
@@ -59,6 +135,16 @@ def test_parse_list():
     }
 
 
+def test_parse_list_with_namespace_and_node_columns():
+    output = (
+        "PROJECT      API                          MGMT                         NS       HOST\n"
+        "p1           http://10.0.0.1:30086 http://10.0.0.1:30087 mmrag-p1 blade-server2\n"
+    )
+    assert remote.parse_list(output) == {
+        "p1": {"api_url": "http://10.0.0.1:30086", "mgmt_url": "http://10.0.0.1:30087"}
+    }
+
+
 def test_redact_removes_the_key_printed_by_rotate_key():
     text = "project : p1\nkey     : mmr_AbC123\nportal  : https://x/ (user: p1, password: <key>)\n"
     redacted = remote.redact(text)
@@ -67,16 +153,23 @@ def test_redact_removes_the_key_printed_by_rotate_key():
     assert "password: <key>" in redacted
 
 
+def test_redact_removes_every_key_deploy_prints():
+    text = "  access key : mmr_AbC123\n  mgmt : http://x/ (user: p1 / pass: mmr_AbC123)\n  new key: mmr_AbC123\n"
+    assert "mmr_AbC123" not in remote.redact(text)
+
+
 def test_redact_catches_a_key_anywhere_in_a_line():
     assert "mmr_Secret9" not in remote.redact("curl -H 'X-API-Key: mmr_Secret9' http://x")
 
 
 def test_clean_strips_colours():
     assert remote.clean("\x1b[32m✓\x1b[0m done") == "✓ done"
+    assert remote.clean("  \x1b[0;32m✔\x1b[0m done") == "  ✔ done"
 
 
 def test_parse_backup_path():
     assert remote.parse_backup_path("stopping…\n✓ backup: /opt/backups/p1-1.tar.gz (12K)\n") == "/opt/backups/p1-1.tar.gz"
+    assert remote.parse_backup_path("  ✔ backup: /opt/backups/p1-1.tar.gz (12K)\n  notes: contains keys\n") == "/opt/backups/p1-1.tar.gz"
     assert remote.parse_backup_path("stopping…\n") is None
 
 

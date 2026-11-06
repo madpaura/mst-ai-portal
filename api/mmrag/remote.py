@@ -5,15 +5,18 @@ different machine: `setup.sh <command>` run over SSH, plus parsing of what those
 commands print. Nothing else in the portal should know how mmrag works.
 
 setup.sh behaviour the callers depend on:
-  * `deploy` exits 0 even when services never turned healthy, so success has to
-    be confirmed with `status`.
-  * `status` is `docker compose ps` without -a, so a crashed container is simply
-    absent from the output. health_from_status() compares with the expected list.
-  * `rotate-key` prints the new key, so all output is redacted before it can
-    reach a log, the database or an API response.
+  * `deploy` exits 0 even when services never turned ready, so success has to be
+    confirmed with `status`.
+  * `status` is `kubectl get pods,sts,deploy,svc,pvc`. A deployment still reads
+    1/1 while a new pod crash-loops behind the old one, so health_from_status()
+    reads pods as well as workloads. An unknown project exits 0 with no workloads
+    listed, so it compares with the expected list.
+  * `rotate-key` returns once the rollout has started, so callers have to wait
+    for it with `status`.
+  * `deploy` and `rotate-key` print the key, so all output is redacted before it
+    can reach a log, the database or an API response.
   * `destroy` asks for the project name on stdin.
-  * `list` exits 1 after printing everything when the last project directory has
-    no .env, which includes a host with no projects yet. Its header shows it ran.
+  * `list` is judged by its PROJECT header, not its exit status.
 """
 import asyncio
 import re
@@ -34,7 +37,11 @@ _KEY_LINE_RE = re.compile(r"^(\s*key\s*:\s*)\S+", re.MULTILINE)
 _KEY_TOKEN_RE = re.compile(r"mmr_[A-Za-z0-9]+")
 _BACKUP_RE = re.compile(r"backup:\s+(\S+)")
 
-_BAD_STATE_RE = re.compile(r"\b(Exited|Restarting|Dead|Paused|Created|Removing)\b")
+_WORKLOAD_RE = re.compile(r"^(?:deployment|statefulset)\.apps/(\S+)\s+(\d+)/(\d+)\s", re.MULTILINE)
+_POD_RE = re.compile(r"^pod/(\S+)\s+(\d+)/(\d+)\s+(\S+)", re.MULTILINE)
+# Pods on their way out, listed for a moment after a rollout or scale-down.
+_POD_LEAVING = {"Terminating", "Completed", "Evicted"}
+_POD_STARTING = {"Pending", "ContainerCreating", "PodInitializing"}
 
 
 class RemoteError(Exception):
@@ -170,27 +177,35 @@ def expected_services() -> list[str]:
     return [s.strip() for s in settings.MMRAG_EXPECTED_SERVICES.split(",") if s.strip()]
 
 
-def health_from_status(slug: str, output: str) -> dict:
-    """Turn `setup.sh status <slug>` output into {healthy, services}."""
-    seen: dict[str, str] = {}
-    container_re = re.compile(rf"^mmrag-{re.escape(slug)}-(.+?)-\d+\s")
-    for line in output.splitlines():
-        match = container_re.match(line)
-        if not match:
-            continue
-        if "(unhealthy)" in line or _BAD_STATE_RE.search(line):
-            state = "unhealthy"
-        elif "(health: starting)" in line:
-            state = "starting"
-        elif "(healthy)" in line:
-            state = "healthy"
-        else:
-            state = "running"
-        seen[match.group(1)] = state
+def _pod_state(ready: str, total: str, status: str) -> Optional[str]:
+    if status in _POD_LEAVING:
+        return None
+    if status == "Running":
+        return "healthy" if ready == total else "starting"
+    if status in _POD_STARTING or re.fullmatch(r"Init:\d+/\d+", status):
+        return "starting"
+    return "unhealthy"
 
-    services = [{"service": name, "state": state} for name, state in seen.items()]
+
+def health_from_status(output: str) -> dict:
+    """Turn `setup.sh status <slug>` output into {healthy, services}."""
+    pods = _POD_RE.findall(output)
+    services = []
+    for name, ready, desired in _WORKLOAD_RE.findall(output):
+        pod_states = {_pod_state(r, t, status) for pod, r, t, status in pods if pod.startswith(f"{name}-")}
+        if int(desired) == 0:
+            state = "stopped"
+        elif "unhealthy" in pod_states:
+            state = "unhealthy"
+        elif int(ready) < int(desired) or "starting" in pod_states:
+            state = "starting"
+        else:
+            state = "healthy"
+        services.append({"service": name, "state": state})
+
+    seen = {s["service"] for s in services}
     services += [{"service": name, "state": "missing"} for name in expected_services() if name not in seen]
-    healthy = bool(services) and all(s["state"] in ("healthy", "running") for s in services)
+    healthy = bool(services) and all(s["state"] == "healthy" for s in services)
     return {"healthy": healthy, "services": services}
 
 
@@ -198,7 +213,7 @@ async def check_health(slug: str) -> dict:
     result = await run(["status", slug], timeout=30)
     if not result.ok:
         return {"healthy": False, "services": [], "error": result.output.strip()[-300:]}
-    return health_from_status(slug, result.output)
+    return health_from_status(result.output)
 
 
 def parse_backup_path(output: str) -> Optional[str]:
