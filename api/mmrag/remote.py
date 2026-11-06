@@ -16,7 +16,9 @@ setup.sh behaviour the callers depend on:
   * `deploy` and `rotate-key` print the key, so all output is redacted before it
     can reach a log, the database or an API response.
   * `destroy` asks for the project name on stdin.
-  * `list` is judged by its PROJECT header, not its exit status.
+  * `list` is judged by its PROJECT header, not its exit status. Only the project
+    names are read: its URLs are NodePorts, while users go through the portal's
+    nginx (see space_urls()).
 """
 import asyncio
 import re
@@ -156,21 +158,23 @@ async def fetch_key(slug: str) -> str:
     return match.group(1)
 
 
-async def list_projects() -> dict[str, dict]:
-    """Return {project: {api_url, mgmt_url}} as reported by `setup.sh list`."""
+async def list_projects() -> set[str]:
+    """Return the project names reported by `setup.sh list`."""
     result = await run(["list"], timeout=30)
     if not result.output.startswith("PROJECT"):
         raise RemoteError(f"`setup.sh list` failed: {result.output.strip()[-300:]}")
     return parse_list(result.output)
 
 
-def parse_list(output: str) -> dict[str, dict]:
-    projects: dict[str, dict] = {}
-    for line in output.splitlines():
-        parts = line.split()
-        if len(parts) >= 3 and parts[0] != "PROJECT":
-            projects[parts[0]] = {"api_url": parts[1], "mgmt_url": parts[2]}
-    return projects
+def parse_list(output: str) -> set[str]:
+    rows = (line.split() for line in output.splitlines())
+    return {parts[0] for parts in rows if len(parts) >= 3 and parts[0] != "PROJECT"}
+
+
+def space_urls(slug: str) -> dict:
+    """Links to a space, relative so they stay on the address the user reached
+    the portal on. The nginx in front of the portal routes /mmrag/ to mmrag."""
+    return {"api_url": f"/mmrag/{slug}/api/", "mgmt_url": f"/mmrag/{slug}/mgmt/"}
 
 
 def expected_services() -> list[str]:

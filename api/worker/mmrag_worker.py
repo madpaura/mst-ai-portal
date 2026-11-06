@@ -93,12 +93,10 @@ async def save_health(pool: asyncpg.Pool, space_id, health: dict):
 
 
 async def save_urls(pool: asyncpg.Pool, space) -> None:
-    project = (await remote.list_projects()).get(space["slug"])
-    if not project:
-        raise JobFailed(f"{space['slug']} is missing from `setup.sh list` after deploying")
+    urls = remote.space_urls(space["slug"])
     await pool.execute(
         "UPDATE mmrag_spaces SET api_url = $2, mgmt_url = $3 WHERE id = $1",
-        space["id"], project["api_url"], project["mgmt_url"],
+        space["id"], urls["api_url"], urls["mgmt_url"],
     )
 
 
