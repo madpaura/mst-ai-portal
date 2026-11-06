@@ -25,7 +25,8 @@ from mmrag.service import SPACE_SELECT, add_event, row_to_space
 POLL_INTERVAL = int(os.getenv("MMRAG_POLL_INTERVAL", "3"))
 LOG_FLUSH_SECONDS = 2.0
 MAX_LOG_CHARS = 200_000
-HEALTH_ATTEMPTS = 4
+# About five minutes: `rotate-key` returns while its rollout is still running.
+HEALTH_ATTEMPTS = 15
 HEALTH_RETRY_SECONDS = 20
 
 
@@ -80,7 +81,7 @@ async def verify_healthy(pool: asyncpg.Pool, log_: JobLog, space) -> dict:
             return health
         if attempt < HEALTH_ATTEMPTS:
             await asyncio.sleep(HEALTH_RETRY_SECONDS)
-    not_ok = [s["service"] for s in health.get("services", []) if s["state"] not in ("healthy", "running")]
+    not_ok = [s["service"] for s in health.get("services", []) if s["state"] != "healthy"]
     raise JobFailed(f"Services not healthy: {', '.join(not_ok) or health.get('error') or 'unknown'}")
 
 
