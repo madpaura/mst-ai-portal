@@ -6,6 +6,7 @@ Lifecycle:
   deploying -> deploy_failed -> deploying
   live | stopped -> delete_requested -> deleting -> deleted
   deleting -> delete_failed -> deleting | deleted
+  any of DELETABLE -> deleting (or straight to deleted if nothing was deployed)
 """
 import json
 import re
@@ -19,6 +20,11 @@ EDITABLE = ("pending", "needs_info", "rejected")
 RESUBMITTABLE = ("needs_info", "rejected")
 # Statuses the admin can send back to the owner.
 REVIEWABLE = ("pending", "deployed", "deploy_failed")
+# Statuses an admin can delete from directly. A deletion request is answered with
+# approve or decline instead, and a running deploy has to finish first.
+DELETABLE = ("pending", "needs_info", "rejected", "deploy_failed", "deployed", "live", "stopped")
+# Provisioned but never given to the owner, so there is no user data to back up.
+NO_USER_DATA = ("needs_info", "rejected", "deploy_failed", "deployed")
 
 JOB_LABELS = {
     "deploy": "Deploy",
@@ -46,8 +52,11 @@ def iso(value) -> Optional[str]:
     return value.isoformat() if value else None
 
 
+def _json_field(value):
+    return json.loads(value) if isinstance(value, str) else value
+
+
 def row_to_space(row, *, active_job: Optional[dict] = None) -> dict:
-    health = row["health"]
     return {
         "id": str(row["id"]),
         "slug": row["slug"],
@@ -63,8 +72,10 @@ def row_to_space(row, *, active_job: Optional[dict] = None) -> dict:
         "owner_id": str(row["owner_id"]) if row["owner_id"] else None,
         "owner_name": row["owner_name"],
         "owner_email": row["owner_email"],
-        "health": json.loads(health) if isinstance(health, str) else health,
+        "health": _json_field(row["health"]),
         "health_checked_at": iso(row["health_checked_at"]),
+        "usage": _json_field(row["usage"]),
+        "usage_checked_at": iso(row["usage_checked_at"]),
         "reviewed_at": iso(row["reviewed_at"]),
         "created_at": iso(row["created_at"]),
         "updated_at": iso(row["updated_at"]),
@@ -81,6 +92,17 @@ SPACE_SELECT = """
 
 async def fetch_space(db, space_id: str):
     return await db.fetchrow(f"{SPACE_SELECT} WHERE s.id = $1", space_id)
+
+
+async def save_monitoring(db, space_id, health: dict, usage: dict):
+    await db.execute(
+        """
+        UPDATE mmrag_spaces
+        SET health = $2::jsonb, health_checked_at = now(), usage = $3::jsonb, usage_checked_at = now()
+        WHERE id = $1
+        """,
+        space_id, json.dumps(health), json.dumps(usage),
+    )
 
 
 async def add_event(conn, space_id, event: str, user: Optional[dict] = None, note: Optional[str] = None):

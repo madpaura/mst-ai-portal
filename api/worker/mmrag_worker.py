@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import database
 from config import settings
 from mmrag import notify, remote
-from mmrag.service import SPACE_SELECT, add_event, row_to_space
+from mmrag.service import NO_USER_DATA, SPACE_SELECT, add_event, row_to_space, save_monitoring
 
 POLL_INTERVAL = int(os.getenv("MMRAG_POLL_INTERVAL", "3"))
 LOG_FLUSH_SECONDS = 2.0
@@ -131,15 +131,37 @@ async def do_rotate_key(pool: asyncpg.Pool, log_: JobLog, space):
     await verify_healthy(pool, log_, space)
 
 
+async def postgres_running(slug: str) -> bool:
+    health = await remote.check_health(slug)
+    return any(s["service"] == "postgres" and s["state"] == "healthy" for s in health["services"])
+
+
+async def ensure_postgres(log_: JobLog, space):
+    """`backup` needs Postgres, and `deploy` is the only way setup.sh can start it."""
+    if await postgres_running(space["slug"]):
+        return
+    await run_step(log_, ["deploy", space["slug"]])
+    for attempt in range(HEALTH_ATTEMPTS):
+        if await postgres_running(space["slug"]):
+            return
+        if attempt < HEALTH_ATTEMPTS - 1:
+            await asyncio.sleep(HEALTH_RETRY_SECONDS)
+    raise JobFailed("Postgres didn't start, so the backup can't run; not deleting without one")
+
+
 async def do_destroy(pool: asyncpg.Pool, log_: JobLog, space):
     if space["slug"] not in await remote.list_projects():
         await log_.step("Project is already gone from the mmrag host")
         return
-    backup = await run_step(log_, ["backup", space["slug"]])
-    backup_path = remote.parse_backup_path(backup.output)
-    if not backup_path:
-        raise JobFailed("Backup finished but reported no archive; not deleting without one")
-    await pool.execute("UPDATE mmrag_spaces SET backup_path = $2 WHERE id = $1", space["id"], backup_path)
+    if space["pre_delete_status"] in NO_USER_DATA:
+        await log_.step("Skipping the backup: this space never went live")
+    else:
+        await ensure_postgres(log_, space)
+        backup = await run_step(log_, ["backup", space["slug"]])
+        backup_path = remote.parse_backup_path(backup.output)
+        if not backup_path:
+            raise JobFailed("Backup finished but reported no archive; not deleting without one")
+        await pool.execute("UPDATE mmrag_spaces SET backup_path = $2 WHERE id = $1", space["id"], backup_path)
     await run_step(log_, ["destroy", space["slug"]], stdin_text=space["slug"])
 
 
@@ -187,21 +209,22 @@ async def apply_outcome(pool: asyncpg.Pool, job, succeeded: bool, error: str | N
         if succeeded and kind in ("destroy", "teardown"):
             await conn.execute(
                 "UPDATE mmrag_spaces SET provisioned = false, api_url = NULL, mgmt_url = NULL, "
-                "health = NULL, health_checked_at = NULL WHERE id = $1",
+                "health = NULL, health_checked_at = NULL, usage = NULL, usage_checked_at = NULL WHERE id = $1",
                 job["space_id"],
             )
         if succeeded and kind == "stop":
             await conn.execute(
-                "UPDATE mmrag_spaces SET health = NULL, health_checked_at = NULL WHERE id = $1",
+                "UPDATE mmrag_spaces SET health = NULL, health_checked_at = NULL, "
+                "usage = NULL, usage_checked_at = NULL WHERE id = $1",
                 job["space_id"],
             )
         await add_event(conn, job["space_id"], f"{kind}_{'succeeded' if succeeded else 'failed'}", note=error)
 
     row = await pool.fetchrow(f"{SPACE_SELECT} WHERE s.id = $1", job["space_id"])
-    await send_notifications(row_to_space(row), kind, succeeded, error)
+    await send_notifications(row_to_space(row), kind, succeeded, error, row["backup_path"])
 
 
-async def send_notifications(space: dict, kind: str, succeeded: bool, error: str | None):
+async def send_notifications(space: dict, kind: str, succeeded: bool, error: str | None, backup_path: str | None):
     if not succeeded:
         await notify.notify_reviewers(
             space, f"MMRAG space job failed: {space['name']}", "A deployment job failed",
@@ -220,7 +243,8 @@ async def send_notifications(space: dict, kind: str, succeeded: bool, error: str
     elif kind == "destroy":
         await notify.notify_owner(
             space, f"MMRAG space deleted: {space['name']}", "Space deleted",
-            "This space has been deleted. A backup was kept on the mmrag host.",
+            "This space has been deleted." + (" A backup was kept on the mmrag host." if backup_path else ""),
+            space["delete_reason"],
         )
 
 
@@ -266,12 +290,44 @@ async def recover_interrupted(pool: asyncpg.Pool):
         await apply_outcome(pool, job, False, "Interrupted by a worker restart")
 
 
+async def sample_space(pool: asyncpg.Pool, space):
+    try:
+        health, usage = await asyncio.gather(remote.check_health(space["slug"]), remote.check_usage(space["slug"]))
+    except remote.RemoteError as exc:
+        health, usage = {"healthy": False, "services": [], "error": str(exc)}, {"services": [], "error": str(exc)}
+    await save_monitoring(pool, space["id"], health, usage)
+
+
+async def monitor_loop(pool: asyncpg.Pool):
+    """Refresh health and resource usage of running spaces. This only reads, so it
+    can run alongside a job, except on the space that job is changing."""
+    while True:
+        try:
+            spaces = await pool.fetch(
+                """
+                SELECT s.id, s.slug FROM mmrag_spaces s
+                WHERE s.status IN ('deployed', 'live') AND NOT EXISTS (
+                    SELECT 1 FROM mmrag_jobs j WHERE j.space_id = s.id AND j.status IN ('queued', 'running')
+                )
+                """
+            )
+            for space in spaces:
+                await sample_space(pool, space)
+        except Exception:
+            log.exception("MMRAG monitor error")
+        await asyncio.sleep(settings.MMRAG_MONITOR_INTERVAL)
+
+
 async def main():
     log.info("MMRAG worker starting | poll_interval={}s configured={}", POLL_INTERVAL, remote.is_configured())
     pool = await asyncpg.create_pool(settings.DATABASE_URL, min_size=1, max_size=3)
     # Email helpers read SMTP config through database.get_db().
     database.pool = pool
     await recover_interrupted(pool)
+    # Keep the reference: asyncio only holds weak references to running tasks.
+    monitor = None
+    if remote.is_configured() and settings.MMRAG_MONITOR_INTERVAL > 0:
+        monitor = asyncio.create_task(monitor_loop(pool))
     while True:
         try:
             job = await claim_job(pool)

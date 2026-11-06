@@ -1,5 +1,6 @@
 """MMRAG SSH bridge: command building, setup.sh output parsing, secret redaction."""
 import asyncio
+import os
 import shlex
 from unittest.mock import patch
 
@@ -123,6 +124,99 @@ def test_health_project_that_does_not_exist():
     health = remote.health_from_status("No resources found in mmrag-demo namespace.\n")
     assert health["healthy"] is False
     assert set(_states(health).values()) == {"missing"}
+
+
+# Modelled on `kubectl top` 1.31 output and on BusyBox and GNU `df -Pk` spacing.
+USAGE_OUTPUT = """::top
+neo4j-0                    12m    512Mi
+portal-7b4cff7cf6-qnb67    1m     90Mi
+portal-7b4cff7cf6-oldpd    1m     10Mi
+postgres-0                 1500m  1Gi
+rag-app-74dcb89b6f-m2l2p   2      2048Ki
+::disk postgres
+46792\t/var/lib/postgresql/data
+Filesystem           1024-blocks    Used Available Capacity Mounted on
+/dev/nvme0n1p2       191135628 123017996  58335616  68% /var/lib/postgresql/data
+::disk neo4j
+1024\t/data
+Filesystem     1024-blocks      Used Available Capacity Mounted on
+/dev/nvme0n1p2   191135628 123017996  58335616      68% /data
+::disk rag-app
+4\t/app/data
+Filesystem           1024-blocks    Used Available Capacity Mounted on
+/dev/nvme0n1p2       191135628 123017996  58335616  70% /app/data
+"""
+
+
+def _usage(usage):
+    return {s["service"]: s for s in usage["services"]}
+
+
+def test_usage_per_service_and_totals():
+    usage = remote.parse_usage(USAGE_OUTPUT)
+    services = _usage(usage)
+    assert services["postgres"]["cpu_millicores"] == 1500
+    assert services["postgres"]["memory_bytes"] == 2**30
+    assert services["postgres"]["disk_bytes"] == 46792 * 1024
+    assert services["rag-app"]["cpu_millicores"] == 2000
+    assert services["rag-app"]["memory_bytes"] == 2048 * 1024
+    assert usage["disk_bytes"] == (46792 + 1024 + 4) * 1024
+    assert usage["error"] is None
+
+
+def test_usage_adds_up_pods_of_one_service_during_a_rollout():
+    portal = _usage(remote.parse_usage(USAGE_OUTPUT))["portal"]
+    assert portal["cpu_millicores"] == 2
+    assert portal["memory_bytes"] == 100 * 2**20
+    assert portal["disk_bytes"] is None
+
+
+def test_usage_reports_the_fullest_data_disk():
+    node_disk = remote.parse_usage(USAGE_OUTPUT)["node_disk"]
+    assert node_disk == {"size_bytes": 191135628 * 1024, "available_bytes": 58335616 * 1024, "used_percent": 70}
+
+
+def test_usage_pod_too_new_for_metrics_stays_unknown():
+    output = USAGE_OUTPUT.replace("postgres-0                 1500m  1Gi\n", "")
+    postgres = _usage(remote.parse_usage(output))["postgres"]
+    assert postgres["cpu_millicores"] is None
+    assert postgres["disk_bytes"] == 46792 * 1024
+
+
+def test_usage_without_metrics_server_still_has_disk():
+    top = USAGE_OUTPUT[:USAGE_OUTPUT.index("::disk postgres")]
+    usage = remote.parse_usage(USAGE_OUTPUT.replace(top, "::top\nerror: Metrics API not available\n"))
+    assert usage["error"] == "CPU and RAM need metrics-server on the cluster"
+    assert usage["cpu_millicores"] is None
+    assert usage["disk_bytes"] == (46792 + 1024 + 4) * 1024
+
+
+def test_usage_of_a_stopped_project_has_no_figures_and_no_error():
+    output = (
+        "::top\nNo resources found in mmrag-demo namespace.\n"
+        "::disk postgres\nError from server (NotFound): pods \"postgres-0\" not found\n"
+        "::disk neo4j\nError from server (NotFound): pods \"neo4j-0\" not found\n"
+        "::disk rag-app\nerror: cannot exec into a container in a completed pod\n"
+    )
+    usage = remote.parse_usage(output)
+    assert usage["error"] is None
+    assert usage["disk_bytes"] is None
+    assert usage["node_disk"] is None
+
+
+def test_usage_du_that_timed_out_still_reports_the_node_disk():
+    output = USAGE_OUTPUT.replace("46792\t/var/lib/postgresql/data\n", "")
+    usage = remote.parse_usage(output)
+    assert _usage(usage)["postgres"]["disk_bytes"] is None
+    assert usage["node_disk"]["used_percent"] == 70
+
+
+def test_usage_command_only_reads_and_quotes_the_namespace():
+    command = remote.build_usage_command("a; rm -rf /")
+    assert shlex.quote("mmrag-a; rm -rf /") in command
+    assert " top pods " in command
+    for word in ("delete", "scale", "apply", "patch", "rollout"):
+        assert word not in command
 
 
 def test_parse_list_reads_project_names():
@@ -340,6 +434,27 @@ def test_unknown_host_key_is_refused(ssh_host):
 
     with pytest.raises(remote.RemoteError):
         asyncio.run(_with_server(ssh_host, wrong_key, body))
+
+
+def test_usage_runs_over_ssh(ssh_host):
+    kubectl = ssh_host["dir"] / "kubectl"
+    kubectl.write_text("#!/bin/sh\nif [ \"$3\" = top ]; then echo 'postgres-0  5m  100Mi'; else echo \"8\t/data\"; fi\n")
+    kubectl.chmod(0o755)
+
+    async def body():
+        with patch.dict("os.environ", {"PATH": f"{ssh_host['dir']}:{os.environ['PATH']}"}):
+            return await remote.check_usage("p1")
+
+    usage = asyncio.run(_with_server(ssh_host, ssh_host["host_key"], body))
+    assert usage["cpu_millicores"] == 5
+    assert usage["disk_bytes"] == 3 * 8 * 1024
+
+
+def test_usage_reports_an_unreachable_host_instead_of_raising(ssh_host):
+    wrong_key = asyncssh.generate_private_key("ssh-ed25519")
+    usage = asyncio.run(_with_server(ssh_host, wrong_key, lambda: remote.check_usage("p1")))
+    assert usage["services"] == []
+    assert "SSH to the mmrag host failed" in usage["error"]
 
 
 def test_not_configured_raises():

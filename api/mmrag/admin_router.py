@@ -1,5 +1,5 @@
 """Admin side of MMRAG spaces: review, deployment, verification and operations."""
-import json
+import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -12,8 +12,9 @@ from config import settings
 from database import get_db
 from limiter import limiter
 from mmrag import notify, remote
-from mmrag.schemas import NoteRequired, OptionalNote
+from mmrag.schemas import AdminDeleteRequest, NoteRequired, OptionalNote
 from mmrag.service import (
+    DELETABLE,
     REVIEWABLE,
     SPACE_SELECT,
     active_jobs,
@@ -24,6 +25,7 @@ from mmrag.service import (
     job_summary,
     list_events,
     row_to_space,
+    save_monitoring,
     transition,
 )
 
@@ -288,14 +290,10 @@ async def refresh_status(space_id: str, admin: dict = Depends(require_admin)):
     _require_remote()
     space = await _space_or_404(space_id)
     try:
-        health = await remote.check_health(space["slug"])
+        health, usage = await asyncio.gather(remote.check_health(space["slug"]), remote.check_usage(space["slug"]))
     except remote.RemoteError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
-    db = await get_db()
-    await db.execute(
-        "UPDATE mmrag_spaces SET health = $2::jsonb, health_checked_at = now() WHERE id = $1",
-        space["id"], json.dumps(health),
-    )
+    await save_monitoring(await get_db(), space["id"], health, usage)
     return await _detail(space["id"])
 
 
@@ -359,6 +357,39 @@ async def reveal_key(
 
 
 # ── Deletion ──────────────────────────────────────────────────────────────────
+
+@router.post("/{space_id}/delete")
+async def admin_delete(
+    space_id: str, req: AdminDeleteRequest, request: Request, background: BackgroundTasks,
+    admin: dict = Depends(require_admin),
+):
+    """Delete a space without an owner request. The space ID has to be repeated
+    in the request, because this can't be undone."""
+    space = await _space_or_404(space_id)
+    if req.slug != space["slug"]:
+        raise HTTPException(status_code=422, detail="The space ID doesn't match")
+    db = await get_db()
+    if space["provisioned"]:
+        _require_remote()
+        async with db.acquire() as conn, conn.transaction():
+            await transition(
+                conn, space["id"], DELETABLE, "deleting",
+                pre_delete_status=space["status"], delete_reason=req.reason, reviewed_by=admin["id"],
+            )
+            await add_event(conn, space["id"], "admin_delete_started", admin, req.reason)
+            await enqueue_job(conn, space["id"], "destroy", admin)
+    else:
+        async with db.acquire() as conn, conn.transaction():
+            await transition(conn, space["id"], DELETABLE, "deleted", delete_reason=req.reason, reviewed_by=admin["id"])
+            await add_event(conn, space["id"], "deleted_by_admin", admin, req.reason)
+        public = row_to_space(await fetch_space(db, space["id"]))
+        background.add_task(
+            notify.notify_owner, public, f"MMRAG space deleted: {public['name']}", "Space deleted",
+            "An admin deleted this space request.", req.reason,
+        )
+    await audit(request, admin, "mmrag_space.admin_deleted", "mmrag_space", space_id, {"slug": space["slug"], "reason": req.reason})
+    return await _detail(space["id"])
+
 
 @router.post("/{space_id}/approve-delete")
 async def approve_delete(space_id: str, request: Request, admin: dict = Depends(require_admin)):

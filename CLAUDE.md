@@ -201,7 +201,7 @@ Tailwind CSS. Dark mode via `dark:` prefix. Primary colour = `text-primary` / `b
 |---|---|---|
 | `worker` | `python worker/transcoder.py` | Polls `jobs` table, runs ffmpeg transcode/trim/cut |
 | `auto-processor` | `python worker/auto_processor.py` | Transcript → metadata/chapters/howto LLM pipeline |
-| `mmrag-worker` | `python worker/mmrag_worker.py` | Runs `setup.sh` on the mmrag host over SSH. Single replica only |
+| `mmrag-worker` | `python worker/mmrag_worker.py` | Runs `setup.sh` on the mmrag host over SSH and samples space usage. Single replica only |
 | `transcript-service` | uvicorn in its own container | Whisper inference, SSE streaming, job queue |
 
 Workers communicate with the DB directly (asyncpg). The auto-processor communicates with transcript-service over HTTP (`TRANSCRIPT_SERVICE_URL` env or derived from `TRANSCRIPT_PORT`).
@@ -212,9 +212,11 @@ Workers communicate with the DB directly (asyncpg). The auto-processor communica
 
 Users request a space at `/rag-spaces`; admins review, verify and operate spaces at `/admin/rag-spaces`.
 
-mmrag runs on a different machine and stays loosely coupled: `api/mmrag/remote.py` is the only code that knows about it, and the contract is `setup.sh <command>` over SSH. Do not share code or databases with mmrag or manage its nginx from the portal. The header of `remote.py` lists the `setup.sh` behaviour the portal depends on.
+mmrag runs on a different machine and stays loosely coupled: `api/mmrag/remote.py` is the only code that knows about it, and the contract is `setup.sh <command>` over SSH, plus the read-only `kubectl` in `check_usage()`, because `setup.sh` has no metrics command. Anything that changes a project goes through `setup.sh`. Do not share code or databases with mmrag or manage its nginx from the portal. The header of `remote.py` lists the `setup.sh` behaviour the portal depends on.
 
 - Space links are relative `/mmrag/<slug>/...` paths, because the nginx in front of the portal routes that prefix to mmrag. Don't use `/mmrag` as a portal path: the SPA uses `/rag-spaces`, the API `/api/rag-spaces` and `/admin/rag-spaces`.
+- Admins can delete a space directly. A space that went live is backed up first, and `deploy` starts it if Postgres is down, because `backup` needs Postgres running.
+- `mmrag-worker` samples health, CPU, RAM and disk of running spaces every `MMRAG_MONITOR_INTERVAL` seconds and keeps only the latest sample.
 - Status changes go through `transition()` in `api/mmrag/service.py`, which guards against double clicks and concurrent admins.
 - Access keys are never stored, emailed or logged. Output from `setup.sh` is redacted before it is stored, because `rotate-key` prints the new key.
 - SSH secrets stay in the mounted `MMRAG_SSH_DIR`, not `app_settings`: `GET /settings/{key}` needs no login.
