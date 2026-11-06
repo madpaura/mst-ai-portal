@@ -46,3 +46,10 @@ class DeleteRequest(BaseModel):
     reason: str = Field(min_length=3, max_length=2000)
 
     _strip_reason = field_validator("reason", mode="before")(_strip)
+
+
+class AdminDeleteRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=2000)
+    slug: str
+
+    _strip_reason = field_validator("reason", mode="before")(_strip)

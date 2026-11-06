@@ -130,6 +130,7 @@ class Settings(BaseSettings):
     MMRAG_REMOTE_PATH: str = ""      # directory holding setup.sh on the mmrag host
     MMRAG_JOB_TIMEOUT: int = 1800    # seconds for one deploy/backup/destroy step
     MMRAG_EXPECTED_SERVICES: str = "postgres,neo4j,rag-app,portal"
+    MMRAG_MONITOR_INTERVAL: int = 300  # seconds between health and usage samples, 0 = off
 
     # Seed default admin (open mode only). Set to "false" in production.
     SEED_DEFAULT_ADMIN: bool = True

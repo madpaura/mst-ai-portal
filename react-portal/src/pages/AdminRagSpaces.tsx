@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { api, toApiError } from '../api/client';
-import { EVENT_LABELS, STATUS_META, formatDate } from '../components/ragSpaceTypes';
+import { DELETABLE, EVENT_LABELS, STATUS_META, formatBytes, formatCpu, formatDate } from '../components/ragSpaceTypes';
 import type { RagSpace, RevealedKey, SpaceJob } from '../components/ragSpaceTypes';
 
 const POLL_MS = 4000;
@@ -42,6 +42,11 @@ const HEALTH_DOT: Record<string, string> = {
   starting: 'bg-amber-500',
   unhealthy: 'bg-rose-500',
   missing: 'bg-rose-500',
+};
+
+const nodeDiskClass = (usedPercent: number) => {
+  if (usedPercent >= 90) return 'text-rose-500';
+  return usedPercent >= 80 ? 'text-amber-500' : 'text-text-muted';
 };
 
 const ConnectionBar: React.FC = () => {
@@ -137,6 +142,8 @@ const Detail: React.FC<{ spaceId: string; onChanged: () => void }> = ({ spaceId,
   const [note, setNote] = useState('');
   const [confirmSlug, setConfirmSlug] = useState<{ action: string; label: string } | null>(null);
   const [typedSlug, setTypedSlug] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
   const [selectedJob, setSelectedJob] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<RevealedKey | null>(null);
   const activeIdRef = useRef<string | null>(null);
@@ -179,6 +186,8 @@ const Detail: React.FC<{ spaceId: string; onChanged: () => void }> = ({ spaceId,
       setConfirmSlug(null);
       setNote('');
       setTypedSlug('');
+      setDeleting(false);
+      setDeleteReason('');
       onChanged();
     } catch (err) {
       setError(toApiError(err));
@@ -212,6 +221,12 @@ const Detail: React.FC<{ spaceId: string; onChanged: () => void }> = ({ spaceId,
   const askInfo = () => ask({ title: 'Request more information', hint: 'The owner sees this message by email and on their space.', action: 'request-info', confirmLabel: 'Send request', required: true });
   const askReject = () => ask({ title: 'Reject this request', hint: 'The owner sees this reason and can edit and resubmit.', action: 'reject', confirmLabel: 'Reject', danger: true, required: true });
   const sendBackRemoves = space.provisioned ? ' The deployed stack will be removed.' : '';
+  const deleteHint = !space.provisioned
+    ? 'Nothing is deployed, so only this request is removed.'
+    : space.status === 'live' || space.status === 'stopped'
+      ? 'The space is backed up on the mmrag host and then deleted. A stopped space is started first, because the backup needs it running.'
+      : 'The deployed stack is removed without a backup, because this space never went live.';
+  const usageByService = new Map(space.usage?.services.map((u) => [u.service, u]));
 
   return (
     <div className="space-y-4">
@@ -265,6 +280,38 @@ const Detail: React.FC<{ spaceId: string; onChanged: () => void }> = ({ spaceId,
                 {pending.confirmLabel}
               </button>
               <button onClick={() => setPending(null)} className={btnGhost}>Cancel</button>
+            </div>
+          </div>
+        ) : deleting ? (
+          <div className="mt-4 rounded-lg border border-rose-500/30 bg-rose-500/5 p-3">
+            <p className="text-sm font-semibold text-text-strong">Delete this space</p>
+            <p className="text-xs text-text-muted">{deleteHint} The owner is emailed your reason. This can't be undone.</p>
+            <textarea
+              aria-label="Reason for deleting"
+              placeholder="Reason"
+              className="mt-2 min-h-20 w-full rounded-lg border border-border-base bg-surface px-3 py-2 text-sm text-text-strong focus:outline-none focus:border-rose-500"
+              value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)}
+              maxLength={2000}
+            />
+            <label className="mt-2 block text-sm font-semibold text-text-strong" htmlFor="delete-slug">
+              Type <code className="font-mono">{space.slug}</code> to confirm
+            </label>
+            <input
+              id="delete-slug"
+              className="mt-2 w-full rounded-lg border border-border-base bg-surface px-3 py-2 font-mono text-sm text-text-strong focus:outline-none focus:border-rose-500"
+              value={typedSlug}
+              onChange={(e) => setTypedSlug(e.target.value)}
+            />
+            <div className="mt-2 flex gap-2">
+              <button
+                disabled={busy || typedSlug !== space.slug || deleteReason.trim().length < 3}
+                onClick={() => post('delete', { reason: deleteReason.trim(), slug: typedSlug })}
+                className={btnDanger}
+              >
+                Delete space
+              </button>
+              <button onClick={() => { setDeleting(false); setDeleteReason(''); setTypedSlug(''); }} className={btnGhost}>Cancel</button>
             </div>
           </div>
         ) : confirmSlug ? (
@@ -331,6 +378,9 @@ const Detail: React.FC<{ spaceId: string; onChanged: () => void }> = ({ spaceId,
             {(space.status === 'needs_info' || space.status === 'rejected') && space.provisioned && (
               <button disabled={busy || jobBusy} onClick={() => post('retry-cleanup')} className={btnGhost}>Retry cleanup</button>
             )}
+            {DELETABLE.includes(space.status) && (
+              <button disabled={busy || jobBusy} onClick={() => { setTypedSlug(''); setDeleting(true); }} className={btnDanger}>Delete space</button>
+            )}
           </div>
         )}
 
@@ -348,20 +398,58 @@ const Detail: React.FC<{ spaceId: string; onChanged: () => void }> = ({ spaceId,
       {space.provisioned && (
         <section className="rounded-xl border border-border-base bg-surface p-5">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-bold text-text-strong">Service health</h3>
+            <h3 className="text-sm font-bold text-text-strong">Health and usage</h3>
             <button disabled={busy} onClick={() => post('status')} className={btnGhost}>Check now</button>
           </div>
           {space.health ? (
             <>
-              <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                {space.health.services.map((s) => (
-                  <li key={s.service} className="flex items-center gap-2 text-sm text-text-muted">
-                    <span className={`h-2 w-2 rounded-full ${HEALTH_DOT[s.state] ?? 'bg-slate-400'}`} />
-                    <span className="font-mono text-xs text-text-strong">{s.service}</span> {s.state}
-                  </li>
-                ))}
-              </ul>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full whitespace-nowrap text-left text-xs text-text-muted sm:text-sm">
+                  <thead>
+                    <tr className="text-xs text-text-faint">
+                      <th className="pb-1 font-semibold">Service</th>
+                      <th className="pb-1 font-semibold">State</th>
+                      <th className="pb-1 pl-2 text-right font-semibold">CPU</th>
+                      <th className="pb-1 pl-2 text-right font-semibold">RAM</th>
+                      <th className="pb-1 pl-2 text-right font-semibold">Disk</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {space.health.services.map((s) => {
+                      const usage = usageByService.get(s.service);
+                      return (
+                        <tr key={s.service} className="border-t border-border-base">
+                          <td className="py-1.5 font-mono text-xs text-text-strong">{s.service}</td>
+                          <td className="py-1.5">
+                            <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${HEALTH_DOT[s.state] ?? 'bg-slate-400'}`} />
+                            {s.state}
+                          </td>
+                          <td className="py-1.5 pl-2 text-right">{formatCpu(usage?.cpu_millicores)}</td>
+                          <td className="py-1.5 pl-2 text-right">{formatBytes(usage?.memory_bytes)}</td>
+                          <td className="py-1.5 pl-2 text-right">{formatBytes(usage?.disk_bytes)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  {space.usage && (
+                    <tfoot>
+                      <tr className="border-t border-border-base font-semibold text-text-strong">
+                        <td className="pt-1.5" colSpan={2}>Total</td>
+                        <td className="pt-1.5 pl-2 text-right">{formatCpu(space.usage.cpu_millicores)}</td>
+                        <td className="pt-1.5 pl-2 text-right">{formatBytes(space.usage.memory_bytes)}</td>
+                        <td className="pt-1.5 pl-2 text-right">{formatBytes(space.usage.disk_bytes)}</td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+              {space.usage?.node_disk && (
+                <p className={`mt-2 text-xs ${nodeDiskClass(space.usage.node_disk.used_percent)}`}>
+                  Disk on the data node: {space.usage.node_disk.used_percent}% used, {formatBytes(space.usage.node_disk.available_bytes)} free of {formatBytes(space.usage.node_disk.size_bytes)}
+                </p>
+              )}
               {space.health.error && <p className="mt-2 text-xs text-rose-500">{space.health.error}</p>}
+              {space.usage?.error && space.usage.error !== space.health.error && <p className="mt-2 text-xs text-amber-500">{space.usage.error}</p>}
               <p className="mt-2 text-xs text-text-faint">Checked {formatDate(space.health_checked_at)}</p>
             </>
           ) : (
@@ -487,6 +575,12 @@ export const AdminRagSpaces: React.FC = () => {
                       <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${meta.className}`}>{meta.label}</span>
                     </div>
                     <p className="mt-1 truncate text-xs text-text-muted">{space.owner_name ?? 'Owner removed'} · {space.plm_project}</p>
+                    {space.usage && (
+                      <p className="mt-1 flex items-center gap-1.5 truncate text-xs text-text-faint">
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${space.health?.healthy ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                        CPU {formatCpu(space.usage.cpu_millicores)} · RAM {formatBytes(space.usage.memory_bytes)} · Disk {formatBytes(space.usage.disk_bytes)}
+                      </p>
+                    )}
                   </button>
                 </li>
               );

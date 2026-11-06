@@ -140,6 +140,7 @@ The portal runs `setup.sh` on the mmrag machine over SSH. mmrag needs no changes
 1. Finish mmrag's one-time setup on the cluster's control node.
 2. Create a dedicated user that owns the mmrag directory and can run `kubectl` against the cluster.
 3. Give that user passwordless `sudo`, or set `MMRAG_SUDO_PASSWORD` in `config/global.env`. `setup.sh` needs root for data directories and nginx, and over SSH there is no terminal, so a password prompt fails the job. Placing projects on worker nodes needs `MMRAG_SUDO_PASSWORD` and `sshpass`.
+4. For CPU and RAM figures the cluster needs metrics-server. `kubectl top pods -A` shows whether it's there. Disk figures work without it, through `kubectl exec`, so that user also needs permission to exec into mmrag pods.
 
 **On the portal host**
 

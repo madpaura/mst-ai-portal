@@ -13,6 +13,22 @@ export interface SpaceHealth {
   error?: string;
 }
 
+export interface ServiceUsage {
+  service: string;
+  cpu_millicores: number | null;
+  memory_bytes: number | null;
+  disk_bytes: number | null;
+}
+
+export interface SpaceUsage {
+  services: ServiceUsage[];
+  cpu_millicores?: number | null;
+  memory_bytes?: number | null;
+  disk_bytes?: number | null;
+  node_disk?: { size_bytes: number; available_bytes: number; used_percent: number } | null;
+  error?: string | null;
+}
+
 export interface SpaceJob {
   id: string;
   kind: string;
@@ -48,6 +64,8 @@ export interface RagSpace {
   owner_email: string | null;
   health: SpaceHealth | null;
   health_checked_at: string | null;
+  usage: SpaceUsage | null;
+  usage_checked_at: string | null;
   created_at: string;
   updated_at: string;
   active_job: SpaceJob | null;
@@ -99,6 +117,8 @@ export const EVENT_LABELS: Record<string, string> = {
   rotate_key_succeeded: 'Access key rotated',
   rotate_key_failed: 'Key rotation failed',
   delete_requested: 'Deletion requested',
+  admin_delete_started: 'Deletion started by admin',
+  deleted_by_admin: 'Deleted by admin',
   delete_cancelled: 'Deletion request cancelled',
   delete_approved: 'Deletion approved',
   delete_denied: 'Deletion declined',
@@ -110,6 +130,21 @@ export const EVENT_LABELS: Record<string, string> = {
   cleanup_retried: 'Cleanup retried',
   deleted_by_owner: 'Deleted by owner',
   force_removed: 'Record removed by admin',
+};
+
+export const DELETABLE: SpaceStatus[] = ['pending', 'needs_info', 'rejected', 'deploy_failed', 'deployed', 'live', 'stopped'];
+
+export const formatCpu = (millicores: number | null | undefined) => {
+  if (millicores == null) return '—';
+  return millicores < 1000 ? `${millicores}m` : `${(millicores / 1000).toFixed(1)} cores`;
+};
+
+export const formatBytes = (bytes: number | null | undefined) => {
+  if (bytes == null) return '—';
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+  const power = bytes > 0 ? Math.min(Math.floor(Math.log2(bytes) / 10), units.length - 1) : 0;
+  const value = bytes / 2 ** (power * 10);
+  return `${value >= 100 || power === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[power]}`;
 };
 
 export const formatDate = (iso: string | null | undefined) =>

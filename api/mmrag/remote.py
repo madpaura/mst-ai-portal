@@ -4,6 +4,10 @@ This module is the whole contract between the portal and mmrag, which runs on a
 different machine: `setup.sh <command>` run over SSH, plus parsing of what those
 commands print. Nothing else in the portal should know how mmrag works.
 
+`setup.sh` has no metrics command, so check_usage() is the one exception: it runs
+read-only `kubectl top` and `kubectl exec` over the same connection. Every change
+to a project still goes through `setup.sh`.
+
 setup.sh behaviour the callers depend on:
   * `deploy` exits 0 even when services never turned ready, so success has to be
     confirmed with `status`.
@@ -16,6 +20,7 @@ setup.sh behaviour the callers depend on:
   * `deploy` and `rotate-key` print the key, so all output is redacted before it
     can reach a log, the database or an API response.
   * `destroy` asks for the project name on stdin.
+  * `backup` dumps through postgres-0, so it fails on a stopped project.
   * `list` is judged by its PROJECT header, not its exit status. Only the project
     names are read: its URLs are NodePorts, while users go through the portal's
     nginx (see space_urls()).
@@ -44,6 +49,19 @@ _POD_RE = re.compile(r"^pod/(\S+)\s+(\d+)/(\d+)\s+(\S+)", re.MULTILINE)
 # Pods on their way out, listed for a moment after a rollout or scale-down.
 _POD_LEAVING = {"Terminating", "Completed", "Evicted"}
 _POD_STARTING = {"Pending", "ContainerCreating", "PodInitializing"}
+
+# Where each project keeps its data, as (service, kubectl target, path).
+_DATA_VOLUMES = (
+    ("postgres", "postgres-0", "/var/lib/postgresql/data"),
+    ("neo4j", "neo4j-0", "/data"),
+    ("rag-app", "deploy/rag-app", "/app/data"),
+)
+_USAGE_TIMEOUT = 60
+_DU_TIMEOUT = 15
+_TOP_RE = re.compile(r"^(\S+)\s+(\d+)(m?)\s+(\d+)(Ki|Mi|Gi|Ti)\s*$", re.MULTILINE)
+_DU_RE = re.compile(r"^(\d+)\s+/", re.MULTILINE)
+_DF_RE = re.compile(r"^\S+\s+(\d+)\s+\d+\s+(\d+)\s+(\d+)%\s+/", re.MULTILINE)
+_MEMORY_UNITS = {"Ki": 2**10, "Mi": 2**20, "Gi": 2**30, "Ti": 2**40}
 
 
 class RemoteError(Exception):
@@ -218,6 +236,69 @@ async def check_health(slug: str) -> dict:
     if not result.ok:
         return {"healthy": False, "services": [], "error": result.output.strip()[-300:]}
     return health_from_status(result.output)
+
+
+def build_usage_command(slug: str) -> str:
+    kubectl = f"kubectl -n {shlex.quote(f'mmrag-{slug}')}"
+    steps = [f"echo ::top; {kubectl} top pods --no-headers 2>&1"]
+    for service, target, path in _DATA_VOLUMES:
+        probe = shlex.quote(f"timeout {_DU_TIMEOUT} du -sk {path}; df -Pk {path}")
+        steps.append(f"echo ::disk {service}; {kubectl} exec {target} -- sh -c {probe} 2>&1")
+    return "; ".join(steps)
+
+
+def _sum_known(values: list) -> Optional[int]:
+    known = [v for v in values if v is not None]
+    return sum(known) if known else None
+
+
+def parse_usage(output: str) -> dict:
+    """Turn the output of build_usage_command() into per-service CPU, RAM and disk."""
+    parts = re.split(r"^::(.+)$", output, flags=re.MULTILINE)
+    sections = dict(zip(parts[1::2], parts[2::2]))
+    top = sections.get("top", "")
+    pods = _TOP_RE.findall(top)
+
+    services = []
+    node_disk = None
+    for name in expected_services():
+        rows = [p for p in pods if p[0].startswith(f"{name}-")]
+        disk = sections.get(f"disk {name}", "")
+        du, df = _DU_RE.search(disk), _DF_RE.search(disk)
+        services.append({
+            "service": name,
+            "cpu_millicores": _sum_known([int(c) * (1 if m else 1000) for _, c, m, _, _ in rows]),
+            "memory_bytes": _sum_known([int(v) * _MEMORY_UNITS[u] for _, _, _, v, u in rows]),
+            "disk_bytes": int(du.group(1)) * 1024 if du else None,
+        })
+        if df and (node_disk is None or int(df.group(3)) > node_disk["used_percent"]):
+            node_disk = {
+                "size_bytes": int(df.group(1)) * 1024,
+                "available_bytes": int(df.group(2)) * 1024,
+                "used_percent": int(df.group(3)),
+            }
+
+    error = None
+    if "Metrics API not available" in top:
+        error = "CPU and RAM need metrics-server on the cluster"
+    elif not pods and "No resources found" not in top:
+        error = top.strip()[-300:] or None
+    return {
+        "services": services,
+        "cpu_millicores": _sum_known([s["cpu_millicores"] for s in services]),
+        "memory_bytes": _sum_known([s["memory_bytes"] for s in services]),
+        "disk_bytes": _sum_known([s["disk_bytes"] for s in services]),
+        "node_disk": node_disk,
+        "error": error,
+    }
+
+
+async def check_usage(slug: str) -> dict:
+    try:
+        result = await _exec(build_usage_command(slug), _USAGE_TIMEOUT, None, redact)
+    except RemoteError as exc:
+        return {"services": [], "error": str(exc)}
+    return parse_usage(result.output)
 
 
 def parse_backup_path(output: str) -> Optional[str]:
