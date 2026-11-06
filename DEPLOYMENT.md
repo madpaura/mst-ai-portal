@@ -137,11 +137,13 @@ The portal runs `setup.sh` on the mmrag machine over SSH. mmrag needs no changes
 
 **On the mmrag host**
 
-1. Finish mmrag's one-time setup on the cluster's control node, including `PUBLIC_IP` in `config/global.env`: the portal links to the URLs `setup.sh list` reports.
+1. Finish mmrag's one-time setup on the cluster's control node.
 2. Create a dedicated user that owns the mmrag directory and can run `kubectl` against the cluster.
 3. Give that user passwordless `sudo`, or set `MMRAG_SUDO_PASSWORD` in `config/global.env`. `setup.sh` needs root for data directories and nginx, and over SSH there is no terminal, so a password prompt fails the job. Placing projects on worker nodes needs `MMRAG_SUDO_PASSWORD` and `sshpass`.
 
 **On the portal host**
+
+Route `/mmrag/` to mmrag in the nginx in front of the portal. Space links are `/mmrag/<project>/mgmt/` and `/mmrag/<project>/api/` on the portal's own address.
 
 ```bash
 mkdir -p secrets/mmrag-ssh

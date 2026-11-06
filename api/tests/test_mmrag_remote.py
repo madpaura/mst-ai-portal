@@ -125,24 +125,17 @@ def test_health_project_that_does_not_exist():
     assert set(_states(health).values()) == {"missing"}
 
 
-def test_parse_list():
-    output = (
-        "PROJECT        API                                                MGMT\n"
-        "p1             https://x.test/mmrag/p1/api/                       https://x.test/mmrag/p1/mgmt/\n"
-    )
-    assert remote.parse_list(output) == {
-        "p1": {"api_url": "https://x.test/mmrag/p1/api/", "mgmt_url": "https://x.test/mmrag/p1/mgmt/"}
-    }
-
-
-def test_parse_list_with_namespace_and_node_columns():
+def test_parse_list_reads_project_names():
     output = (
         "PROJECT      API                          MGMT                         NS       HOST\n"
         "p1           http://10.0.0.1:30086 http://10.0.0.1:30087 mmrag-p1 blade-server2\n"
+        "p2           http://10.0.0.1:30088 http://10.0.0.1:30089 mmrag-p2 blade1\n"
     )
-    assert remote.parse_list(output) == {
-        "p1": {"api_url": "http://10.0.0.1:30086", "mgmt_url": "http://10.0.0.1:30087"}
-    }
+    assert remote.parse_list(output) == {"p1", "p2"}
+
+
+def test_space_urls_stay_on_the_portal_address():
+    assert remote.space_urls("p1") == {"api_url": "/mmrag/p1/api/", "mgmt_url": "/mmrag/p1/mgmt/"}
 
 
 def test_redact_removes_the_key_printed_by_rotate_key():
@@ -319,8 +312,8 @@ def test_run_redacts_the_key_rotate_key_prints(ssh_host):
 
 
 @pytest.mark.parametrize("output, expected", [
-    ("PROJECT  API  MGMT\n", {}),
-    ("PROJECT  API  MGMT\np1  https://x/api/  https://x/mgmt/\n", {"p1": {"api_url": "https://x/api/", "mgmt_url": "https://x/mgmt/"}}),
+    ("PROJECT  API  MGMT\n", set()),
+    ("PROJECT  API  MGMT\np1  https://x/api/  https://x/mgmt/\n", {"p1"}),
 ])
 def test_list_exiting_1_after_printing_is_not_a_failure(output, expected):
     async def fake_run(*args, **kwargs):
