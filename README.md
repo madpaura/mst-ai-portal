@@ -10,6 +10,7 @@ Corporate AI learning and tools portal — video courses, solutions showcase, co
 - **Courses** — structured, weekly curriculum built on top of Ignite videos: modules/items, enrollment, per-item progress, ratings/feedback, and a per-course newsletter-style email; admin curriculum builder plus a dedicated Analytics drill-down (roster, drop-off funnel, feedback)
 - **Solutions** — filterable solution card showcase (SW / HW / Other)
 - **Marketplace** — **three navbar-driven catalog sections** (Agents, Skills, MCP) with per-type construction-status toggles; GitHub sync, type-aware install guides, zip download, contributor submission workflow with **NVIDIA SkillSpector security scanning**, version history, and lifecycle management (MANIFEST.json, artifact deletion)
+- **MMRAG spaces** — users request a RAG space at `/rag-spaces`; admins review, verify, deploy, delete and monitor (health, CPU, RAM, disk) spaces at `/admin/rag-spaces`. mmrag runs on a separate host and is driven over SSH via `setup.sh` (see [DEPLOYMENT.md](DEPLOYMENT.md#mmrag-spaces))
 - **Discover** — Articles (with likes, trending sort, PDF mode, rich-text paste), Memes (with click analytics), News feed with RSS/ingest support
 - **Search** — site-wide full-text + fuzzy typo-tolerant search across all content types
 - **AI Assistant** — floating chat widget with 21 portal-aware tools, multi-provider LLM (Ollama/OpenAI/Anthropic/in-house OpenAI-compatible gateway), admin-configurable system prompt
@@ -87,6 +88,7 @@ mst-ai-portal/
 │   ├── video/              # Ignite video CRUD, auto-mode pipeline, creator isolation,
 │   │                       # non-destructive editor, Courses curriculum (modules/items/progress)
 │   ├── worker/             # transcoder.py, auto_processor.py
+│   ├── mmrag/              # MMRAG space requests, approval state machine, SSH bridge to setup.sh
 │   ├── solutions/          # Solution card CRUD
 │   ├── articles/           # Knowledge articles
 │   ├── forge/              # Marketplace / Forge CRUD + GitHub sync worker
@@ -123,6 +125,7 @@ mst-ai-portal/
 | `backend` | FastAPI API server |
 | `worker` | FFmpeg transcoding worker |
 | `auto-processor` | Transcript → metadata/chapters LLM pipeline |
+| `mmrag-worker` | Runs mmrag `setup.sh` over SSH and samples space usage (single replica) |
 | `frontend` | Nginx serving the built React app |
 | `skillspector` | NVIDIA SkillSpector security scanner sidecar (artifact validation) |
 | `transcript-service` | Whisper speech-to-text (separate compose file) |
